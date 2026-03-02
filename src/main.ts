@@ -366,7 +366,7 @@ app.whenReady().then(async () => {
           logger.info("[app] Mobile sync is enabled, starting server...");
           const { getMobileSyncServer } = await import("./main/mobileSyncServer");
           const syncServer = getMobileSyncServer();
-          const port = settings.sync.port ?? 8384;
+          const port = settings.sync.port ?? 53318;
           await syncServer.start(port);
           logger.info("[app] Mobile sync server started");
         }

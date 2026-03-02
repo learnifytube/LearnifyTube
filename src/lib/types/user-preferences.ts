@@ -143,7 +143,7 @@ export const DEFAULT_DOWNLOAD_PREFERENCES: DownloadPreferences = {
 
 export const DEFAULT_SYNC_PREFERENCES: SyncPreferences = {
   enabled: false,
-  port: 8384,
+  port: 53318,
 };
 
 export const DEFAULT_USER_PREFERENCES: UserPreferences = {

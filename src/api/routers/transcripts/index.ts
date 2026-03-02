@@ -432,12 +432,15 @@ export const transcriptsRouter = t.router({
 
       // Download from yt-dlp
       const lang = input.lang ?? "en";
-      const { getBinaryFilePath } = await import("../binary");
-      const binPath = getBinaryFilePath();
-
-      if (!fs.existsSync(binPath)) {
-        return { success: false, message: "yt-dlp binary not installed" };
+      const { ensureYtDlpBinaryReady } = await import("../binary");
+      const ready = await ensureYtDlpBinaryReady();
+      if (!ready.installed || !ready.path) {
+        return {
+          success: false,
+          message: ready.message ?? "yt-dlp binary not installed",
+        };
       }
+      const binPath = ready.path;
 
       const transcriptsDir = getTranscriptsDir();
       ensureDirSync(transcriptsDir);

@@ -68,20 +68,55 @@ const setExecutableIfNeeded = (filePath: string): void => {
   }
 };
 
-const readVersionFromBinary = (binPath: string): string | null => {
+type DownloadResult = { ok: boolean; error?: string };
+
+const pipeResponseToFile = (
+  response: Electron.IncomingMessage,
+  destinationPath: string,
+  resolve: (result: DownloadResult) => void
+): void => {
+  const ws = fs.createWriteStream(destinationPath);
+  let settled = false;
+  const settle = (result: DownloadResult): void => {
+    if (settled) return;
+    settled = true;
+    resolve(result);
+  };
+
+  ws.on("finish", () => settle({ ok: true }));
+  ws.on("error", (error) => settle({ ok: false, error: String(error) }));
+  response.on("data", (chunk) => ws.write(chunk));
+  response.on("end", () => ws.end());
+  response.on("error", (error) => {
+    ws.destroy();
+    settle({ ok: false, error: String(error) });
+  });
+};
+
+const readVersionFromBinaryDetailed = (
+  binPath: string,
+  timeoutMs = 5000
+): { version: string | null; timedOut: boolean; error?: string } => {
   try {
-    if (!fs.existsSync(binPath)) return null;
+    if (!fs.existsSync(binPath)) {
+      return { version: null, timedOut: false };
+    }
     const out = execFileSync(binPath, ["--version"], {
       encoding: "utf8",
-      timeout: 5000,
+      timeout: timeoutMs,
       windowsHide: true,
     }).trim();
-    return out || null;
+    return { version: out || null, timedOut: false };
   } catch (e) {
-    logger.warn("[ytdlp] Failed to read version from binary", { binPath, error: String(e) });
-    return null;
+    const error = String(e);
+    const timedOut = /ETIMEDOUT/i.test(error);
+    logger.warn("[ytdlp] Failed to read version from binary", { binPath, error, timedOut });
+    return { version: null, timedOut, error };
   }
 };
+
+const readVersionFromBinary = (binPath: string): string | null =>
+  readVersionFromBinaryDetailed(binPath).version;
 
 const readInstalledVersion = (): string | null => {
   try {
@@ -90,15 +125,21 @@ const readInstalledVersion = (): string | null => {
       const stored = fs.readFileSync(versionFile, "utf8").trim();
       if (stored) return stored;
     }
-
-    const detected = readVersionFromBinary(getBinaryFilePath());
-    if (detected) {
-      writeInstalledVersion(detected);
-    }
-    return detected;
+    return null;
   } catch (e) {
     logger.error("[ytdlp] Failed to read version file", e);
     return null;
+  }
+};
+
+const clearInstalledVersion = (): void => {
+  try {
+    const versionFile = getVersionFilePath();
+    if (fs.existsSync(versionFile)) {
+      fs.unlinkSync(versionFile);
+    }
+  } catch (e) {
+    logger.warn("[ytdlp] Failed to clear version file", { error: String(e) });
   }
 };
 
@@ -251,10 +292,7 @@ const installYtDlpFromRelease = async (
 
   logger.info("[ytdlp] Download starting", { url: latest.assetUrl });
 
-  const result = await new Promise<{
-    ok: boolean;
-    error?: string;
-  }>((resolve) => {
+  const result = await new Promise<DownloadResult>((resolve) => {
     let request: ReturnType<typeof net.request> | undefined;
     try {
       request = net.request({ method: "GET", url: latest.assetUrl });
@@ -283,16 +321,7 @@ const installYtDlpFromRelease = async (
                 res2.on("end", () => resolve({ ok: false, error: `HTTP ${res2.statusCode}` }));
                 return;
               }
-              const ws = fs.createWriteStream(tmpPath);
-              res2.on("data", (chunk) => ws.write(chunk));
-              res2.on("end", () => {
-                ws.end();
-                resolve({ ok: true });
-              });
-              res2.on("error", (e) => {
-                ws.destroy();
-                resolve({ ok: false, error: String(e) });
-              });
+              pipeResponseToFile(res2, tmpPath, resolve);
             });
             follow.on("error", (e) => resolve({ ok: false, error: String(e) }));
             follow.end();
@@ -308,16 +337,7 @@ const installYtDlpFromRelease = async (
         return;
       }
 
-      const ws = fs.createWriteStream(tmpPath);
-      response.on("data", (chunk) => ws.write(chunk));
-      response.on("end", () => {
-        ws.end();
-        resolve({ ok: true });
-      });
-      response.on("error", (e) => {
-        ws.destroy();
-        resolve({ ok: false, error: String(e) });
-      });
+      pipeResponseToFile(response, tmpPath, resolve);
     });
 
     request.on("error", (e) => resolve({ ok: false, error: String(e) }));
@@ -325,6 +345,9 @@ const installYtDlpFromRelease = async (
   });
 
   if (!result.ok) {
+    if (fs.existsSync(tmpPath)) {
+      fs.unlinkSync(tmpPath);
+    }
     logger.error("[ytdlp] Download failed", { error: result.error });
     return { success: false as const, message: result.error ?? "Download failed" };
   }
@@ -334,13 +357,35 @@ const installYtDlpFromRelease = async (
     fs.copyFileSync(tmpPath, binPath);
     fs.unlinkSync(tmpPath);
     setExecutableIfNeeded(binPath);
-    writeInstalledVersion(latest.version);
+
+    const versionProbe = readVersionFromBinaryDetailed(binPath, 20000);
+    let detectedVersion = versionProbe.version;
+    if (!detectedVersion && versionProbe.timedOut) {
+      logger.warn("[ytdlp] Version probe timed out after install; accepting downloaded binary", {
+        binPath,
+        fallbackVersion: latest.version,
+      });
+      detectedVersion = latest.version || "unknown";
+    }
+
+    if (!detectedVersion) {
+      if (fs.existsSync(binPath)) {
+        fs.unlinkSync(binPath);
+      }
+      clearInstalledVersion();
+      return {
+        success: false as const,
+        message: "Downloaded yt-dlp binary failed validation (not executable)",
+      };
+    }
+
+    writeInstalledVersion(detectedVersion);
     writeLastUpdateCheckAt(Date.now());
-    logger.info("[ytdlp] Installed", { binPath, version: latest.version });
+    logger.info("[ytdlp] Installed", { binPath, version: detectedVersion });
     return {
       success: true as const,
       path: binPath,
-      version: latest.version,
+      version: detectedVersion,
       alreadyInstalled: false as const,
     };
   } catch (e) {
@@ -376,8 +421,22 @@ export const ensureYtDlpBinaryReady = async (
     ensureBinDir();
     const binPath = getBinaryFilePath();
     const hasBinary = fs.existsSync(binPath);
+    const storedVersion = readInstalledVersion();
+    const shouldProbeExistingBinary = hasBinary && !storedVersion;
+    const existingVersionProbe = shouldProbeExistingBinary
+      ? readVersionFromBinaryDetailed(binPath)
+      : { version: storedVersion, timedOut: false };
+    const detectedExistingVersion = existingVersionProbe.version ?? storedVersion;
 
-    if (!hasBinary || options.forceInstall) {
+    if (hasBinary && !detectedExistingVersion && !existingVersionProbe.timedOut) {
+      logger.warn("[ytdlp] Existing binary is unusable; reinstalling", { binPath });
+    }
+
+    if (
+      !hasBinary ||
+      (!detectedExistingVersion && !existingVersionProbe.timedOut) ||
+      options.forceInstall
+    ) {
       const latest = await fetchLatestRelease();
       if (!latest) {
         return {
@@ -411,11 +470,9 @@ export const ensureYtDlpBinaryReady = async (
       };
     }
 
-    const storedVersion = readInstalledVersion();
-    const detectedVersion = readVersionFromBinary(binPath);
-    const installedVersion = detectedVersion ?? storedVersion;
-    if (detectedVersion && detectedVersion !== storedVersion) {
-      writeInstalledVersion(detectedVersion);
+    const installedVersion = detectedExistingVersion ?? storedVersion;
+    if (detectedExistingVersion && detectedExistingVersion !== storedVersion) {
+      writeInstalledVersion(detectedExistingVersion);
     }
 
     const lastCheckedAt = readLastUpdateCheckAt();
@@ -520,7 +577,7 @@ export const binaryRouter = t.router({
     try {
       const binPath = getBinaryFilePath();
       const installed = fs.existsSync(binPath);
-      const version = readInstalledVersion();
+      const version = installed ? readInstalledVersion() : null;
       return { installed, version, path: installed ? binPath : null };
     } catch (e) {
       logger.error("[ytdlp] getInstallInfo failed", e);
@@ -544,8 +601,9 @@ export const binaryRouter = t.router({
     }> => {
       try {
         const binPath = getBinaryFilePath();
+        const storedVersion = readInstalledVersion();
         const installedVersion = fs.existsSync(binPath)
-          ? (readVersionFromBinary(binPath) ?? readInstalledVersion())
+          ? (storedVersion ?? readVersionFromBinary(binPath))
           : null;
         const latest = await fetchLatestRelease();
 
@@ -672,7 +730,7 @@ export const binaryRouter = t.router({
       logger.info("[ffmpeg] Download starting", { url: downloadUrl, platform, needsExtraction });
 
       // Download the file
-      const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      const result = await new Promise<DownloadResult>((resolve) => {
         const request = net.request(downloadUrl);
         request.on("response", (response) => {
           if (response.statusCode !== 200) {
@@ -680,16 +738,7 @@ export const binaryRouter = t.router({
             return;
           }
 
-          const ws = fs.createWriteStream(tmpPath);
-          response.on("data", (chunk) => ws.write(chunk));
-          response.on("end", () => {
-            ws.end();
-            resolve({ ok: true });
-          });
-          response.on("error", (e) => {
-            ws.destroy();
-            resolve({ ok: false, error: String(e) });
-          });
+          pipeResponseToFile(response, tmpPath, resolve);
         });
 
         request.on("error", (e) => resolve({ ok: false, error: String(e) }));
@@ -697,6 +746,9 @@ export const binaryRouter = t.router({
       });
 
       if (!result.ok) {
+        if (fs.existsSync(tmpPath)) {
+          fs.unlinkSync(tmpPath);
+        }
         logger.error("[ffmpeg] Download failed", { error: result.error });
         return { success: false as const, message: result.error ?? "Download failed" };
       }

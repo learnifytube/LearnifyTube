@@ -383,20 +383,20 @@ export const spawnDownload = async (
 
     // Determine player client from fallback state (defaults to 'android' at index 0)
     const playerClientIndex = fallbackState?.playerClientIndex ?? 0;
-    const cookiesFromBrowser = await getCookiesFromBrowserPreference(db);
-    const playerClient =
-      cookiesFromBrowser !== "none" && playerClientIndex === 0
-        ? "web"
-        : getPlayerClient(playerClientIndex);
+    const fallbackAttempt = fallbackState?.fallbackAttempts ?? 0;
+    const configuredCookiesFromBrowser = await getCookiesFromBrowserPreference(db);
+    const useCookies = configuredCookiesFromBrowser !== "none" && fallbackAttempt === 0;
+    const cookiesFromBrowser = useCookies ? configuredCookiesFromBrowser : "none";
+    const playerClient = getPlayerClient(playerClientIndex);
 
-    if (cookiesFromBrowser !== "none" && playerClientIndex === 0) {
-      logger.info("[download-worker] Overriding player client for cookie-authenticated download", {
+    if (configuredCookiesFromBrowser !== "none" && !useCookies) {
+      logger.info("[download-worker] Disabling browser cookies for fallback attempt", {
         downloadId,
         videoId,
-        requestedPlayerClient: getPlayerClient(playerClientIndex),
-        effectivePlayerClient: playerClient,
+        configuredCookiesFromBrowser,
+        fallbackAttempt,
         reason:
-          "Browser cookies are configured; web client is more reliable for authenticated requests",
+          "Previous attempt failed; retrying without cookies to recover missing format errors",
       });
     }
 
@@ -486,9 +486,11 @@ export const spawnDownload = async (
       outputPath,
       format: selectedFormat,
       playerClient,
+      configuredCookiesFromBrowser,
       cookiesFromBrowser,
+      useCookies,
       formatStrategy,
-      fallbackAttempt: fallbackState?.fallbackAttempts ?? 0,
+      fallbackAttempt,
       maxFallbackAttempts: fallbackState?.maxFallbackAttempts ?? 10,
       fullCommand: `${ytDlpPath} ${args.join(" ")}`,
     });

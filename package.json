@@ -1,7 +1,7 @@
 {
   "name": "@learnifytube/electron",
   "productName": "LearnifyTube",
-  "version": "1.0.65",
+  "version": "1.0.66",
   "description": "LearnifyTube - A powerful YouTube downloader application with a beautiful modern interface for downloading videos, playlists, and managing your downloads efficiently.",
   "main": ".vite/build/main.js",
   "scripts": {

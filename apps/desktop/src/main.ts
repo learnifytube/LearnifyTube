@@ -26,6 +26,8 @@ import defaultDb from "./api/db";
 import { userPreferences } from "./api/db/schema";
 import { isLikelyMdnsTransportError, logMdnsDiagnosticSnapshot } from "./main/mdnsDiagnostics";
 import { parseUserPreferences } from "./lib/types/user-preferences";
+import { resolveWithinAllowed } from "./main/security/path-confinement";
+import { getAllowedBaseDirs, refreshAllowedBaseDirs } from "./main/security/allowed-dirs";
 
 // Global error handlers to prevent crashes from logging errors
 process.on("uncaughtException", (error) => {
@@ -256,7 +258,7 @@ function createWindow(): void {
       webSecurity: !isDev, // Enable web security in production mode (like lossless-cut)
       devTools: isDev, // Only enable dev tools in development
       contextIsolation: true,
-      nodeIntegration: true,
+      nodeIntegration: false,
       nodeIntegrationInSubFrames: false,
       preload,
     },
@@ -369,6 +371,10 @@ app.whenReady().then(async () => {
     await initializeDatabase();
     logger.info("[app] Database initialized successfully");
 
+    // Build the file-serving allowlist (download dir + cache) now that the DB
+    // is available, so local-file:// and the media server can confine reads.
+    await refreshAllowedBaseDirs();
+
     // Initialize download queue manager
     logger.info("[app] Initializing download queue manager");
     await initializeQueueManager(defaultDb, { autoStart: true });
@@ -455,16 +461,23 @@ app.whenReady().then(async () => {
           normalizedPath,
         });
       }
-      const filePath = path.resolve(normalizedPath);
-      if (!fs.existsSync(filePath)) {
-        logger.error("[protocol] Requested local file does not exist", {
+
+      // Confine reads to the download/cache directories so a compromised
+      // renderer cannot read arbitrary files (e.g. SSH keys, .secrets.env).
+      const confinement = resolveWithinAllowed(normalizedPath, getAllowedBaseDirs());
+      if (!confinement.ok) {
+        const statusCode = confinement.reason === "not-found" ? 404 : 403;
+        logger.error("[protocol] local-file request rejected", {
           requestId,
           rawUrl,
-          filePath,
+          normalizedPath,
+          reason: confinement.reason,
+          statusCode,
         });
-        callback({ statusCode: 404, data: Readable.from([]) });
+        callback({ statusCode, data: Readable.from([]) });
         return;
       }
+      const filePath = confinement.realPath;
 
       try {
         fs.accessSync(filePath, fs.constants.R_OK);
@@ -599,7 +612,7 @@ app.whenReady().then(async () => {
         ...details.responseHeaders,
         "Content-Security-Policy": [
           "default-src 'self'; " +
-            "script-src 'self' 'unsafe-inline' https://*.posthog.com; " +
+            "script-src 'self' https://*.posthog.com; " +
             "connect-src 'self' http://127.0.0.1:* https://*.posthog.com; " +
             "img-src 'self' data: file: local-file: https://*.posthog.com https://i.ytimg.com https://*.ytimg.com https://yt3.ggpht.com https://yt3.googleusercontent.com;" +
             "media-src 'self' data: file: local-file: http://127.0.0.1:*; " +

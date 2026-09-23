@@ -2,6 +2,8 @@ import * as fs from "fs";
 import * as path from "path";
 import * as http from "http";
 import { logger } from "../helpers/logger";
+import { resolveWithinAllowed } from "./security/path-confinement";
+import { getAllowedBaseDirs } from "./security/allowed-dirs";
 
 /**
  * Simple HTTP server for streaming local video files to the renderer.
@@ -40,17 +42,21 @@ const createMediaServer = (): MediaServer => {
       return;
     }
 
-    // Decode and resolve the file path
+    // Decode and confine to allowed download/cache directories.
     const decodedPath = decodeURIComponent(filePath);
-    const resolvedPath = path.resolve(decodedPath);
-
-    // Check if file exists
-    if (!fs.existsSync(resolvedPath)) {
-      logger.warn(`[MediaServer] File not found: ${resolvedPath}`);
-      res.writeHead(404);
-      res.end("File not found");
+    const confinement = resolveWithinAllowed(decodedPath, getAllowedBaseDirs());
+    if (!confinement.ok) {
+      const statusCode = confinement.reason === "not-found" ? 404 : 403;
+      logger.warn(`[MediaServer] Request rejected`, {
+        decodedPath,
+        reason: confinement.reason,
+        statusCode,
+      });
+      res.writeHead(statusCode);
+      res.end(statusCode === 404 ? "File not found" : "Access denied");
       return;
     }
+    const resolvedPath = confinement.realPath;
 
     // Check read permissions
     try {
@@ -97,7 +103,6 @@ const createMediaServer = (): MediaServer => {
         "Accept-Ranges": "bytes",
         "Content-Length": chunkSize,
         "Content-Type": contentType,
-        "Access-Control-Allow-Origin": "*",
         "Cache-Control": "no-cache",
       });
 
@@ -118,7 +123,6 @@ const createMediaServer = (): MediaServer => {
         "Content-Length": fileSize,
         "Content-Type": contentType,
         "Accept-Ranges": "bytes",
-        "Access-Control-Allow-Origin": "*",
         "Cache-Control": "no-cache",
       });
 

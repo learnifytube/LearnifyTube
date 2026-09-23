@@ -14,6 +14,7 @@ import {
   normalizeDownloadPreferences,
   parseUserPreferences,
 } from "@/lib/types/user-preferences";
+import { refreshAllowedBaseDirs } from "@/main/security/allowed-dirs";
 
 // Zod schema for preferred languages JSON
 const languagesArraySchema = z.array(z.string());
@@ -332,6 +333,8 @@ export const preferencesRouter = t.router({
           .where(eq(userPreferences.id, "default"));
 
         logger.info("[preferences] Updated download path", { downloadPath: input.downloadPath });
+        // Keep the file-serving allowlist in sync with the new download dir.
+        await refreshAllowedBaseDirs();
         return { success: true as const, downloadPath: input.downloadPath };
       } catch (e) {
         logger.error("[preferences] updateDownloadPath failed", e);
@@ -429,6 +432,9 @@ export const preferencesRouter = t.router({
           selectedPath,
           updatedFromStored: selectedPath !== storedPath,
         });
+
+        // Keep the file-serving allowlist in sync with the new download dir.
+        await refreshAllowedBaseDirs();
 
         return {
           success: true,

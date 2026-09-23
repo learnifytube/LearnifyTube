@@ -9,9 +9,13 @@ import os from "os";
 import { execFileSync, execSync } from "child_process";
 import {
   getDirectLatestDownloadUrl,
+  getDirectPinnedDownloadUrl,
   getLatestReleaseApiUrl,
+  getPinnedChecksumsUrl,
   getYtDlpAssetName,
+  YT_DLP_PINNED_VERSION,
 } from "@/api/utils/ytdlp-utils/ytdlp-utils";
+import { matchesExpected, parseChecksumForAsset, sha256OfFile } from "@/api/utils/ytdlp-utils/checksum";
 import { isYtDlpUpdateAvailable } from "@/api/utils/ytdlp-utils/version";
 import {
   getFfmpegDownloadUrl,
@@ -264,12 +268,52 @@ const extractArchive = async (
   }
 };
 
-async function fetchLatestRelease(): Promise<{ version: string; assetUrl: string } | null> {
+type YtDlpRelease = {
+  version: string;
+  assetUrl: string;
+  expectedChecksum: string;
+};
+
+async function fetchPinnedRelease(): Promise<YtDlpRelease | null> {
+  const desiredAsset = getYtDlpAssetName(process.platform);
+  const assetUrl = getDirectPinnedDownloadUrl(process.platform);
+
+  try {
+    const checksumsRes = await fetch(getPinnedChecksumsUrl());
+    if (!checksumsRes.ok) {
+      logger.error("[ytdlp] Failed to fetch pinned release checksums", {
+        status: checksumsRes.status,
+        version: YT_DLP_PINNED_VERSION,
+      });
+      return null;
+    }
+
+    const expectedChecksum = parseChecksumForAsset(await checksumsRes.text(), desiredAsset);
+    if (!expectedChecksum) {
+      logger.error("[ytdlp] Checksum missing for pinned asset", {
+        asset: desiredAsset,
+        version: YT_DLP_PINNED_VERSION,
+      });
+      return null;
+    }
+
+    return {
+      version: YT_DLP_PINNED_VERSION,
+      assetUrl,
+      expectedChecksum,
+    };
+  } catch (e) {
+    logger.error("[ytdlp] Exception fetching pinned release", e);
+    return null;
+  }
+}
+
+/** Fallback when the pinned checksum file cannot be fetched (no verification). */
+async function fetchLatestReleaseFallback(): Promise<{ version: string; assetUrl: string } | null> {
   try {
     const releaseRes = await fetch(getLatestReleaseApiUrl());
     if (!releaseRes.ok) {
       logger.error("[ytdlp] Failed to fetch latest release", { status: releaseRes.status });
-      // Fallback to direct latest download URL without version
       return { version: "unknown", assetUrl: getDirectLatestDownloadUrl(process.platform) };
     }
     const json = githubReleaseSchema.parse(await releaseRes.json());
@@ -285,7 +329,7 @@ async function fetchLatestRelease(): Promise<{ version: string; assetUrl: string
 }
 
 const installYtDlpFromRelease = async (
-  latest: { version: string; assetUrl: string },
+  latest: YtDlpRelease,
   binPath: string
 ): Promise<DownloadLatestResult> => {
   const tmpPath = path.join(os.tmpdir(), `yt-dlp-${Date.now()}`);
@@ -350,6 +394,20 @@ const installYtDlpFromRelease = async (
     }
     logger.error("[ytdlp] Download failed", { error: result.error });
     return { success: false as const, message: result.error ?? "Download failed" };
+  }
+
+  const actualChecksum = sha256OfFile(tmpPath);
+  if (!matchesExpected(actualChecksum, latest.expectedChecksum)) {
+    fs.unlinkSync(tmpPath);
+    logger.error("[ytdlp] Checksum verification failed", {
+      expected: latest.expectedChecksum,
+      actual: actualChecksum,
+      version: latest.version,
+    });
+    return {
+      success: false as const,
+      message: "Downloaded yt-dlp binary failed checksum verification",
+    };
   }
 
   try {
@@ -437,7 +495,7 @@ export const ensureYtDlpBinaryReady = async (
       (!detectedExistingVersion && !existingVersionProbe.timedOut) ||
       options.forceInstall
     ) {
-      const latest = await fetchLatestRelease();
+      const latest = await fetchPinnedRelease();
       if (!latest) {
         return {
           installed: false,
@@ -445,7 +503,7 @@ export const ensureYtDlpBinaryReady = async (
           version: null,
           updated: false,
           updateCheckSkipped: false,
-          message: "Failed to resolve latest yt-dlp",
+          message: "Failed to resolve pinned yt-dlp release",
         };
       }
 
@@ -492,9 +550,9 @@ export const ensureYtDlpBinaryReady = async (
       };
     }
 
-    const latest = await fetchLatestRelease();
+    const latestInfo = await fetchLatestReleaseFallback();
     writeLastUpdateCheckAt(now);
-    if (!latest || !installedVersion) {
+    if (!latestInfo || !installedVersion) {
       return {
         installed: true,
         path: binPath,
@@ -504,7 +562,7 @@ export const ensureYtDlpBinaryReady = async (
       };
     }
 
-    const updateAvailable = isYtDlpUpdateAvailable(installedVersion, latest.version);
+    const updateAvailable = isYtDlpUpdateAvailable(installedVersion, latestInfo.version);
     if (!updateAvailable) {
       return {
         installed: true,
@@ -515,7 +573,20 @@ export const ensureYtDlpBinaryReady = async (
       };
     }
 
-    const install = await installYtDlpFromRelease(latest, binPath);
+    const pinned = await fetchPinnedRelease();
+    if (!pinned) {
+      logger.warn("[ytdlp] Update available but pinned release could not be resolved");
+      return {
+        installed: true,
+        path: binPath,
+        version: installedVersion,
+        updated: false,
+        updateCheckSkipped: false,
+        message: "Failed to resolve pinned yt-dlp release for update",
+      };
+    }
+
+    const install = await installYtDlpFromRelease(pinned, binPath);
     if (!install.success) {
       logger.warn("[ytdlp] Update attempt failed; continuing with existing binary", {
         error: install.message,
@@ -586,7 +657,7 @@ export const binaryRouter = t.router({
   }),
 
   resolveLatest: publicProcedure.query(async (): Promise<ResolveLatestResult> => {
-    const info = await fetchLatestRelease();
+    const info = await fetchLatestReleaseFallback();
     return info;
   }),
 
@@ -605,7 +676,7 @@ export const binaryRouter = t.router({
         const installedVersion = fs.existsSync(binPath)
           ? (storedVersion ?? readVersionFromBinary(binPath))
           : null;
-        const latest = await fetchLatestRelease();
+        const latest = await fetchLatestReleaseFallback();
 
         if (!installedVersion || !latest) {
           return {

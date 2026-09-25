@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState } from "react";
 import { useLocalSearchParams,
@@ -21,10 +20,9 @@ import { getSavedPlaylistWithItems } from "../../../db/repositories/playlists";
 import type { SavedPlaylistWithItems } from "../../../db/repositories/playlists";
 import { api } from "../../../services/api";
 import { downloadManager } from "../../../services/downloadManager";
-import { getVideoLocalPath, videoExistsLocally } from "../../../services/downloader";
+import { offlineCopy } from "../../../services/offline-copy";
 import { useConnectionStore } from "../../../stores/connection";
 import { useDownloadStore } from "../../../stores/downloads";
-import { useLibraryStore } from "../../../stores/library";
 import { usePlaybackStore, type StreamingVideo } from "../../../stores/playback";
 
 type SavedPlaylistItem = SavedPlaylistWithItems["items"][number];
@@ -41,7 +39,7 @@ export default function SavedPlaylistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const serverUrl = useConnectionStore((state) => state.serverUrl);
-  const libraryVideos = useLibraryStore((state) => state.videos);
+  const getOfflineUri = offlineCopy.useLookup();
   const queueDownload = useDownloadStore((state) => state.queueDownload);
   const downloadQueue = useDownloadStore((state) => state.queue);
   const startPlaylist = usePlaybackStore((state) => state.startPlaylist);
@@ -72,16 +70,6 @@ export default function SavedPlaylistScreen() {
     setPlaylist(data ?? null);
     setLoading(false);
   }, [playlistParamId]);
-
-  const localPathByVideoId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const video of libraryVideos) {
-      if (video.localPath) {
-        map.set(video.id, video.localPath);
-      }
-    }
-    return map;
-  }, [libraryVideos]);
 
   const setPreparingVideo = useCallback((videoId: string, isPreparing: boolean) => {
     setPreparingVideoIds((prev) => {
@@ -135,7 +123,7 @@ export default function SavedPlaylistScreen() {
       let wasQueued = false;
 
       while (Date.now() - start < timeoutMs) {
-        if (videoExistsLocally(videoId)) return;
+        if (offlineCopy.getUri(videoId) !== null) return;
         if (shouldAbort()) throw new Error(PREPARE_CANCELLED_MESSAGE);
 
         const item = useDownloadStore.getState().getDownload(videoId);
@@ -160,8 +148,7 @@ export default function SavedPlaylistScreen() {
     (item: SavedPlaylistItem) => {
       if (!playlist) return;
 
-      const localPath =
-        localPathByVideoId.get(item.videoId) ?? getVideoLocalPath(item.videoId) ?? undefined;
+      const localPath = getOfflineUri(item.videoId) ?? undefined;
 
       if (!serverUrl && !localPath) {
         Alert.alert(
@@ -177,10 +164,7 @@ export default function SavedPlaylistScreen() {
         channelTitle: videoItem.channelTitle,
         duration: videoItem.duration,
         thumbnailUrl: videoItem.thumbnailUrl ?? undefined,
-        localPath:
-          localPathByVideoId.get(videoItem.videoId) ??
-          getVideoLocalPath(videoItem.videoId) ??
-          undefined,
+        localPath: getOfflineUri(videoItem.videoId) ?? undefined,
       }));
 
       const playableVideos = serverUrl
@@ -205,13 +189,12 @@ export default function SavedPlaylistScreen() {
       );
       router.push(`/player/${item.videoId}`);
     },
-    [playlist, localPathByVideoId, serverUrl, startPlaylist, router]
+    [playlist, getOfflineUri, serverUrl, startPlaylist, router]
   );
 
   const handleVideoPress = useCallback(
     async (item: SavedPlaylistItem) => {
-      const alreadyLocal =
-        localPathByVideoId.has(item.videoId) || videoExistsLocally(item.videoId);
+      const alreadyLocal = getOfflineUri(item.videoId) !== null;
 
       if (alreadyLocal) {
         playSavedPlaylistVideo(item);
@@ -250,7 +233,7 @@ export default function SavedPlaylistScreen() {
 
         await waitForServerDownload(item.videoId, shouldAbort);
 
-        if (!videoExistsLocally(item.videoId)) {
+        if (offlineCopy.getUri(item.videoId) === null) {
           queueDownload(item.videoId, {
             title: item.title,
             channelTitle: item.channelTitle,
@@ -281,7 +264,7 @@ export default function SavedPlaylistScreen() {
       }
     },
     [
-      localPathByVideoId,
+      getOfflineUri,
       playSavedPlaylistVideo,
       preparingVideoIds,
       queueDownload,
@@ -348,8 +331,7 @@ export default function SavedPlaylistScreen() {
   }
 
   const downloadedCount = playlist.items.filter(
-    (item) =>
-      localPathByVideoId.has(item.videoId) || videoExistsLocally(item.videoId)
+    (item) => getOfflineUri(item.videoId) !== null
   ).length;
   const totalCount = playlist.items.length;
   const downloadPercent = totalCount > 0 ? (downloadedCount / totalCount) * 100 : 0;

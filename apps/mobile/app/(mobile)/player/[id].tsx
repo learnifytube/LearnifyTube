@@ -25,7 +25,7 @@ import { usePlaybackStore } from "../../../stores/playback";
 import { useConnectionStore } from "../../../stores/connection";
 import { useSettingsStore } from "../../../stores/settings";
 import { api } from "../../../services/api";
-import { getVideoLocalPath } from "../../../services/downloader";
+import { offlineCopy } from "../../../services/offline-copy";
 import * as wordsRepo from "../../../db/repositories/words";
 import * as watchHistoryRepo from "../../../db/repositories/watchHistory";
 import * as videoRepo from "../../../db/repositories/videos";
@@ -192,8 +192,8 @@ export default function PlayerScreen() {
     [libraryVideo?.description, dbVideo?.description]
   );
 
-  // Determine video source URL - resolve path dynamically to handle sandbox changes
-  const localVideoPath = id ? getVideoLocalPath(id) : null;
+  // Play the Offline copy when there is one, otherwise stream
+  const localVideoPath = offlineCopy.useUri(id ?? "");
   const directStreamUrl =
     !localVideoPath && serverUrl && id ? `${serverUrl}/api/video/${id}/file` : null;
   const videoSourceUrl =
@@ -528,7 +528,7 @@ export default function PlayerScreen() {
           channelTitle: video.channelTitle,
           duration: video.duration,
           thumbnailUrl: video.thumbnailUrl ?? null,
-          localPath: localVideoPath ?? video.localPath ?? null,
+          localPath: localVideoPath,
           lastPositionSeconds: normalizedPosition,
           additionalWatchSeconds,
           lastWatchedAt: now,

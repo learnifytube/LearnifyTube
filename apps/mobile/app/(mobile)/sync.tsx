@@ -14,7 +14,6 @@ import {
 import { useRouter } from "expo-router";
 import { useSyncStore } from "../../stores/sync";
 import { useConnectionStore } from "../../stores/connection";
-import { useLibraryStore } from "../../stores/library";
 import { useDownloadStore } from "../../stores/downloads";
 import { usePlaybackStore } from "../../stores/playback";
 import { savePlaylist, isPlaylistSaved } from "../../db/repositories/playlists";
@@ -41,12 +40,11 @@ import type {
 } from "../../types";
 import type { StreamingVideo } from "../../stores/playback";
 import { api } from "../../services/api";
-import { getVideoLocalPath, videoExistsLocally } from "../../services/downloader";
+import { offlineCopy } from "../../services/offline-copy";
 
 export default function SyncScreen() {
   const router = useRouter();
   const serverUrl = useConnectionStore((s) => s.serverUrl);
-  const libraryVideos = useLibraryStore((s) => s.videos);
   const queueDownload = useDownloadStore((s) => s.queueDownload);
   const startPlaylist = usePlaybackStore((s) => s.startPlaylist);
   const { channels, playlists, myLists } = useBrowseCatalog();
@@ -93,7 +91,8 @@ export default function SyncScreen() {
   );
 
   // Set of video IDs already synced to mobile
-  const syncedVideoIds = new Set(libraryVideos.map((v) => v.id));
+  const getOfflineUri = offlineCopy.useLookup();
+  const hasOfflineCopy = (videoId: string) => getOfflineUri(videoId) !== null;
 
   const [pendingVideoIds, setPendingVideoIds] = useState<Set<string>>(new Set());
   const [, bumpSavedPlaylistVersion] = useState(0);
@@ -303,7 +302,7 @@ export default function SyncScreen() {
       const start = Date.now();
 
       while (Date.now() - start < timeoutMs) {
-        if (videoExistsLocally(videoId)) return;
+        if (offlineCopy.getUri(videoId) !== null) return;
         await sleep(intervalMs);
       }
 
@@ -314,9 +313,7 @@ export default function SyncScreen() {
 
   const handlePlayVideo = useCallback(
     (video: RemoteVideoWithStatus) => {
-      const localPath =
-        getVideoLocalPath(video.id) ??
-        libraryVideos.find((v) => v.id === video.id)?.localPath;
+      const localPath = offlineCopy.getUri(video.id);
       if (!serverUrl && !localPath) {
         Alert.alert(
           "Offline mode",
@@ -354,9 +351,7 @@ export default function SyncScreen() {
 
       const playlistStreamingVideos: StreamingVideo[] = currentVideos.map(
         (v) => {
-          const local =
-            getVideoLocalPath(v.id) ??
-            libraryVideos.find((lv) => lv.id === v.id)?.localPath;
+          const local = offlineCopy.getUri(v.id);
           return {
             id: v.id,
             title: v.title,
@@ -399,7 +394,6 @@ export default function SyncScreen() {
     },
     [
       serverUrl,
-      libraryVideos,
       selectedChannel,
       selectedPlaylist,
       selectedMyList,
@@ -435,7 +429,7 @@ export default function SyncScreen() {
       if (
         selectedVideoIds.has(video.id) &&
         video.downloadStatus === "completed" &&
-        !syncedVideoIds.has(video.id)
+        !hasOfflineCopy(video.id)
       ) {
         queueDownload(video.id, {
           title: video.title,
@@ -452,7 +446,7 @@ export default function SyncScreen() {
     playlistVideos,
     myListVideos,
     selectedVideoIds,
-    syncedVideoIds,
+    hasOfflineCopy,
     queueDownload,
     clearVideoSelection,
   ]);
@@ -532,11 +526,11 @@ export default function SyncScreen() {
     );
     // Videos not yet synced to mobile
     const syncableCount = serverUrl
-      ? availableVideos.filter((v) => !syncedVideoIds.has(v.id)).length
+      ? availableVideos.filter((v) => !hasOfflineCopy(v.id)).length
       : 0;
     // Videos already saved locally
     const savedCount = availableVideos.filter((v) =>
-      syncedVideoIds.has(v.id)
+      hasOfflineCopy(v.id)
     ).length;
     const totalAvailable = availableVideos.length;
     const isFullySaved = savedCount === totalAvailable && totalAvailable > 0;
@@ -584,7 +578,7 @@ export default function SyncScreen() {
 
       // Queue downloads for videos not yet synced
       for (const video of availableVideos) {
-        if (!syncedVideoIds.has(video.id)) {
+        if (!hasOfflineCopy(video.id)) {
           queueDownload(video.id, {
             title: video.title,
             channelTitle: video.channelTitle,
@@ -696,25 +690,25 @@ export default function SyncScreen() {
               <VideoListItem
                 video={item}
                 isSelected={selectedVideoIds.has(item.id)}
-                isSyncedToMobile={syncedVideoIds.has(item.id)}
+                isSyncedToMobile={hasOfflineCopy(item.id)}
                 onPress={() => {
                   if (
                     serverUrl &&
                     item.downloadStatus === "completed" &&
-                    !syncedVideoIds.has(item.id)
+                    !hasOfflineCopy(item.id)
                   ) {
                     toggleVideoSelection(item.id);
                   }
                 }}
                 onPlayPress={
-                  item.downloadStatus === "completed" || syncedVideoIds.has(item.id)
+                  item.downloadStatus === "completed" || hasOfflineCopy(item.id)
                     ? () => handlePlayVideo(item)
                     : undefined
                 }
                 onSyncPress={
                   serverUrl &&
                     item.downloadStatus === "completed" &&
-                    !syncedVideoIds.has(item.id)
+                    !hasOfflineCopy(item.id)
                     ? () => handleSyncVideo(item)
                     : undefined
                 }

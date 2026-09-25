@@ -13,7 +13,6 @@ import {
 } from "react-native";
 import { Link, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLibraryStore } from "../../../stores/library";
 import { useDownloadStore } from "../../../stores/downloads";
 import { useConnectionStore } from "../../../stores/connection";
 import { useSyncStore } from "../../../stores/sync";
@@ -31,13 +30,12 @@ import { Smartphone, ArrowLeft, Play } from "../../../theme/icons";
 import type { RemoteChannel, RemoteVideoWithStatus } from "../../../types";
 import type { StreamingVideo } from "../../../stores/playback";
 import { api } from "../../../services/api";
-import { getVideoLocalPath, videoExistsLocally } from "../../../services/downloader";
+import { offlineCopy } from "../../../services/offline-copy";
 
 export default function HomeScreen() {
   const serverUrl = useConnectionStore((s) => s.serverUrl);
   const isConnected = !!serverUrl;
 
-  const libraryVideos = useLibraryStore((s) => s.videos);
   const queueDownload = useDownloadStore((s) => s.queueDownload);
   const { channels } = useBrowseCatalog();
 
@@ -63,7 +61,8 @@ export default function HomeScreen() {
   const startPlaylist = usePlaybackStore((s) => s.startPlaylist);
 
   // Set of video IDs already synced to mobile
-  const syncedVideoIds = new Set(libraryVideos.map((v) => v.id));
+  const getOfflineUri = offlineCopy.useLookup();
+  const hasOfflineCopy = (videoId: string) => getOfflineUri(videoId) !== null;
 
   const [pendingVideoIds, setPendingVideoIds] = useState<Set<string>>(new Set());
   const [, bumpSavedPlaylistVersion] = useState(0);
@@ -168,7 +167,7 @@ export default function HomeScreen() {
       const start = Date.now();
 
       while (Date.now() - start < timeoutMs) {
-        if (videoExistsLocally(videoId)) return;
+        if (offlineCopy.getUri(videoId) !== null) return;
         await sleep(intervalMs);
       }
 
@@ -180,9 +179,7 @@ export default function HomeScreen() {
   // Play a single video (streaming or local)
   const handlePlayVideo = useCallback(
     (video: RemoteVideoWithStatus) => {
-      const localPath =
-        getVideoLocalPath(video.id) ??
-        libraryVideos.find((v) => v.id === video.id)?.localPath;
+      const localPath = offlineCopy.getUri(video.id);
       if (!serverUrl && !localPath) {
         Alert.alert(
           "Offline mode",
@@ -215,9 +212,7 @@ export default function HomeScreen() {
       // Convert to StreamingVideo array
       const playlistStreamingVideos: StreamingVideo[] = currentVideos.map(
         (v) => {
-          const local =
-            getVideoLocalPath(v.id) ??
-            libraryVideos.find((lv) => lv.id === v.id)?.localPath;
+          const local = offlineCopy.getUri(v.id);
           return {
             id: v.id,
             title: v.title,
@@ -259,7 +254,7 @@ export default function HomeScreen() {
 
       router.push(`/player/${video.id}`);
     },
-    [serverUrl, libraryVideos, selectedChannel, channelVideos, startPlaylist, router]
+    [serverUrl, selectedChannel, channelVideos, startPlaylist, router]
   );
 
   const handlePlayAll = useCallback(() => {
@@ -272,7 +267,7 @@ export default function HomeScreen() {
       if (serverUrl) {
         return v.downloadStatus === "completed";
       }
-      return syncedVideoIds.has(v.id);
+      return offlineCopy.getUri(v.id) !== null;
     });
 
     if (playableVideos.length === 0) {
@@ -285,9 +280,7 @@ export default function HomeScreen() {
 
     // Convert to StreamingVideo array
     const streamingVideos: StreamingVideo[] = playableVideos.map((v) => {
-      const localPath =
-        getVideoLocalPath(v.id) ??
-        libraryVideos.find((lv) => lv.id === v.id)?.localPath;
+      const localPath = offlineCopy.getUri(v.id);
       return {
         id: v.id,
         title: v.title,
@@ -319,10 +312,8 @@ export default function HomeScreen() {
     router.push(`/player/${videosToPlay[0].id}`);
   }, [
     serverUrl,
-    syncedVideoIds,
     selectedChannel,
     channelVideos,
-    libraryVideos,
     startPlaylist,
   ]);
 
@@ -346,7 +337,7 @@ export default function HomeScreen() {
       if (
         selectedVideoIds.has(video.id) &&
         video.downloadStatus === "completed" &&
-        !syncedVideoIds.has(video.id)
+        !hasOfflineCopy(video.id)
       ) {
         queueDownload(video.id, {
           title: video.title,
@@ -360,7 +351,7 @@ export default function HomeScreen() {
   }, [
     channelVideos,
     selectedVideoIds,
-    syncedVideoIds,
+    hasOfflineCopy,
     queueDownload,
     clearVideoSelection,
   ]);
@@ -405,10 +396,10 @@ export default function HomeScreen() {
       (v) => v.downloadStatus === "completed"
     );
     const syncableCount = serverUrl
-      ? availableVideos.filter((v) => !syncedVideoIds.has(v.id)).length
+      ? availableVideos.filter((v) => !hasOfflineCopy(v.id)).length
       : 0;
     const savedCount = availableVideos.filter((v) =>
-      syncedVideoIds.has(v.id)
+      hasOfflineCopy(v.id)
     ).length;
     const totalAvailable = availableVideos.length;
     const isFullySaved = savedCount === totalAvailable && totalAvailable > 0;
@@ -418,8 +409,8 @@ export default function HomeScreen() {
         ? isPlaylistSaved(saveTarget.playlistId)
         : isFullySaved;
 
-    const localPlayableCount = currentVideos.filter((v) =>
-      syncedVideoIds.has(v.id)
+    const localPlayableCount = currentVideos.filter(
+      (v) => hasOfflineCopy(v.id)
     ).length;
     const playableCount = serverUrl ? totalAvailable : localPlayableCount;
 
@@ -461,7 +452,7 @@ export default function HomeScreen() {
 
       // Queue downloads for videos not yet synced
       for (const video of availableVideos) {
-        if (!syncedVideoIds.has(video.id)) {
+        if (!hasOfflineCopy(video.id)) {
           queueDownload(video.id, {
             title: video.title,
             channelTitle: video.channelTitle,

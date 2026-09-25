@@ -26,7 +26,7 @@ import {
   getSavedPlaylistWithItems,
 } from "../../../db/repositories/playlists";
 import * as watchHistoryRepo from "../../../db/repositories/watchHistory";
-import { getVideoLocalPath } from "../../../services/downloader";
+import { offlineCopy } from "../../../services/offline-copy";
 import { colors, spacing, radius, fontSize, fontWeight } from "../../../theme";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -158,19 +158,10 @@ export function SavedTabContent() {
     }, [loadData])
   );
 
-  const downloadedVideos = videos.filter((v) => !!v.localPath);
+  const getOfflineUri = offlineCopy.useLookup();
+  const downloadedVideos = videos.filter((v) => getOfflineUri(v.id) !== null);
   const activeDownloads = downloadQueue.filter((d) => d.status === "downloading");
   const queuedDownloads = downloadQueue.filter((d) => d.status === "queued");
-
-  const localPathByVideoId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const video of videos) {
-      if (video.localPath) {
-        map.set(video.id, video.localPath);
-      }
-    }
-    return map;
-  }, [videos]);
 
   const getVideoResumeSeconds = useCallback(
     (videoId: string, duration: number) => {
@@ -233,10 +224,7 @@ export function SavedTabContent() {
         channelTitle: item.channelTitle,
         duration: item.duration,
         thumbnailUrl: item.thumbnailUrl ?? undefined,
-        localPath:
-          localPathByVideoId.get(item.videoId) ??
-          getVideoLocalPath(item.videoId) ??
-          undefined,
+        localPath: getOfflineUri(item.videoId) ?? undefined,
       }));
 
       const playableVideos = serverUrl
@@ -271,7 +259,7 @@ export function SavedTabContent() {
           : (`/player/${selectedVideo.id}` as Href);
       router.push(route);
     },
-    [localPathByVideoId, playlistResumeById, router, serverUrl, startPlaylist]
+    [getOfflineUri, playlistResumeById, router, serverUrl, startPlaylist]
   );
 
   const renderPlaylistCard = (playlist: SavedPlaylistInfo, index: number) => {

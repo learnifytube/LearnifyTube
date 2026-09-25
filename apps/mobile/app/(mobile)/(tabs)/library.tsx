@@ -14,7 +14,6 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLibraryStore } from "../../../stores/library";
 import { useDownloadStore } from "../../../stores/downloads";
 import { useConnectionStore } from "../../../stores/connection";
 import { useSyncStore } from "../../../stores/sync";
@@ -38,7 +37,7 @@ import { colors, spacing, fontSize, fontWeight } from "../../../theme";
 import { ArrowLeft } from "../../../theme/icons";
 import type { RemotePlaylist, RemoteMyList, RemoteVideoWithStatus } from "../../../types";
 import type { StreamingVideo } from "../../../stores/playback";
-import { getVideoLocalPath } from "../../../services/downloader";
+import { offlineCopy } from "../../../services/offline-copy";
 
 type LibraryTab = "mylists" | "playlists" | "saved";
 
@@ -51,7 +50,6 @@ const LIBRARY_TABS: { key: LibraryTab; label: string }[] = [
 export default function LibraryScreen() {
   const router = useRouter();
   const serverUrl = useConnectionStore((s) => s.serverUrl);
-  const libraryVideos = useLibraryStore((s) => s.videos);
   const queueDownload = useDownloadStore((s) => s.queueDownload);
   const startPlaylist = usePlaybackStore((s) => s.startPlaylist);
   const { playlists, myLists } = useBrowseCatalog();
@@ -92,7 +90,8 @@ export default function LibraryScreen() {
     selectedMyList?.id ?? null
   );
 
-  const syncedVideoIds = new Set(libraryVideos.map((v) => v.id));
+  const getOfflineUri = offlineCopy.useLookup();
+  const hasOfflineCopy = (videoId: string) => getOfflineUri(videoId) !== null;
   const [, bumpSavedPlaylistVersion] = useState(0);
 
   useEffect(() => {
@@ -201,9 +200,7 @@ export default function LibraryScreen() {
 
   const handlePlayVideo = useCallback(
     (video: RemoteVideoWithStatus) => {
-      const localPath =
-        getVideoLocalPath(video.id) ??
-        libraryVideos.find((v) => v.id === video.id)?.localPath;
+      const localPath = offlineCopy.getUri(video.id);
       if (!serverUrl && !localPath) {
         Alert.alert(
           "Offline mode",
@@ -241,10 +238,7 @@ export default function LibraryScreen() {
           channelTitle: v.channelTitle,
           duration: v.duration,
           thumbnailUrl: v.thumbnailUrl ?? undefined,
-          localPath:
-            getVideoLocalPath(v.id) ??
-            libraryVideos.find((lv) => lv.id === v.id)?.localPath ??
-            undefined,
+          localPath: offlineCopy.getUri(v.id) ?? undefined,
         })
       );
       const playablePlaylistVideos = serverUrl
@@ -277,7 +271,6 @@ export default function LibraryScreen() {
     },
     [
       serverUrl,
-      libraryVideos,
       selectedPlaylist,
       selectedMyList,
       playlistVideos,
@@ -306,7 +299,7 @@ export default function LibraryScreen() {
       if (
         selectedVideoIds.has(video.id) &&
         video.downloadStatus === "completed" &&
-        !syncedVideoIds.has(video.id)
+        !hasOfflineCopy(video.id)
       ) {
         queueDownload(video.id, {
           title: video.title,
@@ -322,7 +315,7 @@ export default function LibraryScreen() {
     playlistVideos,
     myListVideos,
     selectedVideoIds,
-    syncedVideoIds,
+    hasOfflineCopy,
     queueDownload,
     clearVideoSelection,
   ]);
@@ -380,10 +373,10 @@ export default function LibraryScreen() {
       (v) => v.downloadStatus === "completed"
     );
     const syncableCount = serverUrl
-      ? availableVideos.filter((v) => !syncedVideoIds.has(v.id)).length
+      ? availableVideos.filter((v) => !hasOfflineCopy(v.id)).length
       : 0;
     const savedCount = availableVideos.filter((v) =>
-      syncedVideoIds.has(v.id)
+      hasOfflineCopy(v.id)
     ).length;
     const totalAvailable = availableVideos.length;
     const isPlaylistSaveContext = Boolean(selectedPlaylist || selectedMyList);
@@ -420,7 +413,7 @@ export default function LibraryScreen() {
       }
       if (!serverUrl) return;
       for (const video of availableVideos) {
-        if (!syncedVideoIds.has(video.id)) {
+        if (!hasOfflineCopy(video.id)) {
           queueDownload(video.id, {
             title: video.title,
             channelTitle: video.channelTitle,
@@ -523,25 +516,25 @@ export default function LibraryScreen() {
               <VideoListItem
                 video={item}
                 isSelected={selectedVideoIds.has(item.id)}
-                isSyncedToMobile={syncedVideoIds.has(item.id)}
+                isSyncedToMobile={hasOfflineCopy(item.id)}
                 onPress={() => {
                   if (
                     serverUrl &&
                     item.downloadStatus === "completed" &&
-                    !syncedVideoIds.has(item.id)
+                    !hasOfflineCopy(item.id)
                   ) {
                     toggleVideoSelection(item.id);
                   }
                 }}
                 onPlayPress={
-                  item.downloadStatus === "completed" || syncedVideoIds.has(item.id)
+                  item.downloadStatus === "completed" || hasOfflineCopy(item.id)
                     ? () => handlePlayVideo(item)
                     : undefined
                 }
                 onSyncPress={
                   serverUrl &&
                   item.downloadStatus === "completed" &&
-                  !syncedVideoIds.has(item.id)
+                  !hasOfflineCopy(item.id)
                     ? () => handleSyncVideo(item)
                     : undefined
                 }

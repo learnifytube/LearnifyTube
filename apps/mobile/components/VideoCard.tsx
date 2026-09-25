@@ -11,7 +11,7 @@ import { Link, type Href } from "expo-router";
 import type { Video } from "../types";
 import { useDownloadStore } from "../stores/downloads";
 import { downloadManager } from "../services/downloadManager";
-import { videoExistsLocally } from "../services/downloader";
+import { offlineCopy } from "../services/offline-copy";
 import { colors, radius, spacing, fontSize, fontWeight } from "../theme";
 import { Check, AlertCircle, Film } from "../theme/icons";
 
@@ -41,7 +41,7 @@ export function VideoCard({
     state.queue.find((d) => d.videoId === video.id)
   );
 
-  const isDownloaded = videoExistsLocally(video.id);
+  const isDownloaded = offlineCopy.useUri(video.id) !== null;
   const isDownloading = download?.status === "downloading";
   const isQueued = download?.status === "queued";
   const isFailed = download?.status === "failed";

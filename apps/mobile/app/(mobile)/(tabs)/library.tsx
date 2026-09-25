@@ -200,8 +200,8 @@ export default function LibraryScreen() {
 
   const handlePlayVideo = useCallback(
     (video: RemoteVideoWithStatus) => {
-      const localPath = offlineCopy.getUri(video.id);
-      if (!serverUrl && !localPath) {
+      const offlineUri = offlineCopy.getUri(video.id);
+      if (!serverUrl && !offlineUri) {
         Alert.alert(
           "Offline mode",
           "This video is not downloaded on mobile yet."
@@ -215,7 +215,6 @@ export default function LibraryScreen() {
         channelTitle: video.channelTitle,
         duration: video.duration,
         thumbnailUrl: video.thumbnailUrl ?? undefined,
-        localPath: localPath ?? undefined,
       };
 
       let contextTitle = "Now Playing";
@@ -238,15 +237,16 @@ export default function LibraryScreen() {
           channelTitle: v.channelTitle,
           duration: v.duration,
           thumbnailUrl: v.thumbnailUrl ?? undefined,
-          localPath: offlineCopy.getUri(v.id) ?? undefined,
         })
       );
       const playablePlaylistVideos = serverUrl
         ? playlistStreamingVideos
-        : playlistStreamingVideos.filter((v) => !!v.localPath);
+        : playlistStreamingVideos.filter(
+            (v) => offlineCopy.getUri(v.id) !== null
+          );
       const startIndex = playablePlaylistVideos.findIndex((v) => v.id === video.id);
       const fallbackVideos =
-        serverUrl || streamingVideo.localPath ? [streamingVideo] : [];
+        serverUrl || offlineUri ? [streamingVideo] : [];
       const videosToPlay =
         playablePlaylistVideos.length > 0
           ? playablePlaylistVideos

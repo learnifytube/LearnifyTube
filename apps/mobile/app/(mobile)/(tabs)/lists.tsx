@@ -224,12 +224,11 @@ export function SavedTabContent() {
         channelTitle: item.channelTitle,
         duration: item.duration,
         thumbnailUrl: item.thumbnailUrl ?? undefined,
-        localPath: getOfflineUri(item.videoId) ?? undefined,
       }));
 
       const playableVideos = serverUrl
         ? playlistVideos
-        : playlistVideos.filter((item) => !!item.localPath);
+        : playlistVideos.filter((item) => getOfflineUri(item.id) !== null);
 
       if (playableVideos.length === 0) {
         Alert.alert(

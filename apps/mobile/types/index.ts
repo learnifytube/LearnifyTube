@@ -16,7 +16,6 @@ export interface Video {
   channelTitle: string;
   duration: number;
   thumbnailUrl?: string;
-  localPath?: string;
   description?: string | null;
   transcriptPath?: string;
   transcript?: Transcript;

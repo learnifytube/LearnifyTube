@@ -12,7 +12,6 @@ export interface UpsertWatchProgressInput {
   channelTitle: string;
   duration: number;
   thumbnailUrl?: string | null;
-  localPath?: string | null;
   lastPositionSeconds: number;
   additionalWatchSeconds?: number;
   lastWatchedAt?: number;
@@ -24,7 +23,6 @@ export interface WatchHistoryItem {
   channelTitle: string;
   duration: number;
   thumbnailUrl: string | null;
-  localPath: string | null;
   totalWatchSeconds: number;
   lastPositionSeconds: number;
   lastWatchedAt: number | null;
@@ -44,7 +42,6 @@ function ensureVideo(input: UpsertWatchProgressInput) {
         channelTitle: input.channelTitle || existing.channelTitle,
         duration: input.duration || existing.duration,
         thumbnailUrl: input.thumbnailUrl ?? existing.thumbnailUrl,
-        localPath: input.localPath ?? existing.localPath,
         updatedAt: now,
       })
       .where(eq(videos.id, input.videoId))
@@ -60,7 +57,6 @@ function ensureVideo(input: UpsertWatchProgressInput) {
       channelTitle: input.channelTitle,
       duration: input.duration,
       thumbnailUrl: input.thumbnailUrl ?? null,
-      localPath: input.localPath ?? null,
       createdAt: now,
       updatedAt: now,
     })
@@ -133,7 +129,6 @@ export function getWatchHistory(limit = 100): WatchHistoryItem[] {
       channelTitle: videos.channelTitle,
       duration: videos.duration,
       thumbnailUrl: videos.thumbnailUrl,
-      localPath: videos.localPath,
       totalWatchSeconds: watchStats.totalWatchSeconds,
       lastPositionSeconds: watchStats.lastPositionSeconds,
       lastWatchedAt: watchStats.lastWatchedAt,
@@ -151,7 +146,6 @@ export function getWatchHistory(limit = 100): WatchHistoryItem[] {
     channelTitle: row.channelTitle,
     duration: row.duration,
     thumbnailUrl: row.thumbnailUrl ?? null,
-    localPath: row.localPath ?? null,
     totalWatchSeconds: row.totalWatchSeconds ?? 0,
     lastPositionSeconds: row.lastPositionSeconds ?? 0,
     lastWatchedAt: row.lastWatchedAt ?? null,

@@ -10,9 +10,9 @@ interface LibraryStore {
   // Load videos from SQLite
   loadVideos: () => void;
 
-  // Video CRUD. The Offline copy module owns localPath.
-  addVideo: (video: Omit<Video, "localPath">) => void;
-  updateVideo: (id: string, updates: Partial<Omit<Video, "localPath">>) => void;
+  // Video CRUD. The Offline copy module owns a Video's file location.
+  addVideo: (video: Video) => void;
+  updateVideo: (id: string, updates: Partial<Video>) => void;
   removeVideo: (id: string) => void;
   getVideo: (id: string) => Video | undefined;
   clearLibrary: () => void;
@@ -32,7 +32,6 @@ function dbVideoToVideo(
     channelTitle: dbVideo.channelTitle,
     duration: dbVideo.duration,
     thumbnailUrl: dbVideo.thumbnailUrl ?? undefined,
-    localPath: dbVideo.localPath ?? undefined,
     description: dbVideo.description ?? null,
   };
 

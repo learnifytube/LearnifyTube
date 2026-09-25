@@ -325,7 +325,7 @@ export default function ConnectScreen() {
 
       console.log("[Connect] Queueing download:", video.title);
 
-      // Add to library (without localPath initially)
+      // Add to library (the Offline copy module records its file)
       addVideo({
         id: video.id,
         title: video.title,

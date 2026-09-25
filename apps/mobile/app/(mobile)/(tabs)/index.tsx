@@ -179,8 +179,8 @@ export default function HomeScreen() {
   // Play a single video (streaming or local)
   const handlePlayVideo = useCallback(
     (video: RemoteVideoWithStatus) => {
-      const localPath = offlineCopy.getUri(video.id);
-      if (!serverUrl && !localPath) {
+      const offlineUri = offlineCopy.getUri(video.id);
+      if (!serverUrl && !offlineUri) {
         Alert.alert(
           "Offline mode",
           "This video is not downloaded on mobile yet."
@@ -195,7 +195,6 @@ export default function HomeScreen() {
         channelTitle: video.channelTitle,
         duration: video.duration,
         thumbnailUrl: video.thumbnailUrl ?? undefined,
-        localPath: localPath ?? undefined,
       };
 
       // Determine the context title (channels-only screen)
@@ -211,28 +210,26 @@ export default function HomeScreen() {
 
       // Convert to StreamingVideo array
       const playlistStreamingVideos: StreamingVideo[] = currentVideos.map(
-        (v) => {
-          const local = offlineCopy.getUri(v.id);
-          return {
-            id: v.id,
-            title: v.title,
-            channelTitle: v.channelTitle,
-            duration: v.duration,
-            thumbnailUrl: v.thumbnailUrl ?? undefined,
-            localPath: local ?? undefined,
-          };
-        }
+        (v) => ({
+          id: v.id,
+          title: v.title,
+          channelTitle: v.channelTitle,
+          duration: v.duration,
+          thumbnailUrl: v.thumbnailUrl ?? undefined,
+        })
       );
       const playablePlaylistVideos = serverUrl
         ? playlistStreamingVideos
-        : playlistStreamingVideos.filter((v) => !!v.localPath);
+        : playlistStreamingVideos.filter(
+            (v) => offlineCopy.getUri(v.id) !== null
+          );
 
       // Find index of current video
       const startIndex = playablePlaylistVideos.findIndex(
         (v) => v.id === video.id
       );
       const fallbackVideos =
-        serverUrl || streamingVideo.localPath ? [streamingVideo] : [];
+        serverUrl || offlineUri ? [streamingVideo] : [];
       const videosToPlay =
         playablePlaylistVideos.length > 0 ? playablePlaylistVideos : fallbackVideos;
 
@@ -279,28 +276,13 @@ export default function HomeScreen() {
     }
 
     // Convert to StreamingVideo array
-    const streamingVideos: StreamingVideo[] = playableVideos.map((v) => {
-      const localPath = offlineCopy.getUri(v.id);
-      return {
-        id: v.id,
-        title: v.title,
-        channelTitle: v.channelTitle,
-        duration: v.duration,
-        thumbnailUrl: v.thumbnailUrl ?? undefined,
-        localPath: localPath ?? undefined,
-      };
-    });
-    const videosToPlay = serverUrl
-      ? streamingVideos
-      : streamingVideos.filter((v) => !!v.localPath);
-
-    if (videosToPlay.length === 0) {
-      Alert.alert(
-        "Offline mode",
-        "No downloaded videos are available to play."
-      );
-      return;
-    }
+    const videosToPlay: StreamingVideo[] = playableVideos.map((v) => ({
+      id: v.id,
+      title: v.title,
+      channelTitle: v.channelTitle,
+      duration: v.duration,
+      thumbnailUrl: v.thumbnailUrl ?? undefined,
+    }));
 
     startPlaylist(
       contextId,

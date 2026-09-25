@@ -167,7 +167,6 @@ export default function PlayerScreen() {
       channelTitle: storedVideo.channelTitle,
       duration: storedVideo.duration,
       thumbnailUrl: storedVideo.thumbnailUrl ?? undefined,
-      localPath: storedVideo.localPath ?? undefined,
       description: normalizeDescription(storedVideo.description),
       transcripts: storedVideo.transcripts,
       transcript: preferredTranscript ?? undefined,
@@ -193,11 +192,11 @@ export default function PlayerScreen() {
   );
 
   // Play the Offline copy when there is one, otherwise stream
-  const localVideoPath = offlineCopy.useUri(id ?? "");
+  const offlineUri = offlineCopy.useUri(id ?? "");
   const directStreamUrl =
-    !localVideoPath && serverUrl && id ? `${serverUrl}/api/video/${id}/file` : null;
+    !offlineUri && serverUrl && id ? `${serverUrl}/api/video/${id}/file` : null;
   const videoSourceUrl =
-    localVideoPath ??
+    offlineUri ??
     (streamServerUrl && id ? getStreamUrl(id) : null) ??
     directStreamUrl;
 
@@ -528,7 +527,6 @@ export default function PlayerScreen() {
           channelTitle: video.channelTitle,
           duration: video.duration,
           thumbnailUrl: video.thumbnailUrl ?? null,
-          localPath: localVideoPath,
           lastPositionSeconds: normalizedPosition,
           additionalWatchSeconds,
           lastWatchedAt: now,
@@ -539,7 +537,7 @@ export default function PlayerScreen() {
         console.log("[Player] Failed to persist watch progress:", error);
       }
     },
-    [video, localVideoPath]
+    [video]
   );
 
   // Only create player when we have a valid source to avoid Fabric viewState errors
@@ -893,7 +891,7 @@ export default function PlayerScreen() {
         </Text>
         <View style={styles.channelRow}>
           <Text style={styles.channel}>{video.channelTitle}</Text>
-          {!localVideoPath && effectiveServerUrl && (
+          {!offlineUri && effectiveServerUrl && (
             <View style={styles.streamingBadge}>
               <Text style={styles.streamingBadgeText}>Streaming</Text>
             </View>

@@ -174,33 +174,24 @@ async function ensureDiscoveryPermissions(): Promise<boolean> {
 
 function toStreamingVideos(
   input: RemoteVideoWithStatus[],
-  getOfflineUri: OfflineCopy["getUri"],
   serverUrl: string | null
 ) {
-  return input.map<StreamingVideo>((item) => {
-    const localPath = getOfflineUri(item.id) ?? undefined;
-    return {
-      id: item.id,
-      title: item.title,
-      channelTitle: item.channelTitle,
-      duration: item.duration,
-      thumbnailUrl: resolveThumbnailUrl(serverUrl, item.thumbnailUrl) ?? undefined,
-      localPath,
-    };
-  });
+  return input.map<StreamingVideo>((item) => ({
+    id: item.id,
+    title: item.title,
+    channelTitle: item.channelTitle,
+    duration: item.duration,
+    thumbnailUrl: resolveThumbnailUrl(serverUrl, item.thumbnailUrl) ?? undefined,
+  }));
 }
 
-function toSavedPlaylistStreamingVideos(
-  playlist: SavedPlaylistWithItems,
-  getOfflineUri: OfflineCopy["getUri"]
-) {
+function toSavedPlaylistStreamingVideos(playlist: SavedPlaylistWithItems) {
   return playlist.items.map<StreamingVideo>((item) => ({
     id: item.videoId,
     title: item.title,
     channelTitle: item.channelTitle,
     duration: item.duration,
     thumbnailUrl: item.thumbnailUrl ?? undefined,
-    localPath: getOfflineUri(item.videoId) ?? undefined,
   }));
 }
 
@@ -617,9 +608,8 @@ export default function TVHomeScreen() {
       }
 
       const playableVideos = toSavedPlaylistStreamingVideos(
-        savedPlaylist,
-        getOfflineUri
-      ).filter((item) => !!item.localPath);
+        savedPlaylist
+      ).filter((item) => getOfflineUri(item.id) !== null);
 
       tvDebugInfo("[TV Offline Debug] Offline playlist playback attempt", {
         savedPlaylistId,
@@ -697,18 +687,15 @@ export default function TVHomeScreen() {
         });
         refreshOfflineCatalog();
 
-        const streamingVideos = toStreamingVideos(
-          normalizedVideos,
-          getOfflineUri,
-          serverUrl
-        );
+        const streamingVideos = toStreamingVideos(normalizedVideos, serverUrl);
         tvDebugInfo("[TV Playback Debug] Remote collection prepared", {
           kind,
           id,
           title,
           totalVideos: streamingVideos.length,
-          localPlayableCount: streamingVideos.filter((item) => !!item.localPath)
-            .length,
+          localPlayableCount: streamingVideos.filter(
+            (item) => getOfflineUri(item.id) !== null
+          ).length,
           sourceKind: "desktop-playback",
           serverUrl,
         });
@@ -903,17 +890,16 @@ export default function TVHomeScreen() {
     const cards: BaseGridCard[] = [];
 
     for (const item of recentPlaylists) {
-      const normalizedVideos = item.videos.map((video) => ({
-        ...video,
-        localPath: getOfflineUri(video.id) ?? undefined,
-      }));
-      if (!canStream && !normalizedVideos.some((video) => !!video.localPath)) {
+      if (
+        !canStream &&
+        !item.videos.some((video) => getOfflineUri(video.id) !== null)
+      ) {
         continue;
       }
 
       const total = item.videos.length;
       const currentPosition = total > 0 ? Math.min(item.lastIndex + 1, total) : 0;
-      const currentVideo = normalizedVideos[item.lastIndex];
+      const currentVideo = item.videos[item.lastIndex];
       const historyServerUrl = canStream ? item.serverUrl ?? serverUrl ?? null : null;
       const subtitle = currentVideo
         ? `Resume ${currentPosition}/${total} - ${currentVideo.title}`
@@ -925,7 +911,7 @@ export default function TVHomeScreen() {
         subtitle,
         thumbnailUrl:
           resolveThumbnailUrl(historyServerUrl, currentVideo?.thumbnailUrl) ??
-          resolveThumbnailUrl(historyServerUrl, normalizedVideos[0]?.thumbnailUrl),
+          resolveThumbnailUrl(historyServerUrl, item.videos[0]?.thumbnailUrl),
         type: "history",
       });
     }
@@ -1098,13 +1084,9 @@ export default function TVHomeScreen() {
         const target = recentPlaylists.find((item) => item.playlistId === card.id);
         if (!target || target.videos.length === 0) return;
 
-        const normalizedVideos = target.videos.map((video) => ({
-          ...video,
-          localPath: getOfflineUri(video.id) ?? undefined,
-        }));
         const playableVideos = canStream
-          ? normalizedVideos
-          : normalizedVideos.filter((video) => !!video.localPath);
+          ? target.videos
+          : target.videos.filter((video) => getOfflineUri(video.id) !== null);
 
         if (playableVideos.length === 0) {
           Alert.alert(

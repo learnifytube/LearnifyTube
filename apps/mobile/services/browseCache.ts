@@ -368,7 +368,7 @@ export function getCachedCollectionVideos(
     thumbnailUrl: item.thumbnailUrl ?? null,
     downloadStatus: normalizeCachedDownloadStatus(
       item.downloadStatus,
-      Boolean(item.localPath)
+      item.isDownloaded
     ),
     downloadProgress: item.downloadProgress ?? null,
     fileSize: item.fileSize ?? null,

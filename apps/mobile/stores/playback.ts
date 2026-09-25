@@ -1,14 +1,14 @@
 import { create } from "zustand";
 import type { Video } from "../types";
 
-// Extended video type for streaming (may not have localPath)
+// A Video in the play queue. It carries no file location: the player asks the
+// Offline copy module when each Video starts and streams when there is none.
 export interface StreamingVideo {
   id: string;
   title: string;
   channelTitle: string;
   duration: number;
   thumbnailUrl?: string;
-  localPath?: string; // undefined when streaming
 }
 
 interface PlaybackStore {
@@ -18,9 +18,7 @@ interface PlaybackStore {
   playlistVideos: StreamingVideo[];
   currentIndex: number;
 
-  // Streaming state
   streamServerUrl: string | null;
-  isStreaming: boolean;
 
   // Actions
   startPlaylist: (
@@ -46,17 +44,14 @@ export const usePlaybackStore = create<PlaybackStore>()((set, get) => ({
   playlistVideos: [],
   currentIndex: 0,
   streamServerUrl: null,
-  isStreaming: false,
 
   startPlaylist: (playlistId, title, videos, startIndex = 0, serverUrl) => {
-    const hasLocalVideos = videos.some((v) => v.localPath);
     set({
       playlistId,
       playlistTitle: title,
       playlistVideos: videos,
       currentIndex: startIndex,
       streamServerUrl: serverUrl ?? null,
-      isStreaming: !!serverUrl && !hasLocalVideos,
     });
   },
 
@@ -87,7 +82,6 @@ export const usePlaybackStore = create<PlaybackStore>()((set, get) => ({
       playlistVideos: [],
       currentIndex: 0,
       streamServerUrl: null,
-      isStreaming: false,
     });
   },
 

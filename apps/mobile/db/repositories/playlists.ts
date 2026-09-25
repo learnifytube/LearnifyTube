@@ -1,5 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
-import { getDb, savedPlaylists, savedPlaylistItems, videos } from "../index";
+import { getDb, savedPlaylists, savedPlaylistItems } from "../index";
+import { offlineCopy } from "../../services/offline-copy";
 import type {
   SavedPlaylist,
   NewSavedPlaylist,
@@ -30,7 +31,6 @@ export interface SavedPlaylistWithItems extends SavedPlaylist {
   items: Array<
     SavedPlaylistItem & {
       isDownloaded: boolean;
-      localPath?: string;
     }
   >;
 }
@@ -239,15 +239,10 @@ export function getSavedPlaylistWithItems(
 
   const items = getPlaylistItemsInternal(id);
 
-  const itemsWithStatus = items.map((item) => {
-    const video = getDb().select().from(videos).where(eq(videos.id, item.videoId)).get();
-
-    return {
-      ...item,
-      isDownloaded: !!video?.localPath,
-      localPath: video?.localPath ?? undefined,
-    };
-  });
+  const itemsWithStatus = items.map((item) => ({
+    ...item,
+    isDownloaded: offlineCopy.getUri(item.videoId) !== null,
+  }));
 
   return {
     ...playlist,
@@ -269,13 +264,9 @@ export function getAllSavedPlaylistsWithProgress(
   return playlists.map((playlist) => {
     const items = getPlaylistItemsInternal(playlist.id);
 
-    let downloadedCount = 0;
-    for (const item of items) {
-      const video = getDb().select().from(videos).where(eq(videos.id, item.videoId)).get();
-      if (video?.localPath) {
-        downloadedCount++;
-      }
-    }
+    const downloadedCount = items.filter(
+      (item) => offlineCopy.getUri(item.videoId) !== null
+    ).length;
 
     return {
       ...playlist,

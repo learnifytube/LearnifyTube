@@ -84,20 +84,15 @@ function getErrorMessage(error: unknown): string {
 
 function toStreamingVideos(
   input: RemoteVideoWithStatus[],
-  getOfflineUri: OfflineCopy["getUri"],
   serverUrl: string | null
 ) {
-  return input.map<StreamingVideo>((item) => {
-    const localPath = getOfflineUri(item.id) ?? undefined;
-    return {
-      id: item.id,
-      title: item.title,
-      channelTitle: item.channelTitle,
-      duration: item.duration,
-      thumbnailUrl: resolveThumbnailUrl(serverUrl, item.thumbnailUrl) ?? undefined,
-      localPath,
-    };
-  });
+  return input.map<StreamingVideo>((item) => ({
+    id: item.id,
+    title: item.title,
+    channelTitle: item.channelTitle,
+    duration: item.duration,
+    thumbnailUrl: resolveThumbnailUrl(serverUrl, item.thumbnailUrl) ?? undefined,
+  }));
 }
 
 function toOfflineChannelVideos(
@@ -501,20 +496,17 @@ export default function TVChannelDetailScreen() {
         return;
       }
 
-      const streamingVideos = toStreamingVideos(
-        channelVideos,
-        getOfflineUri,
-        serverUrl
-      );
+      const streamingVideos = toStreamingVideos(channelVideos, serverUrl);
       const playableVideos = canStream
         ? streamingVideos
-        : streamingVideos.filter((item) => !!item.localPath);
+        : streamingVideos.filter((item) => getOfflineUri(item.id) !== null);
       tvDebugInfo("[TV Playback Debug] Channel playlist prepared", {
         videoId,
         playbackPlaylistId: activePlaylist?.id ?? channelId ?? channelTitle,
         totalVideos: streamingVideos.length,
-        localPlayableCount: streamingVideos.filter((item) => !!item.localPath)
-          .length,
+        localPlayableCount: streamingVideos.filter(
+          (item) => getOfflineUri(item.id) !== null
+        ).length,
         canStream,
       });
       const startIndex = playableVideos.findIndex((item) => item.id === videoId);

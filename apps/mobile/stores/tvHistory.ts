@@ -32,6 +32,18 @@ interface TVHistoryStore {
   clearRecentPlaylists: () => void;
 }
 
+// Keep only the queue fields, so a location from an older version (or an
+// object carrying extra fields) is never persisted.
+function toHistoryVideo({
+  id,
+  title,
+  channelTitle,
+  duration,
+  thumbnailUrl,
+}: StreamingVideo) {
+  return { id, title, channelTitle, duration, thumbnailUrl };
+}
+
 function clampIndex(index: number, length: number): number {
   if (length <= 0) return 0;
   if (index < 0) return 0;
@@ -57,7 +69,7 @@ export const useTVHistoryStore = create<TVHistoryStore>()(
         const nextEntry: TVRecentPlaylist = {
           playlistId,
           title,
-          videos,
+          videos: videos.map(toHistoryVideo),
           lastIndex: safeIndex,
           lastVideoId: videos[safeIndex]?.id ?? null,
           serverUrl: serverUrl ?? null,
@@ -103,6 +115,17 @@ export const useTVHistoryStore = create<TVHistoryStore>()(
     {
       name: "learnify-tv-recent-playlists-v1",
       storage: createJSONStorage(() => AsyncStorage),
+      // v0 persisted each Video's file location; drop it.
+      version: 1,
+      migrate: (persisted) => {
+        const state = persisted as Pick<TVHistoryStore, "recentPlaylists">;
+        return {
+          recentPlaylists: (state?.recentPlaylists ?? []).map((item) => ({
+            ...item,
+            videos: (item.videos ?? []).map(toHistoryVideo),
+          })),
+        };
+      },
     }
   )
 );

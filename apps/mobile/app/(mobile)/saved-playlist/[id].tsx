@@ -148,9 +148,7 @@ export default function SavedPlaylistScreen() {
     (item: SavedPlaylistItem) => {
       if (!playlist) return;
 
-      const localPath = getOfflineUri(item.videoId) ?? undefined;
-
-      if (!serverUrl && !localPath) {
+      if (!serverUrl && getOfflineUri(item.videoId) === null) {
         Alert.alert(
           "Offline mode",
           "Reconnect to desktop to stream or sync this video."
@@ -164,12 +162,11 @@ export default function SavedPlaylistScreen() {
         channelTitle: videoItem.channelTitle,
         duration: videoItem.duration,
         thumbnailUrl: videoItem.thumbnailUrl ?? undefined,
-        localPath: getOfflineUri(videoItem.videoId) ?? undefined,
       }));
 
       const playableVideos = serverUrl
         ? allPlaylistVideos
-        : allPlaylistVideos.filter((video) => !!video.localPath);
+        : allPlaylistVideos.filter((video) => getOfflineUri(video.id) !== null);
 
       const startIndex = playableVideos.findIndex((video) => video.id === item.videoId);
       if (startIndex < 0) {

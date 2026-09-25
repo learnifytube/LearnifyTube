@@ -1,6 +1,4 @@
 import TcpSocket from "react-native-tcp-socket";
-import { File } from "expo-file-system";
-import * as FileSystemLegacy from "expo-file-system/legacy";
 import { getDeviceName } from "./discovery";
 import { offlineCopy } from "../offline-copy";
 import type { Video, PeerVideo } from "../../types";
@@ -18,18 +16,6 @@ const log = (message: string, data?: unknown) => {
 
 let server: ReturnType<typeof TcpSocket.createServer> | null = null;
 let sharedVideos: Video[] = [];
-
-/** Read an Offline copy from any Storage location (`file://` or `content://`). */
-async function readOfflineCopyBytes(uri: string): Promise<Uint8Array> {
-  // Picked-folder copies are content://; the SDK 54 File API is file://-oriented.
-  if (uri.startsWith("content://")) {
-    const base64 = await FileSystemLegacy.readAsStringAsync(uri, {
-      encoding: FileSystemLegacy.EncodingType.Base64,
-    });
-    return Buffer.from(base64, "base64");
-  }
-  return new File(uri).bytes();
-}
 
 function parseHttpRequest(data: string): { method: string; path: string } | null {
   const lines = data.split("\r\n");
@@ -143,18 +129,16 @@ async function handleRequest(path: string, method: string): Promise<{ statusCode
   const fileMatch = path.match(/^\/video\/([^/]+)\/file$/);
   if (method === "GET" && fileMatch) {
     const videoId = fileMatch[1];
-    const uri = offlineCopy.getUri(videoId);
-
-    if (!uri) {
-      return {
-        statusCode: 404,
-        contentType: "text/plain",
-        body: "Offline copy not found",
-      };
-    }
 
     try {
-      const bytes = await readOfflineCopyBytes(uri);
+      const bytes = await offlineCopy.readBytes(videoId);
+      if (!bytes) {
+        return {
+          statusCode: 404,
+          contentType: "text/plain",
+          body: "Offline copy not found",
+        };
+      }
       return {
         statusCode: 200,
         contentType: "video/mp4",

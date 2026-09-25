@@ -25,6 +25,8 @@ export type OfflineCopyPlatform = {
   copy: (from: string, to: string) => Promise<void>;
   move: (from: string, to: string) => Promise<void>;
   remove: (uri: string) => Promise<void>;
+  /** Raw bytes of a file at any Storage location URI. */
+  readBytes: (uri: string) => Promise<Uint8Array>;
 };
 
 const VIDEOS_DIR = "videos";
@@ -71,7 +73,12 @@ export function createOfflineCopy(platform: OfflineCopyPlatform) {
   const resolveRecord = (videoId: string, uri: string) =>
     isInternalUri(uri) ? internalUri(videoId) : uri;
 
+  // A fresh function per change, so screens that look up many Videos
+  // re-render (and recompute anything keyed on it) when any copy changes.
+  let lookup = (videoId: string) => getUri(videoId);
+
   const notify = () => {
+    lookup = (videoId: string) => getUri(videoId);
     for (const listener of listeners) listener();
   };
 
@@ -266,12 +273,21 @@ export function createOfflineCopy(platform: OfflineCopyPlatform) {
     return dest;
   };
 
+  /** Bytes of a reachable Offline copy, or null. Used by peer-to-peer serving. */
+  const readBytes = async (videoId: string) => {
+    const uri = getUri(videoId);
+    if (!uri) return null;
+    return platform.readBytes(uri);
+  };
+
   return {
     /** The playable URI of a Video's Offline copy, or null. */
     getUri,
     /** Same answer as `getUri`, re-rendering when the Offline copy appears or disappears. */
     useUri: (videoId: string) =>
       useSyncExternalStore(subscribe, () => getUri(videoId)),
+    /** A `getUri` for screens that check many Videos; re-renders when any Offline copy appears or disappears. */
+    useLookup: () => useSyncExternalStore(subscribe, () => lookup),
     /** Moves a finished temp file into the current Storage location, replacing any existing copy. */
     adopt,
     /** Where a Download should write its partial file before calling `adopt`. */
@@ -280,6 +296,8 @@ export function createOfflineCopy(platform: OfflineCopyPlatform) {
     discardTemp,
     /** Re-checks internal storage and the current Storage location. */
     scan,
+    /** Bytes of a reachable Offline copy, or null. Used by peer-to-peer serving. */
+    readBytes,
   };
 }
 

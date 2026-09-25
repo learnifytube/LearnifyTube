@@ -74,7 +74,7 @@ export default function ShareScreen() {
       if (shareableVideos.length === 0) {
         Alert.alert(
           "No Videos",
-          "You don't have any downloaded videos to share."
+          "You don't have any Offline copies to share."
         );
         return;
       }
@@ -232,7 +232,6 @@ export default function ShareScreen() {
         updateTransfer(video.id, { status: "completed", progress: 100 });
       } catch (error) {
         console.error(`Download failed for ${video.id}:`, error);
-        await offlineCopy.discardTemp(video.id).catch(() => {});
         updateTransfer(video.id, { status: "failed" });
       }
     }

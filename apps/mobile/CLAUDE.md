@@ -30,12 +30,12 @@ The two route groups import and navigate only within themselves; `scripts/check-
 - **Desktop sync** — `services/api.ts` is the REST client for the desktop's mobile sync server; the version handshake lives in `apps/shared/mobile-sync-contract.ts`.
 - **Downloads** — queued in `stores/downloads.ts` (AsyncStorage-persisted; in-flight items reset to queued on hydration), driven by `hooks/useDownloadProcessor.ts`, processed by `services/downloadManager.ts` (concurrency, retry backoff, cancellation). `services/downloader.ts` transfers to a temp file, then the manager hands it to the Offline copy module's `adopt`.
 - **Persistence** — SQLite via expo-sqlite + Drizzle (`db/schema.ts`, `db/repositories/`); migrations run on app start. Zustand stores in `stores/`; `library.ts` mirrors SQLite, the rest persist to AsyncStorage.
-- **P2P sharing** — `services/p2p/`: mDNS discovery (react-native-zeroconf) plus a local server/client. The server serves Offline copies via `offlineCopy.getUri`; the client downloads to a temp file and the share screen calls `adopt`.
-- **File system** — prefer the expo-file-system SDK 54+ `Paths`/`Directory`/`File` API for new code; `downloader.ts`, `storage-location.ts`, and `app-update.ts` still use `expo-file-system/legacy`.
+- **P2P sharing** — `services/p2p/`: mDNS discovery (react-native-zeroconf) plus a local server/client. The server serves Offline copies via `offlineCopy.readBytes`; the client downloads to a temp file and the share screen calls `adopt`.
+- **File system** — prefer the expo-file-system SDK 54+ `Paths`/`Directory`/`File` API for new code; `downloader.ts`, `storage-location.ts`, `app-update.ts`, and the Offline copy platform still use `expo-file-system/legacy` (picked-folder `content://` URIs).
 
 ## Offline copies
 
-`services/offline-copy/` owns a Video's Offline copy in every Storage location (internal, picked folder, USB folder): `offlineCopy.getUri(videoId)`, `offlineCopy.useUri(videoId)`, and `adopt` for finished Downloads and peer-to-peer receives. It is the only writer of the videos table's `localPath` record; the app shell (`hooks/useOfflineCopyScans.ts`) triggers its scans. Choosing a Storage location stays in `services/storage-location.ts`.
+`services/offline-copy/` owns a Video's Offline copy in every Storage location (internal, picked folder, USB folder): `offlineCopy.getUri(videoId)`, `offlineCopy.useUri(videoId)`, `offlineCopy.readBytes(videoId)` for peer-to-peer serving, and `adopt` for finished Downloads and peer-to-peer receives. It is the only writer of the videos table's `localPath` record; the app shell (`hooks/useOfflineCopyScans.ts`) triggers its scans. Choosing a Storage location stays in `services/storage-location.ts`.
 
 Screens not yet migrated still use `getVideoLocalPath` / `videoExistsLocally` in `services/downloader.ts`, which check internal storage only; new code should ask the Offline copy module.
 

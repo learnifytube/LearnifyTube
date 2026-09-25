@@ -25,6 +25,7 @@ function createFakePlatform({
   records = {} as Record<string, string>,
 } = {}) {
   const files = new Set<string>();
+  const contents = new Map<string, Uint8Array>();
   const unmounted = new Set<string>();
   const state = {
     documentsDir,
@@ -69,14 +70,26 @@ function createFakePlatform({
       if (state.failCopies) throw new Error("Disk full");
       if (!files.has(from)) throw new Error(`Missing ${from}`);
       files.add(to);
+      const bytes = contents.get(from);
+      if (bytes) contents.set(to, bytes);
     },
     move: async (from, to) => {
       if (!files.has(from)) throw new Error(`Missing ${from}`);
       files.delete(from);
       files.add(to);
+      const bytes = contents.get(from);
+      if (bytes) {
+        contents.set(to, bytes);
+        contents.delete(from);
+      }
     },
     remove: async (uri) => {
       files.delete(uri);
+      contents.delete(uri);
+    },
+    readBytes: async (uri) => {
+      if (!isMounted(uri) || !files.has(uri)) throw new Error(`Missing ${uri}`);
+      return contents.get(uri) ?? new Uint8Array();
     },
   };
 
@@ -84,7 +97,10 @@ function createFakePlatform({
     platform,
     state,
     files,
-    write: (uri: string) => files.add(uri),
+    write: (uri: string, bytes?: Uint8Array) => {
+      files.add(uri);
+      if (bytes) contents.set(uri, bytes);
+    },
     unmount: (prefix: string) => unmounted.add(prefix),
     remount: (prefix: string) => unmounted.delete(prefix),
   };
@@ -341,6 +357,31 @@ describe("Offline copy", () => {
     expect(result.current).toBe("file:///container-a/Documents/videos/v8.mp4");
   });
 
+  it("re-renders the lookup hook when a USB drive is unplugged and plugged back in", async () => {
+    const usbCopy = "file:///storage/USB1/LearnifyTube/videos/v12.mp4";
+    const fake = createFakePlatform({
+      location: USB,
+      records: { v12: usbCopy },
+    });
+    fake.write(usbCopy);
+    const offlineCopy = createOfflineCopy(fake.platform);
+    const { result } = await renderHook(() => offlineCopy.useLookup());
+
+    expect(result.current("v12")).toBe(usbCopy);
+
+    fake.unmount("file:///storage/USB1");
+    await act(async () => {
+      await offlineCopy.scan();
+    });
+    expect(result.current("v12")).toBeNull();
+
+    fake.remount("file:///storage/USB1");
+    await act(async () => {
+      await offlineCopy.scan();
+    });
+    expect(result.current("v12")).toBe(usbCopy);
+  });
+
   it("answers from saved records before the first scan", () => {
     const fake = createFakePlatform({
       location: PICKED,
@@ -356,5 +397,17 @@ describe("Offline copy", () => {
       "file:///storage/USB1/LearnifyTube/videos/v10.mp4",
     );
     expect(offlineCopy.getUri("unknown")).toBeNull();
+  });
+
+  it("reads bytes of a reachable Offline copy for peer-to-peer serving", async () => {
+    const fake = createFakePlatform({ location: PICKED });
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+    fake.write("content://picked/videos/v13.mp4", bytes);
+    fake.state.records.v13 = "content://picked/videos/v13.mp4";
+    const offlineCopy = createOfflineCopy(fake.platform);
+    await offlineCopy.scan();
+
+    expect(await offlineCopy.readBytes("v13")).toEqual(bytes);
+    expect(await offlineCopy.readBytes("missing")).toBeNull();
   });
 });

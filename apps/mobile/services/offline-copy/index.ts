@@ -1,3 +1,4 @@
+import { File } from "expo-file-system";
 import * as FileSystemLegacy from "expo-file-system/legacy";
 import {
   getOfflineCopyRecords,
@@ -61,6 +62,20 @@ const platform: OfflineCopyPlatform = {
   copy: (from, to) => FileSystemLegacy.copyAsync({ from, to }),
   move: (from, to) => FileSystemLegacy.moveAsync({ from, to }),
   remove: (uri) => FileSystemLegacy.deleteAsync(uri, { idempotent: true }),
+  readBytes: async (uri) => {
+    // file:// (internal + USB): SDK 54 File API.
+    if (!isContentUri(uri)) return new File(uri).bytes();
+    // content:// (picked folder): copy to a temp file so we avoid Base64
+    // expansion, then read with File.
+    const tempUri = `${platform.documentsDir()}/videos/.read-${Date.now()}.mp4`;
+    await FileSystemLegacy.copyAsync({ from: uri, to: tempUri });
+    try {
+      return await new File(tempUri).bytes();
+    } finally {
+      await FileSystemLegacy.deleteAsync(tempUri, { idempotent: true });
+    }
+  },
 };
 
 export const offlineCopy = createOfflineCopy(platform);
+export type { OfflineCopy } from "./createOfflineCopy";

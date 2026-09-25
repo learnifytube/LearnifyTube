@@ -258,7 +258,6 @@ export default function PlayerScreen() {
           channelTitle: meta.channelTitle,
           duration: meta.duration,
           thumbnailUrl: video?.thumbnailUrl,
-          localPath: localVideoPath ?? video?.localPath,
           description: normalizedDescription,
         });
       })
@@ -275,11 +274,9 @@ export default function PlayerScreen() {
     id,
     effectiveServerUrl,
     localDescription,
-    localVideoPath,
     video?.channelTitle,
     video?.duration,
     video?.id,
-    video?.localPath,
     video?.thumbnailUrl,
     video?.title,
   ]);

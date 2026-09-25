@@ -6,6 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { useDownloadProcessor } from "../hooks/useDownloadProcessor";
 import { useDatabase } from "../hooks/useDatabase";
+import { useOfflineCopyScans } from "../hooks/useOfflineCopyScans";
 import { useLibraryStore } from "../stores/library";
 import { useNavigationLogger } from "../hooks/useNavigationLogger";
 import { usePresencePublisher } from "../hooks/usePresencePublisher";
@@ -14,6 +15,11 @@ import { colors } from "../theme";
 
 function DownloadProcessor() {
   useDownloadProcessor();
+  return null;
+}
+
+function OfflineCopyScanner() {
+  useOfflineCopyScans();
   return null;
 }
 
@@ -114,6 +120,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <DatabaseInitializer>
         <DownloadProcessor />
+        <OfflineCopyScanner />
         <NavigationLogger />
         <PresencePublisher />
         <SelfUpdateChecker />

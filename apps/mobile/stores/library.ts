@@ -10,9 +10,9 @@ interface LibraryStore {
   // Load videos from SQLite
   loadVideos: () => void;
 
-  // Video CRUD
-  addVideo: (video: Video) => void;
-  updateVideo: (id: string, updates: Partial<Video>) => void;
+  // Video CRUD. The Offline copy module owns localPath.
+  addVideo: (video: Omit<Video, "localPath">) => void;
+  updateVideo: (id: string, updates: Partial<Omit<Video, "localPath">>) => void;
   removeVideo: (id: string) => void;
   getVideo: (id: string) => Video | undefined;
   clearLibrary: () => void;
@@ -73,8 +73,6 @@ export const useLibraryStore = create<LibraryStore>()(
     addVideo: (video) => {
       try {
         const existing = videoRepo.getVideoById(video.id);
-        const localPath =
-          video.localPath ?? existing?.localPath ?? null;
         const thumbnailUrl =
           video.thumbnailUrl ?? existing?.thumbnailUrl ?? null;
 
@@ -85,7 +83,6 @@ export const useLibraryStore = create<LibraryStore>()(
           channelTitle: video.channelTitle,
           duration: video.duration,
           thumbnailUrl,
-          localPath,
           description: video.description,
         });
 
@@ -129,7 +126,6 @@ export const useLibraryStore = create<LibraryStore>()(
           channelTitle: updates.channelTitle ?? existing.channelTitle,
           duration: updates.duration ?? existing.duration,
           thumbnailUrl: updates.thumbnailUrl ?? existing.thumbnailUrl,
-          localPath: updates.localPath ?? existing.localPath,
           description:
             updates.description === undefined
               ? existing.description

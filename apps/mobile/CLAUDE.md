@@ -11,9 +11,10 @@ npm run android             # Run on Android emulator
 npm run type-check
 npm run lint
 npm run check:ui-boundaries # Phone/TV route isolation check
+npm test                    # jest-expo
 ```
 
-There is no test suite; verify with `type-check`, `lint`, and `check:ui-boundaries`.
+Verify with `test`, `type-check`, `lint`, and `check:ui-boundaries`. Tests exercise modules through their public interface with a fake platform built via the module's factory; no module mocking.
 
 ## Two Surfaces
 
@@ -27,17 +28,16 @@ The two route groups import and navigate only within themselves; `scripts/check-
 ## Architecture
 
 - **Desktop sync** — `services/api.ts` is the REST client for the desktop's mobile sync server; the version handshake lives in `apps/shared/mobile-sync-contract.ts`.
-- **Downloads** — queued in `stores/downloads.ts` (AsyncStorage-persisted; in-flight items reset to queued on hydration), driven by `hooks/useDownloadProcessor.ts`, processed by `services/downloadManager.ts` (concurrency, retry backoff, cancellation), written to disk by `services/downloader.ts`.
+- **Downloads** — queued in `stores/downloads.ts` (AsyncStorage-persisted; in-flight items reset to queued on hydration), driven by `hooks/useDownloadProcessor.ts`, processed by `services/downloadManager.ts` (concurrency, retry backoff, cancellation). `services/downloader.ts` transfers to a temp file, then the manager hands it to the Offline copy module's `adopt`.
 - **Persistence** — SQLite via expo-sqlite + Drizzle (`db/schema.ts`, `db/repositories/`); migrations run on app start. Zustand stores in `stores/`; `library.ts` mirrors SQLite, the rest persist to AsyncStorage.
 - **P2P sharing** — `services/p2p/`: mDNS discovery (react-native-zeroconf) plus a local server/client.
 - **File system** — prefer the expo-file-system SDK 54+ `Paths`/`Directory`/`File` API for new code; `downloader.ts`, `storage-location.ts`, and `app-update.ts` still use `expo-file-system/legacy`.
 
-## Video File Paths
+## Offline copies
 
-App sandbox paths change on reinstall/update, and videos may live in a user-chosen storage folder (`services/storage-location.ts`: internal, SAF, or file).
+`services/offline-copy/` owns a Video's Offline copy in every Storage location (internal, picked folder, USB folder): `offlineCopy.getUri(videoId)`, `offlineCopy.useUri(videoId)`, and `adopt` for finished Downloads. It is the only writer of the videos table's `localPath` record; the app shell (`hooks/useOfflineCopyScans.ts`) triggers its scans. Choosing a Storage location stays in `services/storage-location.ts`.
 
-- Resolve a playable file at use time via `services/downloader.ts` (`getVideoLocalPath`, `videoExistsLocally`); treat the stored `localPath` in SQLite/stores as a stale hint.
-- `getVideoLocalPath` checks internal storage only — code handling custom storage folders must also consult `findSafVideoFile` / the storage location.
+Screens not yet migrated still use `getVideoLocalPath` / `videoExistsLocally` in `services/downloader.ts`, which check internal storage only; new code should ask the Offline copy module.
 
 ## Theme
 

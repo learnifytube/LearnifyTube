@@ -1,13 +1,7 @@
 import * as FileSystemLegacy from "expo-file-system/legacy";
 import { Paths } from "expo-file-system";
 import { api } from "./api";
-import {
-  createSafVideoFile,
-  ensureSafVideosDirectory,
-  findSafVideoFile,
-  getVideoStorageLocation,
-} from "./storage-location";
-import type { VideoMeta, Transcript } from "../types";
+import { offlineCopy } from "./offline-copy";
 
 // Custom AbortError for React Native (DOMException doesn't exist)
 class AbortError extends Error {
@@ -82,27 +76,20 @@ export interface DownloadProgress {
   totalBytes: number;
 }
 
+/**
+ * Download a Video to a temporary file. The caller hands the file to
+ * `offlineCopy.adopt`; on failure or cancel the partial file is discarded.
+ */
 export async function downloadVideo(
   serverUrl: string,
   videoId: string,
   onProgress: (progress: DownloadProgress) => void,
   signal?: AbortSignal
-): Promise<{ videoPath: string; meta: VideoMeta; transcripts: Transcript[] }> {
-  await ensureVideosDir();
-  const storageLocation = await getVideoStorageLocation();
-  const internalVideoFileUri = getVideoFileUri(videoId);
-  if (!internalVideoFileUri) {
-    throw new Error("Video directory is not available");
-  }
-
-  const isExternalStorage = storageLocation.kind === "saf" && !!storageLocation.directoryUri;
-  const videoFileUri = isExternalStorage
-    ? `${internalVideoFileUri}.download`
-    : internalVideoFileUri;
+) {
+  const tempUri = await offlineCopy.tempFileUri(videoId);
   const videoUrl = api.getVideoFileUrl(serverUrl, videoId);
 
   log(`Starting download: ${videoUrl}`);
-  log(`Destination: ${isExternalStorage ? storageLocation.label : videoFileUri}`);
 
   // Signal that download is starting
   onProgress({ progress: 0, bytesDownloaded: 0, totalBytes: 0 });
@@ -116,7 +103,7 @@ export async function downloadVideo(
     // Use legacy FileSystem API for downloading with progress
     const downloadResumable = FileSystemLegacy.createDownloadResumable(
       videoUrl,
-      videoFileUri,
+      tempUri,
       {},
       (downloadProgress) => {
         const progress = Math.round(
@@ -149,7 +136,6 @@ export async function downloadVideo(
 
       // Check if aborted during download
       if (signal?.aborted) {
-        await cleanupPartialDownload(videoId);
         throw new AbortError();
       }
 
@@ -165,26 +151,7 @@ export async function downloadVideo(
         );
       }
 
-      let finalVideoUri = result.uri;
-
-      if (isExternalStorage && storageLocation.directoryUri) {
-        const videosDirUri = await ensureSafVideosDirectory(storageLocation.directoryUri);
-        const existingUri = await findSafVideoFile(videosDirUri, videoId);
-        if (existingUri) {
-          await FileSystemLegacy.StorageAccessFramework.deleteAsync(existingUri, {
-            idempotent: true,
-          });
-        }
-        const externalVideoUri = await createSafVideoFile(videosDirUri, videoId);
-        await FileSystemLegacy.StorageAccessFramework.copyAsync({
-          from: result.uri,
-          to: externalVideoUri,
-        });
-        await FileSystemLegacy.deleteAsync(result.uri, { idempotent: true });
-        finalVideoUri = externalVideoUri;
-      }
-
-      log(`Download complete: ${finalVideoUri}`);
+      log(`Download complete: ${videoId}`);
       onProgress({
         progress: 100,
         bytesDownloaded: result.headers?.["content-length"]
@@ -213,52 +180,22 @@ export async function downloadVideo(
         );
       }
 
-      return {
-        videoPath: finalVideoUri,
-        meta,
-        transcripts,
-      };
+      if (signal?.aborted) {
+        throw new AbortError();
+      }
+
+      return { tempUri, meta, transcripts };
     } finally {
       if (signal && abortHandler) {
         signal.removeEventListener("abort", abortHandler);
       }
     }
   } catch (error) {
-    // Clean up partial download on error (unless it's an abort)
-    const isAbortError =
-      error instanceof Error &&
-      (error.name === "AbortError" || error.message.includes("aborted"));
-    if (!isAbortError) {
-      await cleanupPartialDownload(videoId).catch(() => {
-        // Ignore cleanup errors
-      });
-    }
+    await offlineCopy.discardTemp(videoId).catch(() => {
+      // Ignore cleanup errors
+    });
     log(`Download error:`, error);
     throw error;
-  }
-}
-
-export async function cleanupPartialDownload(videoId: string): Promise<void> {
-  const videoFileUri = getVideoFileUri(videoId);
-  const tempFileUri = videoFileUri ? `${videoFileUri}.download` : null;
-
-  try {
-    if (videoFileUri) {
-      const videoInfo = await FileSystemLegacy.getInfoAsync(videoFileUri);
-      if (videoInfo.exists) {
-        await FileSystemLegacy.deleteAsync(videoFileUri, { idempotent: true });
-        log(`Cleaned up partial download: ${videoFileUri}`);
-      }
-    }
-    if (tempFileUri) {
-      const tempInfo = await FileSystemLegacy.getInfoAsync(tempFileUri);
-      if (tempInfo.exists) {
-        await FileSystemLegacy.deleteAsync(tempFileUri, { idempotent: true });
-        log(`Cleaned up temp file: ${tempFileUri}`);
-      }
-    }
-  } catch (error) {
-    log(`Cleanup error:`, error);
   }
 }
 

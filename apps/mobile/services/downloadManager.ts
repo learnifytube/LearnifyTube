@@ -1,7 +1,8 @@
 import { useDownloadStore, type DownloadItem } from "../stores/downloads";
 import { useLibraryStore } from "../stores/library";
 import { useConnectionStore } from "../stores/connection";
-import { downloadVideo, cleanupPartialDownload } from "./downloader";
+import { downloadVideo } from "./downloader";
+import { offlineCopy } from "./offline-copy";
 
 const log = (message: string, data?: unknown) => {
   const timestamp = new Date().toISOString().split("T")[1].slice(0, 12);
@@ -72,7 +73,7 @@ class DownloadManager {
     log(`Starting download: ${item.title}`);
 
     try {
-      const { videoPath, meta, transcripts } = await downloadVideo(
+      const { tempUri, meta, transcripts } = await downloadVideo(
         serverUrl,
         item.videoId,
         (progress) => {
@@ -81,21 +82,14 @@ class DownloadManager {
         controller.signal
       );
 
-      // Download complete
-      this.activeControllers.delete(item.videoId);
-      this.lastProgressUpdate.delete(item.videoId);
-
-      // Update download store
-      useDownloadStore.getState().markCompleted(item.videoId);
-
-      // Add/update video in library with all transcripts
+      // Add/update video in library with all transcripts; the row must
+      // exist before adopt records the Offline copy on it.
       libraryStore.addVideo({
         id: item.videoId,
         title: item.title,
         channelTitle: item.channelTitle,
         duration: item.duration,
         thumbnailUrl: item.thumbnailUrl,
-        localPath: videoPath,
         description: meta.description ?? null,
         // Use transcripts from dedicated endpoint, fallback to meta
         transcripts:
@@ -104,6 +98,17 @@ class DownloadManager {
             : meta.transcripts ?? (meta.transcript ? [meta.transcript] : []),
         transcript: meta.transcript,
       });
+      if (controller.signal.aborted) {
+        await offlineCopy.discardTemp(item.videoId).catch(() => {});
+        throw new Error("Download aborted");
+      }
+      await offlineCopy.adopt(item.videoId, tempUri);
+      useLibraryStore.getState().loadVideos();
+
+      // Download complete
+      this.activeControllers.delete(item.videoId);
+      this.lastProgressUpdate.delete(item.videoId);
+      useDownloadStore.getState().markCompleted(item.videoId);
 
       log(
         `Download complete: ${item.title} (${transcripts.length} transcripts)`
@@ -117,8 +122,9 @@ class DownloadManager {
 
       // Check for abort error (DOMException doesn't exist in React Native)
       const isAbortError =
-        error instanceof Error &&
-        (error.name === "AbortError" || error.message.includes("aborted"));
+        controller.signal.aborted ||
+        (error instanceof Error &&
+          (error.name === "AbortError" || error.message.includes("aborted")));
       if (isAbortError) {
         log(`Download cancelled: ${item.title}`);
         // Already removed from queue by cancel()
@@ -201,10 +207,13 @@ class DownloadManager {
     // Remove from queue
     useDownloadStore.getState().cancelDownload(videoId);
 
-    // Clean up any partial download
-    cleanupPartialDownload(videoId).catch(() => {
-      // Ignore cleanup errors
-    });
+    // An active download discards its own partial file once it stops;
+    // otherwise clean up anything a failed attempt left behind.
+    if (!controller) {
+      offlineCopy.discardTemp(videoId).catch(() => {
+        // Ignore cleanup errors
+      });
+    }
 
     // Process next in queue
     this.processQueue();
@@ -215,8 +224,8 @@ class DownloadManager {
 
     // Abort all active downloads
     for (const [videoId, controller] of this.activeControllers) {
+      log(`Aborting download: ${videoId}`);
       controller.abort();
-      cleanupPartialDownload(videoId).catch(() => {});
     }
     this.activeControllers.clear();
 

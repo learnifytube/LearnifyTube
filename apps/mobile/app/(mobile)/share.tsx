@@ -25,6 +25,7 @@ import {
 } from "../../services/p2p/discovery";
 import { startServer, stopServer, DEFAULT_PORT } from "../../services/p2p/server";
 import { getPeerVideos, downloadVideoFromPeer } from "../../services/p2p/client";
+import { offlineCopy } from "../../services/offline-copy";
 import type { DiscoveredPeer, PeerVideo } from "../../types";
 
 type ViewMode = "select" | "share" | "receive";
@@ -40,6 +41,7 @@ export default function ShareScreen() {
 
   const videos = useLibraryStore((state) => state.videos);
   const addVideo = useLibraryStore((state) => state.addVideo);
+  const loadVideos = useLibraryStore((state) => state.loadVideos);
   const updateVideo = useLibraryStore((state) => state.updateVideo);
   const downloadedVideos = videos.filter((v) => !!v.localPath);
 
@@ -216,15 +218,16 @@ export default function ShareScreen() {
           }
         );
 
-        // Add to library
+        // Add to library, then hand the file to the Offline copy module
         addVideo({
           id: video.id,
           title: video.title,
           channelTitle: video.channelTitle,
           duration: video.duration,
-          localPath: videoPath,
           transcript: meta.transcript,
         });
+        await offlineCopy.adopt(video.id, videoPath);
+        loadVideos();
 
         updateTransfer(video.id, { status: "completed", progress: 100 });
       } catch (error) {
@@ -239,6 +242,7 @@ export default function ShareScreen() {
     addTransfer,
     updateTransfer,
     addVideo,
+    loadVideos,
   ]);
 
   const handleBack = async () => {

@@ -44,8 +44,22 @@ function joinUri(base: string, path: string): string {
   return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 }
 
+const changeListeners = new Set<() => void>();
+
+export function subscribeToVideoStorageLocation(listener: () => void) {
+  changeListeners.add(listener);
+  return () => {
+    changeListeners.delete(listener);
+  };
+}
+
+function notifyLocationChanged() {
+  for (const listener of changeListeners) listener();
+}
+
 async function saveLocation(location: VideoStorageLocation): Promise<VideoStorageLocation> {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(location));
+  notifyLocationChanged();
   return location;
 }
 
@@ -76,6 +90,7 @@ export async function getVideoStorageLocation(): Promise<VideoStorageLocation> {
 
 export async function setInternalVideoStorage(): Promise<VideoStorageLocation> {
   await AsyncStorage.removeItem(STORAGE_KEY);
+  notifyLocationChanged();
   return INTERNAL_VIDEO_STORAGE;
 }
 
@@ -147,44 +162,4 @@ export async function selectDetectedUsbStorageDirectory(): Promise<VideoStorageL
   throw new Error(
     "No writable USB drive found. Make sure the USB drive is connected and Android grants file access to LearnifyTube."
   );
-}
-
-export async function ensureSafVideosDirectory(parentUri: string): Promise<string> {
-  const saf = getStorageAccessFramework();
-  if (!saf) throw new Error("Android storage access is not available.");
-
-  const files = await saf.readDirectoryAsync(parentUri);
-  const existing = files.find((uri) => {
-    const decoded = decodeURIComponent(uri).toLowerCase();
-    return decoded.endsWith("/videos") || decoded.includes("%2fvideos");
-  });
-  if (existing) return existing;
-
-  return saf.makeDirectoryAsync(parentUri, "videos");
-}
-
-export async function createSafVideoFile(directoryUri: string, videoId: string): Promise<string> {
-  const saf = getStorageAccessFramework();
-  if (!saf) throw new Error("Android storage access is not available.");
-  return saf.createFileAsync(directoryUri, videoId, "video/mp4");
-}
-
-export async function findSafVideoFile(directoryUri: string, videoId: string): Promise<string | null> {
-  const saf = getStorageAccessFramework();
-  if (!saf) return null;
-
-  try {
-    const files = await saf.readDirectoryAsync(directoryUri);
-    return (
-      files.find((uri) => {
-        const decoded = decodeURIComponent(uri).toLowerCase();
-        return (
-          decoded.endsWith(`/${videoId.toLowerCase()}.mp4`) ||
-          decoded.includes(`${videoId.toLowerCase()}.mp4`)
-        );
-      }) ?? null
-    );
-  } catch {
-    return null;
-  }
 }

@@ -102,7 +102,6 @@ async function normalizeRemoteVideo(
     channelTitle: video.channelTitle,
     duration: video.duration,
     thumbnailUrl: normalizedThumbnailUrl ?? null,
-    localPath: existingVideo?.localPath ?? null,
   });
 
   return {

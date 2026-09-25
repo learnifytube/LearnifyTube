@@ -107,14 +107,15 @@ export function getAllVideosWithPrimaryTranscript(): Array<
 }
 
 // Insert or update video
+// The localPath record is written only through updateVideoLocalPath.
 export function upsertVideo(
-  videoData: Omit<NewVideo, "createdAt" | "updatedAt">
+  videoData: Omit<NewVideo, "createdAt" | "updatedAt" | "localPath">
 ): Video {
   const now = Date.now();
   const existing = getVideoById(videoData.id);
 
   if (existing) {
-    const nextVideoData: Omit<NewVideo, "createdAt" | "updatedAt"> = {
+    const nextVideoData: Omit<NewVideo, "createdAt" | "updatedAt" | "localPath"> = {
       id: videoData.id,
       title: videoData.title,
       channelTitle: videoData.channelTitle,
@@ -123,10 +124,6 @@ export function upsertVideo(
         videoData.thumbnailUrl === undefined
           ? existing.thumbnailUrl
           : videoData.thumbnailUrl,
-      localPath:
-        videoData.localPath === undefined
-          ? existing.localPath
-          : videoData.localPath,
       description:
         videoData.description === undefined
           ? existing.description
@@ -144,7 +141,7 @@ export function upsertVideo(
       channelTitle: videoData.channelTitle,
       duration: videoData.duration,
       thumbnailUrl: videoData.thumbnailUrl ?? null,
-      localPath: videoData.localPath ?? null,
+      localPath: null,
       description: videoData.description ?? null,
     };
 
@@ -154,6 +151,15 @@ export function upsertVideo(
   }
 
   return getVideoById(videoData.id)!;
+}
+
+// Saved Offline copy locations; only the Offline copy module reads and writes these.
+export function getOfflineCopyRecords() {
+  return getDb()
+    .select({ videoId: videos.id, uri: videos.localPath })
+    .from(videos)
+    .all()
+    .filter((row): row is { videoId: string; uri: string } => !!row.uri);
 }
 
 // Update video local path

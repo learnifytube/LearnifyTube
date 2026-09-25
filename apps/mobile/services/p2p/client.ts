@@ -1,5 +1,5 @@
 import * as FileSystemLegacy from "expo-file-system/legacy";
-import { Paths, Directory, File } from "expo-file-system";
+import { offlineCopy } from "../offline-copy";
 import type { DiscoveredPeer, PeerVideo, VideoMeta } from "../../types";
 
 const TIMEOUT = 10000;
@@ -84,21 +84,16 @@ export async function getVideoMeta(
   return response.json();
 }
 
-async function ensureVideosDir(): Promise<Directory> {
-  const videosDir = new Directory(Paths.document, "videos");
-  if (!videosDir.exists) {
-    videosDir.create();
-  }
-  return videosDir;
-}
-
+/**
+ * Download a Video from a peer to a temporary file. The caller hands the file
+ * to `offlineCopy.adopt`; on failure the partial file is discarded.
+ */
 export async function downloadVideoFromPeer(
   peer: DiscoveredPeer,
   videoId: string,
   onProgress: (progress: number) => void
-): Promise<{ videoPath: string; meta: VideoMeta }> {
-  const videosDir = await ensureVideosDir();
-  const videoFile = new File(videosDir, `${videoId}.mp4`);
+): Promise<{ tempUri: string; meta: VideoMeta }> {
+  const tempUri = await offlineCopy.tempFileUri(videoId);
   const url = getPeerUrl(peer);
   const videoUrl = `${url}/video/${videoId}/file`;
 
@@ -111,7 +106,7 @@ export async function downloadVideoFromPeer(
     // Use legacy FileSystem API for downloading with progress
     const downloadResumable = FileSystemLegacy.createDownloadResumable(
       videoUrl,
-      videoFile.uri,
+      tempUri,
       {},
       (downloadProgress) => {
         const progress = Math.round(
@@ -136,10 +131,13 @@ export async function downloadVideoFromPeer(
     const meta = await getVideoMeta(peer, videoId);
 
     return {
-      videoPath: videoFile.uri,
+      tempUri,
       meta,
     };
   } catch (error) {
+    await offlineCopy.discardTemp(videoId).catch(() => {
+      // Ignore cleanup errors
+    });
     log(`Download error:`, error);
     throw error;
   }

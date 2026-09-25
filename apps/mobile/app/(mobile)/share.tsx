@@ -42,8 +42,8 @@ export default function ShareScreen() {
   const videos = useLibraryStore((state) => state.videos);
   const addVideo = useLibraryStore((state) => state.addVideo);
   const loadVideos = useLibraryStore((state) => state.loadVideos);
-  const updateVideo = useLibraryStore((state) => state.updateVideo);
-  const downloadedVideos = videos.filter((v) => !!v.localPath);
+  // Reachable Offline copies only — share list matches what the server can serve.
+  const shareableVideos = videos.filter((v) => offlineCopy.getUri(v.id) !== null);
 
   const {
     isSharing,
@@ -71,7 +71,7 @@ export default function ShareScreen() {
 
   const handleContinue = () => {
     if (selectedMode === "share") {
-      if (downloadedVideos.length === 0) {
+      if (shareableVideos.length === 0) {
         Alert.alert(
           "No Videos",
           "You don't have any downloaded videos to share."
@@ -99,7 +99,7 @@ export default function ShareScreen() {
   };
 
   const selectAllShareVideos = () => {
-    setSelectedShareIds(new Set(downloadedVideos.map((v) => v.id)));
+    setSelectedShareIds(new Set(shareableVideos.map((v) => v.id)));
   };
 
   const deselectAllShareVideos = () => {
@@ -113,7 +113,7 @@ export default function ShareScreen() {
     }
 
     try {
-      const videosToShare = downloadedVideos.filter((v) =>
+      const videosToShare = shareableVideos.filter((v) =>
         selectedShareIds.has(v.id)
       );
       const port = await startServer(videosToShare, DEFAULT_PORT);
@@ -210,7 +210,7 @@ export default function ShareScreen() {
       updateTransfer(video.id, { status: "downloading" });
 
       try {
-        const { videoPath, meta } = await downloadVideoFromPeer(
+        const { tempUri, meta } = await downloadVideoFromPeer(
           selectedPeer,
           video.id,
           (progress) => {
@@ -218,7 +218,7 @@ export default function ShareScreen() {
           }
         );
 
-        // Add to library, then hand the file to the Offline copy module
+        // Add to library, then hand the temp file to the Offline copy module
         addVideo({
           id: video.id,
           title: video.title,
@@ -226,12 +226,13 @@ export default function ShareScreen() {
           duration: video.duration,
           transcript: meta.transcript,
         });
-        await offlineCopy.adopt(video.id, videoPath);
+        await offlineCopy.adopt(video.id, tempUri);
         loadVideos();
 
         updateTransfer(video.id, { status: "completed", progress: 100 });
       } catch (error) {
         console.error(`Download failed for ${video.id}:`, error);
+        await offlineCopy.discardTemp(video.id).catch(() => {});
         updateTransfer(video.id, { status: "failed" });
       }
     }
@@ -307,7 +308,7 @@ export default function ShareScreen() {
           ) : (
             <>
               <VideoShareList
-                videos={downloadedVideos}
+                videos={shareableVideos}
                 selectedIds={selectedShareIds}
                 onToggle={toggleShareVideo}
                 onSelectAll={selectAllShareVideos}

@@ -1,14 +1,16 @@
 import { useMemo } from "react";
+import { offlineCopy } from "../../services/offline-copy";
 import { useLibraryStore } from "../../stores/library";
 import type { TVLibraryVideoItem } from "../types/surface";
 
 export function useLibraryCatalog() {
   const videos = useLibraryStore((state) => state.videos);
+  const getOfflineUri = offlineCopy.useLookup();
 
   const offlineVideos: TVLibraryVideoItem[] = useMemo(
     () =>
       videos
-        .filter((item) => !!item.localPath)
+        .filter((item) => !!getOfflineUri(item.id))
         .map((item) => ({
           id: item.id,
           title: item.title,
@@ -16,11 +18,12 @@ export function useLibraryCatalog() {
           duration: item.duration,
           thumbnailUrl: item.thumbnailUrl,
         })),
-    [videos]
+    [getOfflineUri, videos]
   );
 
   return {
     videos,
     offlineVideos,
+    getOfflineUri,
   };
 }

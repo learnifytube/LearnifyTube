@@ -35,9 +35,9 @@ The two route groups import and navigate only within themselves; `scripts/check-
 
 ## Offline copies
 
-`services/offline-copy/` owns a Video's Offline copy in every Storage location (internal, picked folder, USB folder): `offlineCopy.getUri(videoId)`, `offlineCopy.useUri(videoId)`, `offlineCopy.readBytes(videoId)` for peer-to-peer serving, and `adopt` for finished Downloads and peer-to-peer receives. It is the only writer of the videos table's `localPath` record; the app shell (`hooks/useOfflineCopyScans.ts`) triggers its scans. Choosing a Storage location stays in `services/storage-location.ts`.
+`services/offline-copy/` owns a Video's Offline copy in every Storage location (internal, picked folder, USB folder): `offlineCopy.getUri(videoId)`, `offlineCopy.useUri(videoId)`, `offlineCopy.useLookup()` (a `getUri` for screens checking many Videos, re-rendering on any change), `offlineCopy.readBytes(videoId)` for peer-to-peer serving, and `adopt` for finished Downloads and peer-to-peer receives. It is the only writer of the videos table's `localPath` record; the app shell (`hooks/useOfflineCopyScans.ts`) triggers its scans. Choosing a Storage location stays in `services/storage-location.ts`.
 
-Screens not yet migrated still use `getVideoLocalPath` / `videoExistsLocally` in `services/downloader.ts`, which check internal storage only; new code should ask the Offline copy module.
+TV screens ask the module. Phone screens and `VideoCard` not yet migrated still use `getVideoLocalPath` / `videoExistsLocally` in `services/downloader.ts`, which check internal storage only; new code should ask the Offline copy module.
 
 ## Theme
 

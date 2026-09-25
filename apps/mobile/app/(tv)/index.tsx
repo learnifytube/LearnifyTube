@@ -38,7 +38,6 @@ import {
   assertSyncCompatibility,
   SyncCompatibilityError,
 } from "../../services/sync-compatibility";
-import { getVideoFileUri, getVideoLocalPath } from "../../services/downloader";
 import {
   buildCachedPlaylistId,
   getAllSavedPlaylistsWithProgress,
@@ -64,6 +63,7 @@ import {
   isRightEdgeGridIndex,
 } from "../../components/tv/grid";
 import { useLibraryCatalog } from "../../core/hooks/useLibraryCatalog";
+import { offlineCopy, type OfflineCopy } from "../../services/offline-copy";
 import type {
   DiscoveredPeer,
   RemoteChannel,
@@ -174,11 +174,11 @@ async function ensureDiscoveryPermissions(): Promise<boolean> {
 
 function toStreamingVideos(
   input: RemoteVideoWithStatus[],
-  localPathByVideoId: Map<string, string>,
+  getOfflineUri: OfflineCopy["getUri"],
   serverUrl: string | null
 ) {
   return input.map<StreamingVideo>((item) => {
-    const localPath = getResolvedLocalPath(item.id, localPathByVideoId);
+    const localPath = getOfflineUri(item.id) ?? undefined;
     return {
       id: item.id,
       title: item.title,
@@ -190,16 +190,9 @@ function toStreamingVideos(
   });
 }
 
-function getResolvedLocalPath(
-  videoId: string,
-  localPathByVideoId: Map<string, string>
-): string | undefined {
-  return localPathByVideoId.get(videoId) ?? getVideoLocalPath(videoId) ?? undefined;
-}
-
 function toSavedPlaylistStreamingVideos(
   playlist: SavedPlaylistWithItems,
-  localPathByVideoId: Map<string, string>
+  getOfflineUri: OfflineCopy["getUri"]
 ) {
   return playlist.items.map<StreamingVideo>((item) => ({
     id: item.videoId,
@@ -207,8 +200,7 @@ function toSavedPlaylistStreamingVideos(
     channelTitle: item.channelTitle,
     duration: item.duration,
     thumbnailUrl: item.thumbnailUrl ?? undefined,
-    localPath:
-      getResolvedLocalPath(item.videoId, localPathByVideoId),
+    localPath: getOfflineUri(item.videoId) ?? undefined,
   }));
 }
 
@@ -221,7 +213,7 @@ function resolveThumbnailUrl(
 
 export default function TVHomeScreen() {
   const { width: windowWidth } = useWindowDimensions();
-  const { videos, offlineVideos } = useLibraryCatalog();
+  const { videos, offlineVideos, getOfflineUri } = useLibraryCatalog();
   const serverUrl = useConnectionStore((state) => state.serverUrl);
   const setServerUrl = useConnectionStore((state) => state.setServerUrl);
   const setServerName = useConnectionStore((state) => state.setServerName);
@@ -284,18 +276,6 @@ export default function TVHomeScreen() {
   const autoConnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const catalogFailedRef = useRef(false);
 
-  const localPathByVideoId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const video of videos) {
-      if (!video.localPath) continue;
-
-      const localPath = getVideoFileUri(video.id) ?? video.localPath;
-      if (localPath) {
-        map.set(video.id, localPath);
-      }
-    }
-    return map;
-  }, [videos]);
   const canStream = !!serverUrl && connectionStage === "connected";
 
   const logOfflinePlaylistSnapshot = useCallback(
@@ -333,12 +313,13 @@ export default function TVHomeScreen() {
 
       tvDebugInfo("[TV Offline Debug] Playlist progress snapshot", {
         reason,
-        localVideoCount: localPathByVideoId.size,
+        offlineVideoCount: videos.filter((video) => offlineCopy.getUri(video.id))
+          .length,
         playlistCount: playlistDebug.length,
         playlists: playlistDebug,
       });
     },
-    [localPathByVideoId]
+    [videos]
   );
 
   const refreshOfflineCatalog = useCallback(
@@ -637,7 +618,7 @@ export default function TVHomeScreen() {
 
       const playableVideos = toSavedPlaylistStreamingVideos(
         savedPlaylist,
-        localPathByVideoId
+        getOfflineUri
       ).filter((item) => !!item.localPath);
 
       tvDebugInfo("[TV Offline Debug] Offline playlist playback attempt", {
@@ -680,7 +661,7 @@ export default function TVHomeScreen() {
       router.push(`/(tv)/player/${playableVideos[0].id}` as Href);
       return true;
     },
-    [localPathByVideoId, startPlaylist, upsertRecentPlaylist]
+    [getOfflineUri, startPlaylist, upsertRecentPlaylist]
   );
 
   const playRemoteCollection = useCallback(
@@ -718,7 +699,7 @@ export default function TVHomeScreen() {
 
         const streamingVideos = toStreamingVideos(
           normalizedVideos,
-          localPathByVideoId,
+          getOfflineUri,
           serverUrl
         );
         tvDebugInfo("[TV Playback Debug] Remote collection prepared", {
@@ -765,7 +746,7 @@ export default function TVHomeScreen() {
     },
     [
       disconnect,
-      localPathByVideoId,
+      getOfflineUri,
       myLists,
       playlists,
       playSavedPlaylistFromCache,
@@ -924,7 +905,7 @@ export default function TVHomeScreen() {
     for (const item of recentPlaylists) {
       const normalizedVideos = item.videos.map((video) => ({
         ...video,
-        localPath: video.localPath ?? getResolvedLocalPath(video.id, localPathByVideoId),
+        localPath: getOfflineUri(video.id) ?? undefined,
       }));
       if (!canStream && !normalizedVideos.some((video) => !!video.localPath)) {
         continue;
@@ -950,7 +931,7 @@ export default function TVHomeScreen() {
     }
 
     return cards;
-  }, [canStream, localPathByVideoId, recentPlaylists, serverUrl]);
+  }, [canStream, getOfflineUri, recentPlaylists, serverUrl]);
 
   const activeCards = useMemo(() => {
     if (mode === "playlists") return playlistCards;
@@ -1119,7 +1100,7 @@ export default function TVHomeScreen() {
 
         const normalizedVideos = target.videos.map((video) => ({
           ...video,
-          localPath: video.localPath ?? getResolvedLocalPath(video.id, localPathByVideoId),
+          localPath: getOfflineUri(video.id) ?? undefined,
         }));
         const playableVideos = canStream
           ? normalizedVideos
@@ -1168,7 +1149,7 @@ export default function TVHomeScreen() {
     },
     [
       canStream,
-      localPathByVideoId,
+      getOfflineUri,
       playOfflineCollection,
       playRemoteCollection,
       recentPlaylists,

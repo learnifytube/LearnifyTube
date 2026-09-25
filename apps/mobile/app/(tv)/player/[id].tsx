@@ -15,7 +15,7 @@ import { useDownloadStore } from "../../../stores/downloads";
 import { usePlaybackStore } from "../../../stores/playback";
 import { useTVHistoryStore } from "../../../stores/tvHistory";
 import { api } from "../../../services/api";
-import { getVideoFileUri, getVideoLocalPath } from "../../../services/downloader";
+import { offlineCopy } from "../../../services/offline-copy";
 import { logger } from "../../../services/logger";
 import { tvDebugInfo } from "../../../services/tvDebug";
 import {
@@ -161,10 +161,10 @@ async function waitForLocalVideoReady(
   while (Date.now() - startedAt < timeoutMs) {
     throwIfAborted(signal);
 
-    const localPath = getVideoLocalPath(videoId);
-    if (localPath) {
+    const offlineUri = offlineCopy.getUri(videoId);
+    if (offlineUri) {
       options?.onProgress?.(100);
-      return localPath;
+      return offlineUri;
     }
 
     const download = useDownloadStore.getState().getDownload(videoId);
@@ -186,7 +186,6 @@ async function waitForLocalVideoReady(
 
 export default function TVPlayerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const libraryVideos = useLibraryStore((state) => state.videos);
   const libraryVideo = useLibraryStore((state) => state.videos.find((item) => item.id === id));
   const serverUrl = useConnectionStore((state) => state.serverUrl);
 
@@ -221,19 +220,6 @@ export default function TVPlayerScreen() {
     playPause?: number;
     next?: number;
   }>({});
-
-  const localPathByVideoId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const item of libraryVideos) {
-      if (!item.localPath) continue;
-
-      const localPath = getVideoFileUri(item.id) ?? item.localPath;
-      if (localPath) {
-        map.set(item.id, localPath);
-      }
-    }
-    return map;
-  }, [libraryVideos]);
 
   const clearRemoteNavTimeout = useCallback(() => {
     if (remoteNavTimeoutRef.current) {
@@ -276,16 +262,7 @@ export default function TVPlayerScreen() {
 
   const effectiveServerUrl = streamServerUrl ?? serverUrl;
 
-  const localPath = useMemo(() => {
-    if (!id) return null;
-    return (
-      getVideoLocalPath(id) ??
-      localPathByVideoId.get(id) ??
-      playlistVideo?.localPath ??
-      libraryVideo?.localPath ??
-      null
-    );
-  }, [id, libraryVideo?.localPath, localPathByVideoId, playlistVideo?.localPath]);
+  const offlineUri = offlineCopy.useUri(id ?? "");
 
   useEffect(() => {
     if (!id) {
@@ -294,25 +271,17 @@ export default function TVPlayerScreen() {
 
     tvDebugInfo("[TV Playback Debug] Source resolution", {
       videoId: id,
-      hasLocalPath: !!localPath,
-      localPath,
+      hasOfflineUri: !!offlineUri,
+      offlineUri,
       hasEffectiveServerUrl: !!effectiveServerUrl,
       effectiveServerUrl,
-      playlistVideoHasLocalPath: !!playlistVideo?.localPath,
-      libraryVideoHasLocalPath: !!libraryVideo?.localPath,
-      sourceKind: localPath
+      sourceKind: offlineUri
         ? "local-file"
         : effectiveServerUrl
           ? "desktop-playback"
           : "unavailable",
     });
-  }, [
-    effectiveServerUrl,
-    id,
-    libraryVideo?.localPath,
-    localPath,
-    playlistVideo?.localPath,
-  ]);
+  }, [effectiveServerUrl, id, offlineUri]);
 
   useEffect(() => {
     if (!id) {
@@ -322,10 +291,10 @@ export default function TVPlayerScreen() {
       return;
     }
 
-    if (localPath) {
+    if (offlineUri) {
       tvDebugInfo("[TV Playback Debug] Using local file", {
         videoId: id,
-        localPath,
+        offlineUri,
       });
       setPrepareState("ready");
       setPrepareError(null);
@@ -337,8 +306,6 @@ export default function TVPlayerScreen() {
       logger.warn("[TV Playback Debug] Offline playback unavailable", {
         videoId: id,
         reason: "no-local-file-and-no-server",
-        playlistVideoHasLocalPath: !!playlistVideo?.localPath,
-        libraryVideoHasLocalPath: !!libraryVideo?.localPath,
       });
       setPrepareState("failed");
       setPrepareError("Video is not available offline");
@@ -377,7 +344,7 @@ export default function TVPlayerScreen() {
         }
 
         const existingDownload = useDownloadStore.getState().getDownload(id);
-        if (!getVideoLocalPath(id)) {
+        if (!offlineCopy.getUri(id)) {
           tvDebugInfo("[TV Playback Debug] Queueing TV download", {
             videoId: id,
             title: video.title,
@@ -402,7 +369,7 @@ export default function TVPlayerScreen() {
         if (!cancelled) {
           tvDebugInfo("[TV Playback Debug] TV download ready", {
             videoId: id,
-            localPath: getVideoLocalPath(id),
+            offlineUri: offlineCopy.getUri(id),
           });
           setPrepareState("ready");
           setPrepareError(null);
@@ -433,16 +400,16 @@ export default function TVPlayerScreen() {
   }, [
     effectiveServerUrl,
     id,
-    localPath,
+    offlineUri,
     prepareRetryVersion,
     video,
   ]);
 
   const source = useMemo(() => {
     if (!id) return "";
-    if (localPath) return localPath;
+    if (offlineUri) return offlineUri;
     return "";
-  }, [effectiveServerUrl, id, localPath, prepareState]);
+  }, [effectiveServerUrl, id, offlineUri, prepareState]);
 
   const player = useVideoPlayer(source, (instance) => {
     instance.loop = false;
@@ -489,7 +456,8 @@ export default function TVPlayerScreen() {
   const hasPrevious = hasPlaylistContext && playlistIndex > 0;
   const hasNext = hasPlaylistContext && playlistIndex < playlistVideos.length - 1;
   const nextVideo = hasNext ? playlistVideos[playlistIndex + 1] : null;
-  const playbackModeLabel = localPath ? "Offline" : "Streaming";
+  const nextOfflineUri = offlineCopy.useUri(nextVideo?.id ?? "");
+  const playbackModeLabel = offlineUri ? "Offline" : "Streaming";
 
   useEffect(() => {
     setNavNodeHandles({
@@ -649,9 +617,7 @@ export default function TVPlayerScreen() {
         return;
       }
 
-      const nextLocalPath =
-        localPathByVideoId.get(nextVideo.id) ?? nextVideo.localPath;
-      if (nextLocalPath) {
+      if (nextOfflineUri) {
         prefetchedNextVideoIdRef.current = nextVideo.id;
         setPrefetchState("ready");
         return;
@@ -693,7 +659,7 @@ export default function TVPlayerScreen() {
       cancelled = true;
       abortController.abort();
     };
-  }, [effectiveServerUrl, localPathByVideoId, nextVideo?.id, nextVideo?.localPath]);
+  }, [effectiveServerUrl, nextOfflineUri, nextVideo?.id]);
 
   if (!id || !source) {
     return (

@@ -22,7 +22,6 @@ import {
   cacheRemotePlaylists,
   resolveRemoteAssetUrl,
 } from "../../../services/browseCache";
-import { getVideoFileUri, getVideoLocalPath } from "../../../services/downloader";
 import { logger } from "../../../services/logger";
 import { tvDebugInfo } from "../../../services/tvDebug";
 import {
@@ -50,6 +49,7 @@ import {
   isRightEdgeGridIndex,
 } from "../../../components/tv/grid";
 import { useLibraryCatalog } from "../../../core/hooks/useLibraryCatalog";
+import { offlineCopy, type OfflineCopy } from "../../../services/offline-copy";
 import type { RemotePlaylist, RemoteVideoWithStatus, Video } from "../../../types";
 
 type DetailMode = "playlists" | "videos";
@@ -84,11 +84,11 @@ function getErrorMessage(error: unknown): string {
 
 function toStreamingVideos(
   input: RemoteVideoWithStatus[],
-  localPathByVideoId: Map<string, string>,
+  getOfflineUri: OfflineCopy["getUri"],
   serverUrl: string | null
 ) {
   return input.map<StreamingVideo>((item) => {
-    const localPath = getResolvedLocalPath(item.id, localPathByVideoId);
+    const localPath = getOfflineUri(item.id) ?? undefined;
     return {
       id: item.id,
       title: item.title,
@@ -100,16 +100,9 @@ function toStreamingVideos(
   });
 }
 
-function getResolvedLocalPath(
-  videoId: string,
-  localPathByVideoId: Map<string, string>
-): string | undefined {
-  return localPathByVideoId.get(videoId) ?? getVideoLocalPath(videoId) ?? undefined;
-}
-
 function toOfflineChannelVideos(
   input: Video[],
-  localPathByVideoId: Map<string, string>
+  getOfflineUri: OfflineCopy["getUri"]
 ) {
   return input.map<RemoteVideoWithStatus>((item) => ({
     id: item.id,
@@ -117,9 +110,7 @@ function toOfflineChannelVideos(
     channelTitle: item.channelTitle,
     duration: item.duration,
     thumbnailUrl: item.thumbnailUrl ?? null,
-    downloadStatus: getResolvedLocalPath(item.id, localPathByVideoId)
-      ? "completed"
-      : "pending",
+    downloadStatus: getOfflineUri(item.id) ? "completed" : "pending",
     downloadProgress: null,
     fileSize: null,
   }));
@@ -127,7 +118,7 @@ function toOfflineChannelVideos(
 
 function toSavedPlaylistChannelVideos(
   playlist: SavedPlaylistWithItems,
-  localPathByVideoId: Map<string, string>
+  getOfflineUri: OfflineCopy["getUri"]
 ) {
   return playlist.items.map<RemoteVideoWithStatus>((item) => ({
     id: item.videoId,
@@ -135,9 +126,7 @@ function toSavedPlaylistChannelVideos(
     channelTitle: item.channelTitle,
     duration: item.duration,
     thumbnailUrl: item.thumbnailUrl ?? null,
-    downloadStatus: getResolvedLocalPath(item.videoId, localPathByVideoId)
-      ? "completed"
-      : "pending",
+    downloadStatus: getOfflineUri(item.videoId) ? "completed" : "pending",
     downloadProgress: null,
     fileSize: null,
   }));
@@ -163,7 +152,7 @@ function getOfflineChannelFallback(
   channelId: string | undefined,
   channelTitle: string,
   videos: Video[],
-  localPathByVideoId: Map<string, string>
+  getOfflineUri: OfflineCopy["getUri"]
 ): OfflineChannelFallback {
   const savedPlaylists = getAllSavedPlaylistsWithProgress({
     includeUnpinned: true,
@@ -186,14 +175,14 @@ function getOfflineChannelFallback(
     if (video.channelTitle !== channelTitle) {
       return false;
     }
-    return !!getResolvedLocalPath(video.id, localPathByVideoId);
+    return !!getOfflineUri(video.id);
   });
 
   return {
     playlists: toOfflineChannelPlaylists(savedChannelPlaylists),
     videos: savedChannel
-      ? toSavedPlaylistChannelVideos(savedChannel, localPathByVideoId)
-      : toOfflineChannelVideos(localVideos, localPathByVideoId),
+      ? toSavedPlaylistChannelVideos(savedChannel, getOfflineUri)
+      : toOfflineChannelVideos(localVideos, getOfflineUri),
     hasChannelSummary: !!savedChannelSummary,
   };
 }
@@ -216,7 +205,7 @@ export default function TVChannelDetailScreen() {
   const upsertRecentPlaylist = useTVHistoryStore(
     (state) => state.upsertRecentPlaylist
   );
-  const { videos, offlineVideos } = useLibraryCatalog();
+  const { videos, offlineVideos, getOfflineUri } = useLibraryCatalog();
 
   const [detailMode, setDetailMode] = useState<DetailMode>("playlists");
   const [channelPlaylists, setChannelPlaylists] = useState<RemotePlaylist[]>([]);
@@ -250,19 +239,6 @@ export default function TVChannelDetailScreen() {
     [gridCardHeight, gridCardWidth]
   );
 
-  const localPathByVideoId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const video of videos) {
-      if (!video.localPath) continue;
-
-      const localPath = getVideoFileUri(video.id) ?? video.localPath;
-      if (localPath) {
-        map.set(video.id, localPath);
-      }
-    }
-    return map;
-  }, [videos]);
-
   const loadChannelData = useCallback(async () => {
     if (!channelId && !channelTitle) {
       setError("Channel not found");
@@ -277,7 +253,9 @@ export default function TVChannelDetailScreen() {
       channelId,
       channelTitle,
       videos,
-      localPathByVideoId
+      // Not the reactive lookup: an Offline copy appearing elsewhere must not
+      // re-fetch the channel and drop the viewer out of an open playlist.
+      offlineCopy.getUri
     );
     const hasOfflinePlaylists = offlineFallback.playlists.length > 0;
     const hasOfflineVideos = offlineFallback.videos.length > 0;
@@ -398,7 +376,7 @@ export default function TVChannelDetailScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [channelId, channelTitle, localPathByVideoId, serverUrl, videos]);
+  }, [channelId, channelTitle, serverUrl, videos]);
 
   useEffect(() => {
     void loadChannelData();
@@ -441,7 +419,7 @@ export default function TVChannelDetailScreen() {
       }
 
       showPlaylistVideos(
-        toSavedPlaylistChannelVideos(savedPlaylist, localPathByVideoId),
+        toSavedPlaylistChannelVideos(savedPlaylist, getOfflineUri),
         playlistId,
         playlistTitle,
         true
@@ -456,7 +434,7 @@ export default function TVChannelDetailScreen() {
       });
       return true;
     },
-    [localPathByVideoId, showPlaylistVideos]
+    [getOfflineUri, showPlaylistVideos]
   );
 
   const openPlaylist = useCallback(
@@ -515,7 +493,7 @@ export default function TVChannelDetailScreen() {
       if (!selectedVideo) return;
       const canStream = !!serverUrl && !isUsingOfflineFallback;
 
-      if (!canStream && !getResolvedLocalPath(videoId, localPathByVideoId)) {
+      if (!canStream && !getOfflineUri(videoId)) {
         Alert.alert(
           "Offline mode",
           "Download this video first or reconnect to desktop to stream it."
@@ -525,7 +503,7 @@ export default function TVChannelDetailScreen() {
 
       const streamingVideos = toStreamingVideos(
         channelVideos,
-        localPathByVideoId,
+        getOfflineUri,
         serverUrl
       );
       const playableVideos = canStream
@@ -567,7 +545,7 @@ export default function TVChannelDetailScreen() {
       channelId,
       channelTitle,
       activePlaylist,
-      localPathByVideoId,
+      getOfflineUri,
       isUsingOfflineFallback,
       serverUrl,
       startPlaylist,

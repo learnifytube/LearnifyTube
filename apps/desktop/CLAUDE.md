@@ -52,20 +52,18 @@ Renderer uses `local-file://` protocol, not `file://` - main process streams byt
 
 Located in `drizzle/`. Auto-backup before migration (keeps 5). Recovery wipes corrupted DB if retries fail.
 
-## Database Debugging
+## Database Location
 
-SQLite database can be queried directly for debugging:
+Resolved in `src/utils/paths.ts`:
+
+- **Dev** (`npm run dev`): `apps/desktop/local.db`
+- **Packaged**: `~/Library/Application Support/LearnifyTube/local.db`
+- **Custom**: set in Settings, stored in `<userData>/database-path.json`; overrides both. `LEARNIFYTUBE_FORCE_DEV_DB=true` ignores it.
 
 ```bash
-# Database location (development)
-~/Library/Application Support/LearnifyTube/learnify.db
-
-# Query with sqlite3
-sqlite3 ~/Library/Application\ Support/LearnifyTube/learnify.db
-
-# Example queries
-SELECT video_id, title, download_status FROM youtube_videos WHERE download_status = 'failed';
-SELECT * FROM youtube_videos ORDER BY updated_at DESC LIMIT 10;
+sqlite3 local.db "SELECT video_id, title, download_status FROM youtube_videos WHERE download_status = 'failed';"
 ```
 
-Or use `npm run db:studio` for Drizzle Studio GUI.
+## Mobile Sync Server
+
+`src/main/mobileSyncServer.ts` is the HTTP server the mobile/TV app talks to — a second entry point beside the tRPC routers. Keep its payloads in step with `apps/shared/mobile-sync-contract.ts` and `apps/mobile/services/api.ts`.

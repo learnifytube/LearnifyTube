@@ -1,17 +1,13 @@
 # AGENTS.md
 
-App-specific guidance lives in `apps/desktop/CLAUDE.md` and `apps/mobile/CLAUDE.md`.
+Two apps, one sync protocol:
+
+- `apps/desktop` — Electron app; guidance in `apps/desktop/CLAUDE.md`.
+- `apps/mobile` — Expo app for phone and Android TV; guidance in `apps/mobile/CLAUDE.md`.
+- `apps/shared/mobile-sync-contract.ts` — the desktop↔mobile sync contract. Desktop serves it from `apps/desktop/src/main/mobileSyncServer.ts`; mobile consumes it in `apps/mobile/services/api.ts`. A change on one side needs the matching change on the other.
 
 ## Agent skills
 
-### Issue tracker
-
-Issues live in GitHub Issues for `learnifytube/LearnifyTube` (via `gh`). See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Multi-context: root `CONTEXT-MAP.md` → `apps/desktop/CONTEXT.md`, `apps/mobile/CONTEXT.md`. See `docs/agents/domain.md`.
+- **Issues** — GitHub Issues on `learnifytube/LearnifyTube` via `gh`. Commands: `docs/agents/issue-tracker.md`.
+- **Triage labels** — role-to-label mapping: `docs/agents/triage-labels.md`.
+- **Domain docs** — glossary (`CONTEXT.md`) and ADR layout: `docs/agents/domain.md`.

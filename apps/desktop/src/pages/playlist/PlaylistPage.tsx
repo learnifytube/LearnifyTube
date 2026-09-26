@@ -24,11 +24,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { PlaylistHeader, PlaylistHeaderSkeleton } from "./components/PlaylistHeader";
-import {
-  PlaylistVideoCard,
-  PlaylistVideoCardSkeleton,
-  type PlaylistVideo,
-} from "./components/PlaylistVideoCard";
+import { PlaylistVideoCardSkeleton, type PlaylistVideo } from "./components/PlaylistVideoCard";
+import { SourceVideoGrid } from "@/components/source-videos/SourceVideoGrid";
 import { CustomPlaylistVideoCard } from "./components/CustomPlaylistVideoCard";
 import { BatchDownloadBar } from "./components/BatchDownloadBar";
 import {
@@ -399,71 +396,72 @@ export default function PlaylistPage(): React.JSX.Element {
         onRefresh={handleRefresh}
       />
 
-      <BatchDownloadBar
-        selectedCount={selectedVideoIds.size}
-        totalNotDownloaded={stats.notDownloaded}
-        isDownloading={downloadMutation.isPending}
-        onSelectAll={handleToggleAll}
-        onClearSelection={handleClearSelection}
-        onDownload={handleDownloadSelected}
-        isAllSelected={selectedVideoIds.size === notDownloadedVideos.length}
-      />
+      {isCustomPlaylist ? (
+        <>
+          <BatchDownloadBar
+            selectedCount={selectedVideoIds.size}
+            totalNotDownloaded={stats.notDownloaded}
+            isDownloading={downloadMutation.isPending}
+            onSelectAll={handleToggleAll}
+            onClearSelection={handleClearSelection}
+            onDownload={handleDownloadSelected}
+            isAllSelected={selectedVideoIds.size === notDownloadedVideos.length}
+          />
 
-      <PlaylistFilters
-        filter={filter}
-        viewMode={viewMode}
-        totalCount={stats.total}
-        downloadedCount={stats.downloaded}
-        notDownloadedCount={stats.notDownloaded}
-        onFilterChange={setFilter}
-        onViewModeChange={setViewMode}
-      />
+          <PlaylistFilters
+            filter={filter}
+            viewMode={viewMode}
+            totalCount={stats.total}
+            downloadedCount={stats.downloaded}
+            notDownloadedCount={stats.notDownloaded}
+            onFilterChange={setFilter}
+            onViewModeChange={setViewMode}
+          />
 
-      {filteredVideos.length === 0 ? (
-        <PlaylistEmptyState filter={filter} />
-      ) : (
-        <div
-          className={cn(
-            "grid gap-4",
-            viewMode === "grid"
-              ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-              : "grid-cols-1 md:grid-cols-2"
+          {filteredVideos.length === 0 ? (
+            <PlaylistEmptyState filter={filter} />
+          ) : (
+            <div
+              className={cn(
+                "grid gap-4",
+                viewMode === "grid"
+                  ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                  : "grid-cols-1 md:grid-cols-2"
+              )}
+            >
+              {filteredVideos.map((video) => {
+                const originalIndex = (data.videos ?? []).findIndex(
+                  (v) => v.videoId === video.videoId
+                );
+                return (
+                  <CustomPlaylistVideoCard
+                    key={video.videoId}
+                    video={video}
+                    index={originalIndex}
+                    playlistId={playlistId}
+                    totalVideos={data.videos?.length ?? 0}
+                    isCurrentVideo={originalIndex === (data.currentVideoIndex || 0)}
+                    isSelected={selectedVideoIds.has(video.videoId)}
+                    onPlay={() => handlePlayVideo(originalIndex)}
+                    onToggleSelect={() => handleToggleVideo(video.videoId)}
+                    onRemoved={() => query.refetch()}
+                  />
+                );
+              })}
+            </div>
           )}
-        >
-          {filteredVideos.map((video) => {
-            const originalIndex = (data.videos ?? []).findIndex((v) => v.videoId === video.videoId);
-            const isCurrentVideo = originalIndex === (data.currentVideoIndex || 0);
-
-            if (isCustomPlaylist) {
-              return (
-                <CustomPlaylistVideoCard
-                  key={video.videoId}
-                  video={video}
-                  index={originalIndex}
-                  playlistId={playlistId}
-                  totalVideos={data.videos?.length ?? 0}
-                  isCurrentVideo={isCurrentVideo}
-                  isSelected={selectedVideoIds.has(video.videoId)}
-                  onPlay={() => handlePlayVideo(originalIndex)}
-                  onToggleSelect={() => handleToggleVideo(video.videoId)}
-                  onRemoved={() => query.refetch()}
-                />
-              );
-            }
-
-            return (
-              <PlaylistVideoCard
-                key={video.videoId}
-                video={video}
-                index={originalIndex}
-                isCurrentVideo={isCurrentVideo}
-                isSelected={selectedVideoIds.has(video.videoId)}
-                onPlay={() => handlePlayVideo(originalIndex)}
-                onToggleSelect={() => handleToggleVideo(video.videoId)}
-              />
-            );
-          })}
-        </div>
+        </>
+      ) : data.videos.length === 0 ? (
+        <PlaylistEmptyState filter="all" />
+      ) : (
+        <SourceVideoGrid
+          className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          videos={data.videos.map((video, index) => ({
+            ...video,
+            subtitle: `#${index + 1}${video.viewCount ? ` · ${video.viewCount.toLocaleString()} views` : ""}`,
+          }))}
+          onPlay={(_videoId, index) => handlePlayVideo(index)}
+        />
       )}
 
       {/* Edit dialog for custom playlists */}

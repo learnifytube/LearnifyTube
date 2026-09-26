@@ -29,16 +29,14 @@ export function NewFromSubscriptionsSection(): React.JSX.Element {
 
   const keepMutation = useMutation({
     mutationFn: (video: SubscriptionVideo) =>
-      trpcClient.queue.addToQueue.mutate({
-        urls: [`https://www.youtube.com/watch?v=${video.videoId}`],
-      }),
+      trpcClient.library.keep.mutate({ videoIds: [video.videoId] }),
     onSuccess: (res, video) => {
       if (res.success) {
         queryClient.invalidateQueries({ queryKey: ["queue", "status"] });
         queryClient.invalidateQueries({ queryKey: ["library"] });
         toast.success(`Keeping "${video.title}"`);
       } else {
-        toast.error(res.message ?? "Failed to keep Video");
+        toast.error(res.message);
       }
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to keep Video"),

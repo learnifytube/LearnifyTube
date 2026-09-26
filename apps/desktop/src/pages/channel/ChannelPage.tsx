@@ -19,7 +19,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ExternalLink } from "@/components/ExternalLink";
 import { PageContainer } from "@/components/ui/page-container";
 import { toast } from "sonner";
-import { LatestTab, PopularTab, LibraryTab, PlaylistsTab } from "./components";
+import { ChannelVideosTab, LibraryTab, PlaylistsTab } from "./components";
 import { RefreshCw, Trash2 } from "lucide-react";
 import Thumbnail from "@/components/Thumbnail";
 
@@ -257,19 +257,11 @@ export default function ChannelPage(): React.JSX.Element {
             </TabsList>
 
             <TabsContent value="latest" className="mt-4">
-              <LatestTab
-                channelId={channelId!}
-                isActive={activeTab === "latest"}
-                onDownload={handleDownloadVideo}
-              />
+              <ChannelVideosTab channelId={channelId} kind="latest" />
             </TabsContent>
 
             <TabsContent value="popular" className="mt-4">
-              <PopularTab
-                channelId={channelId!}
-                isActive={activeTab === "popular"}
-                onDownload={handleDownloadVideo}
-              />
+              <ChannelVideosTab channelId={channelId} kind="popular" />
             </TabsContent>
 
             <TabsContent value="library" className="mt-4">

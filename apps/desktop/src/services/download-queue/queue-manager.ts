@@ -850,11 +850,14 @@ const createQueueManager = (
           }
         }
 
-        // Check for duplicates in current in-memory queue
+        // Check for duplicates in current in-memory queue. A fetch that failed for good stays
+        // paused in memory; adding it again replaces it with a fresh attempt.
         const inQueue = Array.from(queue.values()).find(
           (item) => item.videoId === videoId && videoId !== null
         );
-        if (inQueue) {
+        if (inQueue && inQueue.status === "paused" && inQueue.errorMessage) {
+          queue.delete(inQueue.id);
+        } else if (inQueue) {
           logger.info("[queue-manager] Skipping duplicate - already in queue", {
             videoId,
             queueId: inQueue.id,

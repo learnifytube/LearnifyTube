@@ -1,84 +1,43 @@
-import { asc, eq } from "drizzle-orm";
+import { z } from "zod";
 import { publicProcedure, t } from "@/api/trpc";
-import {
-  customPlaylistItems,
-  customPlaylists,
-  favorites,
-  phoneListItems,
-  videoWatchStats,
-  youtubeVideos,
-} from "@/api/db/schema";
 import defaultDb from "@/api/db";
-import { getWatchState } from "@/lib/watch-state";
-import { FAVORITES_LIST_ID, PHONE_LIST_ID } from "@/lib/lists";
-import { isKept } from "@/api/library/kept";
+import { logger } from "@/helpers/logger";
+import { requireQueueManager } from "@/services/download-queue/queue-manager";
+import { addToList } from "@/api/library/add-to-list";
+import { loadLibraryVideos } from "@/api/library/library-videos";
 import { loadNewFromSubscriptions } from "@/api/library/new-from-subscriptions";
 
 export const libraryRouter = t.router({
   // Every Video in the Library (kept: fetched or on its way), with Watch state and Lists
-  list: publicProcedure.query(async ({ ctx }) => {
-    const db = ctx.db ?? defaultDb;
-
-    const [rows, listItems, favoriteRows, phoneRows, lists] = await Promise.all([
-      db
-        .select({
-          videoId: youtubeVideos.videoId,
-          title: youtubeVideos.title,
-          channelId: youtubeVideos.channelId,
-          channelTitle: youtubeVideos.channelTitle,
-          durationSeconds: youtubeVideos.durationSeconds,
-          thumbnailUrl: youtubeVideos.thumbnailUrl,
-          thumbnailPath: youtubeVideos.thumbnailPath,
-          downloadStatus: youtubeVideos.downloadStatus,
-          downloadProgress: youtubeVideos.downloadProgress,
-          keptAt: youtubeVideos.keptAt,
-          lastPositionSeconds: videoWatchStats.lastPositionSeconds,
-          lastWatchedAt: videoWatchStats.lastWatchedAt,
-          watchedAt: videoWatchStats.watchedAt,
-        })
-        .from(youtubeVideos)
-        .leftJoin(videoWatchStats, eq(videoWatchStats.videoId, youtubeVideos.videoId))
-        .where(isKept),
-      db
-        .select({ videoId: customPlaylistItems.videoId, listId: customPlaylistItems.playlistId })
-        .from(customPlaylistItems),
-      db
-        .select({ videoId: favorites.entityId })
-        .from(favorites)
-        .where(eq(favorites.entityType, "video")),
-      db.select({ videoId: phoneListItems.videoId }).from(phoneListItems),
-      db
-        .select({ id: customPlaylists.id, name: customPlaylists.name })
-        .from(customPlaylists)
-        .orderBy(asc(customPlaylists.name)),
-    ]);
-
-    const listIdsByVideo = new Map<string, string[]>();
-    const addToList = (videoId: string, listId: string): void => {
-      listIdsByVideo.set(videoId, [...(listIdsByVideo.get(videoId) ?? []), listId]);
-    };
-    listItems.forEach((item) => addToList(item.videoId, item.listId));
-    favoriteRows.forEach((row) => addToList(row.videoId, FAVORITES_LIST_ID));
-    phoneRows.forEach((row) => addToList(row.videoId, PHONE_LIST_ID));
-
-    return {
-      videos: rows.map(({ keptAt, lastPositionSeconds, watchedAt, ...video }) => ({
-        ...video,
-        keptAt: keptAt ?? 0,
-        lastPositionSeconds,
-        watchState: getWatchState({ watchedAt, lastPositionSeconds }),
-        listIds: listIdsByVideo.get(video.videoId) ?? [],
-      })),
-      lists: [
-        { id: FAVORITES_LIST_ID, name: "Favorites" },
-        { id: PHONE_LIST_ID, name: "Phone List" },
-        ...lists,
-      ],
-    };
-  }),
+  list: publicProcedure.query(({ ctx }) => loadLibraryVideos(ctx.db ?? defaultDb)),
 
   // Videos from Subscriptions the user has not kept yet, for Home's Keep row
   newFromSubscriptions: publicProcedure.query(({ ctx }) =>
     loadNewFromSubscriptions(ctx.db ?? defaultDb)
   ),
+
+  // Keep Videos (fetch them into the Library), optionally adding them to a List as well.
+  // A Video already kept or on its way is not fetched again but still goes into the List.
+  keep: publicProcedure
+    .input(z.object({ videoIds: z.array(z.string()).min(1), listId: z.string().optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = ctx.db ?? defaultDb;
+      const urls = input.videoIds.map((id) => `https://www.youtube.com/watch?v=${id}`);
+      try {
+        await requireQueueManager().addToQueue(urls);
+      } catch (error) {
+        const isDuplicate = typeof error === "object" && error !== null && "skippedUrls" in error;
+        if (!isDuplicate) {
+          logger.error("[library] keep failed", error);
+          return { success: false as const, message: "Failed to keep Videos" };
+        }
+        // Every Video was already kept or on its way: only a List can still change
+        const addedIds = "addedIds" in error && Array.isArray(error.addedIds) ? error.addedIds : [];
+        if (addedIds.length === 0 && !input.listId) {
+          return { success: false as const, message: "Already kept" };
+        }
+      }
+      if (input.listId) await addToList(db, input.listId, input.videoIds);
+      return { success: true as const };
+    }),
 });

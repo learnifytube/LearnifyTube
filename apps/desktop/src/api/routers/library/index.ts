@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull, ne } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { publicProcedure, t } from "@/api/trpc";
 import {
   customPlaylistItems,
@@ -11,6 +11,8 @@ import {
 import defaultDb from "@/api/db";
 import { getWatchState } from "@/lib/watch-state";
 import { FAVORITES_LIST_ID, PHONE_LIST_ID } from "@/lib/lists";
+import { isKept } from "@/api/library/kept";
+import { loadNewFromSubscriptions } from "@/api/library/new-from-subscriptions";
 
 export const libraryRouter = t.router({
   // Every Video in the Library (kept: fetched or on its way), with Watch state and Lists
@@ -31,17 +33,12 @@ export const libraryRouter = t.router({
           downloadProgress: youtubeVideos.downloadProgress,
           keptAt: youtubeVideos.keptAt,
           lastPositionSeconds: videoWatchStats.lastPositionSeconds,
+          lastWatchedAt: videoWatchStats.lastWatchedAt,
           watchedAt: videoWatchStats.watchedAt,
         })
         .from(youtubeVideos)
         .leftJoin(videoWatchStats, eq(videoWatchStats.videoId, youtubeVideos.videoId))
-        .where(
-          and(
-            isNotNull(youtubeVideos.keptAt),
-            isNotNull(youtubeVideos.downloadStatus),
-            ne(youtubeVideos.downloadStatus, "cancelled")
-          )
-        ),
+        .where(isKept),
       db
         .select({ videoId: customPlaylistItems.videoId, listId: customPlaylistItems.playlistId })
         .from(customPlaylistItems),
@@ -79,4 +76,9 @@ export const libraryRouter = t.router({
       ],
     };
   }),
+
+  // Videos from Subscriptions the user has not kept yet, for Home's Keep row
+  newFromSubscriptions: publicProcedure.query(({ ctx }) =>
+    loadNewFromSubscriptions(ctx.db ?? defaultDb)
+  ),
 });

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Library, Plus } from "lucide-react";
 import { trpcClient } from "@/utils/trpc";
+import { isOnItsWay } from "@/lib/kept-video";
 import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/ui/page-container";
 import { QuickAddDialog } from "@/components/QuickAddDialog";
@@ -16,9 +17,6 @@ const DEFAULT_VIEW: LibraryView = {
   channelId: "all",
   listId: "all",
 };
-
-const isOnItsWay = (status: string | null): boolean =>
-  status !== "completed" && status !== "failed";
 
 export default function LibraryPage(): React.JSX.Element {
   const [view, setView] = useState(DEFAULT_VIEW);

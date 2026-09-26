@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Smartphone, Wifi, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { SyncPairingCode } from "@/components/SyncPairingCode";
 
 export function SyncTab(): React.JSX.Element {
   const { toast } = useToast();
@@ -106,6 +107,8 @@ export function SyncTab(): React.JSX.Element {
               </div>
 
               <div className="grid gap-3">
+                <SyncPairingCode pairingCode={syncStatus.pairingCode} />
+
                 <div>
                   <Label className="text-xs text-muted-foreground">Server Address</Label>
                   <div className="mt-1 flex items-center gap-2">
@@ -156,6 +159,7 @@ export function SyncTab(): React.JSX.Element {
             <li>Make sure your mobile device is on the same WiFi network</li>
             <li>Open the LearnifyTube mobile app</li>
             <li>Tap "Connect to Desktop" on the mobile app</li>
+            <li>Enter the pairing code shown above</li>
             <li>
               Enter the server address shown above (e.g.,{" "}
               <code className="rounded bg-muted px-1">{syncStatus?.ip ?? "192.168.x.x"}</code>)

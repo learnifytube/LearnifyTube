@@ -38,7 +38,7 @@ export async function downloadVideo(
   const tempUri = await offlineCopy.tempFileUri(videoId);
   const videoUrl = api.getVideoFileUrl(serverUrl, videoId);
 
-  log(`Starting download: ${videoUrl}`);
+  log(`Starting download: ${serverUrl}/api/video/${videoId}/file`);
 
   // Signal that download is starting
   onProgress({ progress: 0, bytesDownloaded: 0, totalBytes: 0 });

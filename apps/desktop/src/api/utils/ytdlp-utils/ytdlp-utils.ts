@@ -16,15 +16,6 @@ export const getYtDlpAssetName = (platform: SupportedPlatform): string => {
   }
 };
 
-export const getLatestReleaseApiUrl = (): string =>
-  "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest";
-
-export const getPinnedReleaseApiUrl = (): string =>
-  `https://api.github.com/repos/yt-dlp/yt-dlp/releases/tags/${YT_DLP_PINNED_VERSION}`;
-
-export const getDirectLatestDownloadUrl = (platform: SupportedPlatform): string =>
-  `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${getYtDlpAssetName(platform)}`;
-
 export const getDirectPinnedDownloadUrl = (platform: SupportedPlatform): string =>
   `https://github.com/yt-dlp/yt-dlp/releases/download/${YT_DLP_PINNED_VERSION}/${getYtDlpAssetName(platform)}`;
 

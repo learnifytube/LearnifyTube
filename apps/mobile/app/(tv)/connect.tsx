@@ -10,7 +10,8 @@ import {
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useConnectionStore } from "../../stores/connection";
-import { api } from "../../services/api";
+import { colors } from "../../theme";
+import { api, PairingRequiredError } from "../../services/api";
 import { ensureDiscoveryPermissions } from "../../services/discovery-permissions";
 import { startScanning, stopScanning } from "../../services/p2p/discovery";
 import {
@@ -105,7 +106,7 @@ function getPeerKey(peer: DiscoveredPeer): string {
 }
 
 export default function TVConnectScreen() {
-  const { setServerUrl, setServerName } = useConnectionStore();
+  const { setServerUrl, setServerName, pairingCode, setPairingCode } = useConnectionStore();
 
   const [input, setInput] = useState("");
   const [isConnecting, setIsConnecting] = useState(false);
@@ -179,6 +180,14 @@ export default function TVConnectScreen() {
                 Alert.alert("Desktop Update Required", error.message);
               } else {
                 Alert.alert("Mobile Update Required", error.message);
+              }
+              return false;
+            }
+            if (error instanceof PairingRequiredError) {
+              if (options?.fromAuto) {
+                setScanError(error.message);
+              } else {
+                Alert.alert("Pairing Code Needed", error.message);
               }
               return false;
             }
@@ -406,6 +415,18 @@ export default function TVConnectScreen() {
             </TVFocusPressable>
           </View>
         ) : null}
+      </View>
+
+      <View style={styles.inputWrap}>
+        <TextInput
+          value={pairingCode ?? ""}
+          onChangeText={setPairingCode}
+          placeholder="Pairing code (desktop Settings → Sync)"
+          placeholderTextColor={colors.textTertiary}
+          style={styles.input}
+          autoCapitalize="characters"
+          autoCorrect={false}
+        />
       </View>
 
       <View style={styles.inputWrap}>

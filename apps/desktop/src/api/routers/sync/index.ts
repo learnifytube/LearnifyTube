@@ -13,6 +13,8 @@ import {
 import {
   getMobileSyncServer,
   getLocalIpAddress,
+  getMobileSyncPairingCode,
+  resetMobileSyncPairingCode,
   type ConnectedDevice,
 } from "@/main/mobileSyncServer";
 import { getMdnsService, type DiscoveredMobileDevice } from "@/main/mdnsService";
@@ -23,6 +25,7 @@ export interface SyncStatus {
   running: boolean;
   ip: string | null;
   port: number;
+  pairingCode: string;
   connectedDevices: ConnectedDevice[];
   discoveredDevices: DiscoveredMobileDevice[];
 }
@@ -147,6 +150,7 @@ export const syncRouter = t.router({
       running: server.isRunning(),
       ip: getLocalIpAddress(),
       port: server.isRunning() ? server.getPort() : prefs.port,
+      pairingCode: getMobileSyncPairingCode(),
       connectedDevices: server.isRunning() ? server.getConnectedDevices() : [],
       discoveredDevices: server.isRunning() ? mdns.getDiscoveredDevices() : [],
     };
@@ -243,6 +247,13 @@ export const syncRouter = t.router({
         port: prefs.port,
       };
     }
+  }),
+
+  // Issue a new pairing code; devices paired with the old one stop working
+  resetPairingCode: publicProcedure.mutation((): { pairingCode: string } => {
+    const pairingCode = resetMobileSyncPairingCode();
+    logger.info("[sync] Mobile sync pairing code reset");
+    return { pairingCode };
   }),
 
   // Update sync port preference

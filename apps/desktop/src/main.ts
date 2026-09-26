@@ -132,7 +132,7 @@ protocol.registerSchemesAsPrivileged([
       secure: true,
       corsEnabled: true,
       supportFetchAPI: true,
-      bypassCSP: true,
+      // No bypassCSP: the CSP lists local-file: explicitly in img-src and media-src.
       allowServiceWorkers: false,
     },
   },
@@ -521,7 +521,6 @@ app.whenReady().then(async () => {
       const baseHeaders = {
         "Content-Type": contentType,
         "Accept-Ranges": "bytes",
-        "Access-Control-Allow-Origin": "*",
         "Cache-Control": "no-cache",
       };
 
@@ -605,7 +604,7 @@ app.whenReady().then(async () => {
   createWindow();
   logger.info("[app] Main window created successfully");
 
-  // Modify CSP to allow scripts from PostHog and inline scripts
+  // CSP: scripts only from the app and PostHog — no 'unsafe-inline' for scripts
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {

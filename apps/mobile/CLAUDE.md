@@ -27,7 +27,7 @@ The two route groups import and navigate only within themselves; `scripts/check-
 
 ## Architecture
 
-- **Desktop sync** — `services/api.ts` is the REST client for the desktop's mobile sync server; the version handshake lives in `apps/shared/mobile-sync-contract.ts`.
+- **Desktop sync** — `services/api.ts` is the REST client for the desktop's mobile sync server; the version handshake lives in `apps/shared/mobile-sync-contract.ts`. It attaches the pairing code from `stores/connection.ts` to every request, and to image/video URLs as `?token=`; build desktop URLs with its `get*Url` helpers. A 401 surfaces as `PairingRequiredError`.
 - **Downloads** — queued in `stores/downloads.ts` (AsyncStorage-persisted; in-flight items reset to queued on hydration), driven by `hooks/useDownloadProcessor.ts`, processed by `services/downloadManager.ts` (concurrency, retry backoff, cancellation). `services/downloader.ts` transfers to a temp file, then the manager hands it to the Offline copy module's `adopt`.
 - **Persistence** — SQLite via expo-sqlite + Drizzle (`db/schema.ts`, `db/repositories/`); migrations run on app start. Zustand stores in `stores/`; `library.ts` mirrors SQLite, the rest persist to AsyncStorage.
 - **P2P sharing** — `services/p2p/`: mDNS discovery (react-native-zeroconf) plus a local server/client. The server serves Offline copies via `offlineCopy.readBytes`; the client downloads to a temp file and the share screen calls `adopt`.

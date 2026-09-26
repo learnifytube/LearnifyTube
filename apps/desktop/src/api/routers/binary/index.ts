@@ -6,38 +6,19 @@ import { app, net } from "electron";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { execFileSync, execSync } from "child_process";
+import { execFileSync } from "child_process";
 import {
-  getDirectLatestDownloadUrl,
   getDirectPinnedDownloadUrl,
-  getLatestReleaseApiUrl,
   getPinnedChecksumsUrl,
   getYtDlpAssetName,
   YT_DLP_PINNED_VERSION,
 } from "@/api/utils/ytdlp-utils/ytdlp-utils";
 import { matchesExpected, parseChecksumForAsset, sha256OfFile } from "@/api/utils/ytdlp-utils/checksum";
-import { isYtDlpUpdateAvailable } from "@/api/utils/ytdlp-utils/version";
 import {
   getFfmpegDownloadUrl,
   getFfmpegBinaryPathInArchive,
   requiresExtraction,
 } from "@/api/utils/ffmpeg-utils/ffmpeg-utils";
-
-// Zod schema for GitHub release API response (fault-tolerant)
-const githubReleaseSchema = z
-  .object({
-    tag_name: z.string().optional().catch(undefined),
-    assets: z
-      .array(
-        z.object({
-          name: z.string().optional().catch(undefined),
-          browser_download_url: z.string().optional().catch(undefined),
-        })
-      )
-      .optional()
-      .catch([]),
-  })
-  .passthrough();
 
 const getBinDir = (): string => path.join(app.getPath("userData"), "bin");
 const getVersionFilePath = (): string => path.join(getBinDir(), "yt-dlp-version.txt");
@@ -222,15 +203,23 @@ const extractArchive = async (
     if (platform === "win32") {
       // For Windows, extract zip using PowerShell
       try {
-        execSync(
-          `powershell -Command "Expand-Archive -Path '${archivePath}' -DestinationPath '${extractTo}' -Force"`,
+        // Paths go in as PowerShell arguments ($args), never spliced into the command text.
+        execFileSync(
+          "powershell",
+          [
+            "-NoProfile",
+            "-Command",
+            "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force",
+            archivePath,
+            extractTo,
+          ],
           { stdio: "ignore" }
         );
         return { success: true };
       } catch {
         // Fallback: try 7z if available
         try {
-          execSync(`7z x "${archivePath}" -o"${extractTo}" -y`, { stdio: "ignore" });
+          execFileSync("7z", ["x", archivePath, `-o${extractTo}`, "-y"], { stdio: "ignore" });
           return { success: true };
         } catch {
           return {
@@ -242,7 +231,7 @@ const extractArchive = async (
     } else if (platform === "darwin") {
       // For macOS, extract zip using unzip (available by default)
       try {
-        execSync(`unzip -q "${archivePath}" -d "${extractTo}"`, { stdio: "ignore" });
+        execFileSync("unzip", ["-q", archivePath, "-d", extractTo], { stdio: "ignore" });
         return { success: true };
       } catch (e) {
         return {
@@ -253,7 +242,7 @@ const extractArchive = async (
     } else if (platform === "linux") {
       // For Linux, extract tar.xz
       try {
-        execSync(`tar -xf "${archivePath}" -C "${extractTo}"`, { stdio: "ignore" });
+        execFileSync("tar", ["-xf", archivePath, "-C", extractTo], { stdio: "ignore" });
         return { success: true };
       } catch (e) {
         return {
@@ -308,25 +297,11 @@ async function fetchPinnedRelease(): Promise<YtDlpRelease | null> {
   }
 }
 
-/** Fallback when the pinned checksum file cannot be fetched (no verification). */
-async function fetchLatestReleaseFallback(): Promise<{ version: string; assetUrl: string } | null> {
-  try {
-    const releaseRes = await fetch(getLatestReleaseApiUrl());
-    if (!releaseRes.ok) {
-      logger.error("[ytdlp] Failed to fetch latest release", { status: releaseRes.status });
-      return { version: "unknown", assetUrl: getDirectLatestDownloadUrl(process.platform) };
-    }
-    const json = githubReleaseSchema.parse(await releaseRes.json());
-    const tag = (json.tag_name ?? "").replace(/^v/, "");
-    const desiredAsset = getYtDlpAssetName(process.platform);
-    const asset = json.assets?.find((a) => a.name === desiredAsset);
-    const assetUrl = asset?.browser_download_url ?? getDirectLatestDownloadUrl(process.platform);
-    return { version: tag || "unknown", assetUrl };
-  } catch (e) {
-    logger.error("[ytdlp] Exception fetching latest release", e);
-    return { version: "unknown", assetUrl: getDirectLatestDownloadUrl(process.platform) };
-  }
-}
+/** The yt-dlp release this app installs and updates to — always the pinned, checksum-verified one. */
+const getPinnedReleaseInfo = (): { version: string; assetUrl: string } => ({
+  version: YT_DLP_PINNED_VERSION,
+  assetUrl: getDirectPinnedDownloadUrl(process.platform),
+});
 
 const installYtDlpFromRelease = async (
   latest: YtDlpRelease,
@@ -550,9 +525,9 @@ export const ensureYtDlpBinaryReady = async (
       };
     }
 
-    const latestInfo = await fetchLatestReleaseFallback();
+    const pinnedInfo = getPinnedReleaseInfo();
     writeLastUpdateCheckAt(now);
-    if (!latestInfo || !installedVersion) {
+    if (!installedVersion) {
       return {
         installed: true,
         path: binPath,
@@ -562,7 +537,8 @@ export const ensureYtDlpBinaryReady = async (
       };
     }
 
-    const updateAvailable = isYtDlpUpdateAvailable(installedVersion, latestInfo.version);
+    // Any build other than the pinned one (older, or a newer unverified "latest") is replaced.
+    const updateAvailable = installedVersion !== pinnedInfo.version;
     if (!updateAvailable) {
       return {
         installed: true,
@@ -656,13 +632,13 @@ export const binaryRouter = t.router({
     }
   }),
 
-  resolveLatest: publicProcedure.query(async (): Promise<ResolveLatestResult> => {
-    const info = await fetchLatestReleaseFallback();
-    return info;
-  }),
+  // Kept as "latest" for the renderer API; it is the pinned release.
+  resolveLatest: publicProcedure.query(async (): Promise<ResolveLatestResult> =>
+    getPinnedReleaseInfo()
+  ),
 
   /**
-   * Check if yt-dlp update is available by comparing installed vs latest version
+   * Check if yt-dlp update is available by comparing installed vs the pinned version
    */
   checkForUpdate: publicProcedure.query(
     async (): Promise<{
@@ -676,28 +652,19 @@ export const binaryRouter = t.router({
         const installedVersion = fs.existsSync(binPath)
           ? (storedVersion ?? readVersionFromBinary(binPath))
           : null;
-        const latest = await fetchLatestReleaseFallback();
-
-        if (!installedVersion || !latest) {
-          return {
-            updateAvailable: !installedVersion && !!latest,
-            installedVersion,
-            latestVersion: latest?.version ?? null,
-          };
-        }
-
-        const updateAvailable = isYtDlpUpdateAvailable(installedVersion, latest.version);
+        const pinnedVersion = getPinnedReleaseInfo().version;
+        const updateAvailable = installedVersion !== pinnedVersion;
 
         logger.info("[ytdlp] Update check result", {
           installedVersion,
-          latestVersion: latest.version,
+          pinnedVersion,
           updateAvailable,
         });
 
         return {
           updateAvailable,
           installedVersion,
-          latestVersion: latest.version,
+          latestVersion: pinnedVersion,
         };
       } catch (e) {
         logger.error("[ytdlp] checkForUpdate failed", e);
@@ -882,7 +849,7 @@ export const binaryRouter = t.router({
 
         // Get version by running ffmpeg -version
         try {
-          const versionOutput = execSync(`"${binPath}" -version`, {
+          const versionOutput = execFileSync(binPath, ["-version"], {
             encoding: "utf8",
             timeout: 5000,
           });

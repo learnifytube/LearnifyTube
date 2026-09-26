@@ -194,7 +194,7 @@ export default function PlayerScreen() {
   // Play the Offline copy when there is one, otherwise stream
   const offlineUri = offlineCopy.useUri(id ?? "");
   const directStreamUrl =
-    !offlineUri && serverUrl && id ? `${serverUrl}/api/video/${id}/file` : null;
+    !offlineUri && serverUrl && id ? api.getVideoFileUrl(serverUrl, id) : null;
   const videoSourceUrl =
     offlineUri ??
     (streamServerUrl && id ? getStreamUrl(id) : null) ??

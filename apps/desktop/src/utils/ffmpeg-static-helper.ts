@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { app } from "electron";
 import { logger } from "@/helpers/logger";
 
@@ -87,7 +87,7 @@ const copyIfNeeded = (sourcePath: string, targetPath: string): void => {
 
 const safeGetVersion = (binaryPath: string): string | null => {
   try {
-    const output = execSync(`"${binaryPath}" -version`, {
+    const output = execFileSync(binaryPath, ["-version"], {
       encoding: "utf-8",
       timeout: 5000,
     });

@@ -67,3 +67,5 @@ sqlite3 local.db "SELECT video_id, title, download_status FROM youtube_videos WH
 ## Mobile Sync Server
 
 `src/main/mobileSyncServer.ts` is the HTTP server the mobile/TV app talks to — a second entry point beside the tRPC routers. Keep its payloads in step with `apps/shared/mobile-sync-contract.ts` and `apps/mobile/services/api.ts`.
+
+Every request must carry the pairing code (`Authorization: Bearer` or a `token` query param for image/video URLs) and no `Origin` header; `src/main/security/sync-auth.ts` decides, `pairing-store.ts` persists the code in `<userData>/mobile-sync-pairing.json`. Files served to the renderer (`local-file://`, `mediaServer`) go through `src/main/security/path-confinement.ts`.

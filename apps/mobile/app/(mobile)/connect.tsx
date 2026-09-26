@@ -14,7 +14,8 @@ import {
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useConnectionStore } from "../../stores/connection";
-import { api } from "../../services/api";
+import { colors } from "../../theme";
+import { api, PairingRequiredError } from "../../services/api";
 import { useLibraryStore } from "../../stores/library";
 import { useDownloadStore } from "../../stores/downloads";
 import { ensureDiscoveryPermissions } from "../../services/discovery-permissions";
@@ -121,7 +122,8 @@ export default function ConnectScreen() {
   const [discoveredDevices, setDiscoveredDevices] = useState<DiscoveredPeer[]>([]);
   const [isScanning, setIsScanning] = useState(false);
 
-  const { setServerUrl, setServerName } = useConnectionStore();
+  const { setServerUrl, setServerName, pairingCode, setPairingCode } =
+    useConnectionStore();
   const { addVideo } = useLibraryStore();
   const queueDownload = useDownloadStore((state) => state.queueDownload);
 
@@ -215,7 +217,10 @@ export default function ConnectScreen() {
             console.log("[Connect] Connection aborted (user navigated away)");
             return;
           }
-          if (error instanceof SyncCompatibilityError) {
+          if (
+            error instanceof SyncCompatibilityError ||
+            error instanceof PairingRequiredError
+          ) {
             throw error;
           }
           lastError = error;
@@ -227,6 +232,10 @@ export default function ConnectScreen() {
     } catch (error) {
       if (error instanceof SyncCompatibilityError) {
         showCompatibilityAlert(error);
+        return;
+      }
+      if (error instanceof PairingRequiredError) {
+        Alert.alert("Pairing Code Needed", error.message);
         return;
       }
       console.error("[Connect] Connection failed:", error);
@@ -271,7 +280,10 @@ export default function ConnectScreen() {
             console.log("[Connect] Connection aborted (user navigated away)");
             return;
           }
-          if (error instanceof SyncCompatibilityError) {
+          if (
+            error instanceof SyncCompatibilityError ||
+            error instanceof PairingRequiredError
+          ) {
             throw error;
           }
           lastError = error;
@@ -283,6 +295,10 @@ export default function ConnectScreen() {
     } catch (error) {
       if (error instanceof SyncCompatibilityError) {
         showCompatibilityAlert(error);
+        return;
+      }
+      if (error instanceof PairingRequiredError) {
+        Alert.alert("Pairing Code Needed", error.message);
         return;
       }
       const reason = getErrorMessage(error);
@@ -355,6 +371,22 @@ export default function ConnectScreen() {
       <View style={styles.content}>
         {remoteVideos.length === 0 ? (
           <>
+            {/* Pairing code: the desktop rejects requests without it */}
+            <Text style={styles.instruction}>
+              Pairing code from desktop Settings → Sync:
+            </Text>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="ABCD-2345"
+                placeholderTextColor={colors.textTertiary}
+                value={pairingCode ?? ""}
+                onChangeText={setPairingCode}
+                autoCapitalize="characters"
+                autoCorrect={false}
+              />
+            </View>
+
             {/* Discovered Devices Section */}
             {discoveredDevices.length > 0 && (
               <View style={styles.discoveredSection}>
@@ -438,7 +470,7 @@ export default function ConnectScreen() {
                   1. Open LearnifyTube on your computer{"\n"}
                   2. Go to Settings &gt; Sync{"\n"}
                   3. Enable "Allow mobile sync"{"\n"}
-                  4. Copy the IP address shown
+                  4. Copy the pairing code and IP address shown
                 </Text>
               </View>
             )}

@@ -13,6 +13,7 @@ import type {
 import { syncServerInfoSchema } from "../../shared/mobile-sync-contract";
 import { parseWithSchema } from "../../shared/schema-utils";
 import { logger } from "./logger";
+import { useConnectionStore } from "../stores/connection";
 import { z } from "zod";
 
 const remoteFlashcardSchema = z.object({
@@ -100,6 +101,28 @@ interface TranscriptsResponse {
   }>;
 }
 
+/** The desktop rejected the request because the pairing code is missing or wrong. */
+export class PairingRequiredError extends Error {
+  constructor() {
+    super(
+      "The desktop needs its pairing code. On the Connect screen, enter the code shown in desktop Settings → Sync."
+    );
+    this.name = "PairingRequiredError";
+  }
+}
+
+const getPairingCode = () => useConnectionStore.getState().pairingCode;
+
+// Image and video URLs go to native loaders that can't set headers, so the code rides in the query.
+function withPairingToken(url: string) {
+  const code = getPairingCode();
+  if (!code) {
+    return url;
+  }
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}token=${encodeURIComponent(code)}`;
+}
+
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
@@ -107,12 +130,21 @@ async function fetchWithTimeout(
 ): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
+  const pairingCode = getPairingCode();
+  const headers = new Headers(options.headers);
+  if (pairingCode) {
+    headers.set("Authorization", `Bearer ${pairingCode}`);
+  }
 
   try {
     const response = await fetch(url, {
       ...options,
+      headers,
       signal: controller.signal,
     });
+    if (response.status === 401) {
+      throw new PairingRequiredError();
+    }
     return response;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -187,19 +219,21 @@ export const api = {
   },
 
   getVideoFileUrl(serverUrl: string, videoId: string): string {
-    return `${serverUrl}/api/video/${videoId}/file`;
+    return withPairingToken(`${serverUrl}/api/video/${videoId}/file`);
   },
 
   getTranscriptUrl(serverUrl: string, videoId: string): string {
-    return `${serverUrl}/api/video/${videoId}/transcript`;
+    return withPairingToken(`${serverUrl}/api/video/${videoId}/transcript`);
   },
 
   getThumbnailUrl(serverUrl: string, videoId: string): string {
-    return `${serverUrl}/api/video/${videoId}/thumbnail`;
+    return withPairingToken(`${serverUrl}/api/video/${videoId}/thumbnail`);
   },
 
   getPlaylistThumbnailUrl(serverUrl: string, playlistId: string): string {
-    return `${serverUrl}/api/playlist/${encodeURIComponent(playlistId)}/thumbnail`;
+    return withPairingToken(
+      `${serverUrl}/api/playlist/${encodeURIComponent(playlistId)}/thumbnail`
+    );
   },
 
   // Fetch all transcripts for a video (multiple languages)

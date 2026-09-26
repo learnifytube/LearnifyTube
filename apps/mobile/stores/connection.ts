@@ -6,8 +6,11 @@ interface ConnectionStore {
   serverUrl: string | null;
   serverName: string | null;
   lastConnected: number | null;
+  // The desktop's mobile sync pairing code (Desktop → Settings → Sync), sent on every request.
+  pairingCode: string | null;
   setServerUrl: (url: string) => void;
   setServerName: (name: string) => void;
+  setPairingCode: (code: string) => void;
   disconnect: () => void;
   isConnected: () => boolean;
 }
@@ -18,6 +21,7 @@ export const useConnectionStore = create<ConnectionStore>()(
       serverUrl: null,
       serverName: null,
       lastConnected: null,
+      pairingCode: null,
 
       setServerUrl: (url) =>
         set({
@@ -26,6 +30,8 @@ export const useConnectionStore = create<ConnectionStore>()(
         }),
 
       setServerName: (name) => set({ serverName: name }),
+
+      setPairingCode: (code) => set({ pairingCode: code.trim() || null }),
 
       disconnect: () =>
         set({

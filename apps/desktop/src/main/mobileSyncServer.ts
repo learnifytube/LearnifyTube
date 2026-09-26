@@ -26,6 +26,8 @@ import { parseVttToSegments, downloadTranscript } from "../api/routers/transcrip
 import { downloadImageToCache } from "../api/utils/ytdlp-utils/thumbnail";
 import { getPlaylistDetailsForServer } from "../api/routers/playlists";
 import { z } from "zod";
+import { authorizeSyncRequest, withPairingToken } from "./security/sync-auth";
+import { createPairingStore, type PairingStore } from "./security/pairing-store";
 import {
   MOBILE_SYNC_PROTOCOL_VERSION,
   MIN_SUPPORTED_MOBILE_SYNC_PROTOCOL_VERSION,
@@ -269,6 +271,24 @@ export function getLocalIpAddress(): string | null {
   return getCandidateLocalIpAddresses()[0] ?? null;
 }
 
+let pairingStore: PairingStore | null = null;
+
+// Created lazily: app.getPath("userData") is only reliable once Electron is ready.
+const getPairingStore = (): PairingStore => {
+  if (!pairingStore) {
+    pairingStore = createPairingStore(
+      path.join(app.getPath("userData"), "mobile-sync-pairing.json")
+    );
+  }
+  return pairingStore;
+};
+
+/** The code a mobile device must present to use the sync server. */
+export const getMobileSyncPairingCode = (): string => getPairingStore().getCode();
+
+/** Replace the pairing code; every paired device must enter the new one. */
+export const resetMobileSyncPairingCode = (): string => getPairingStore().reset();
+
 const createMobileSyncServer = (): MobileSyncServer => {
   let server: http.Server | null = null;
   let port = 0;
@@ -311,13 +331,14 @@ const createMobileSyncServer = (): MobileSyncServer => {
     cleanupStaleDevices();
   };
 
+  // Absolute URL for an image the mobile app loads natively (no headers), so it carries the pairing code.
+  const assetUrl = (pathname: string): string =>
+    withPairingToken(`http://${getLocalIpAddress()}:${port}${pathname}`, getMobileSyncPairingCode());
+
   const sendJson = (res: http.ServerResponse, data: unknown, statusCode = 200): void => {
     logger.info(`[MobileSyncServer] → ${statusCode} JSON response`);
     res.writeHead(statusCode, {
       "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
     });
     res.end(JSON.stringify(data));
   };
@@ -481,7 +502,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
           fileSize: video.downloadFileSize ?? 0,
           hasTranscript: videosWithTranscripts.has(video.videoId),
           thumbnailUrl: hasThumbnailSource
-            ? `http://${getLocalIpAddress()}:${port}/api/video/${video.videoId}/thumbnail`
+            ? assetUrl(`/api/video/${video.videoId}/thumbnail`)
             : undefined,
         };
       });
@@ -765,7 +786,6 @@ const createMobileSyncServer = (): MobileSyncServer => {
           "Accept-Ranges": "bytes",
           "Content-Length": chunkSize,
           "Content-Type": contentType,
-          "Access-Control-Allow-Origin": "*",
           "Cache-Control": "no-cache",
         });
 
@@ -786,7 +806,6 @@ const createMobileSyncServer = (): MobileSyncServer => {
           "Content-Length": fileSize,
           "Content-Type": contentType,
           "Accept-Ranges": "bytes",
-          "Access-Control-Allow-Origin": "*",
           "Cache-Control": "no-cache",
         });
 
@@ -864,7 +883,6 @@ const createMobileSyncServer = (): MobileSyncServer => {
       res.writeHead(200, {
         "Content-Length": stat.size,
         "Content-Type": contentType,
-        "Access-Control-Allow-Origin": "*",
         "Cache-Control": "max-age=86400",
       });
 
@@ -896,7 +914,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
       channelTitle: video.channelTitle,
       duration: video.durationSeconds ?? 0,
       thumbnailUrl: hasThumbnailSource
-        ? `http://${getLocalIpAddress()}:${port}/api/video/${video.videoId}/thumbnail`
+        ? assetUrl(`/api/video/${video.videoId}/thumbnail`)
         : null,
       downloadStatus:
         video.downloadStatus === "completed" ||
@@ -935,7 +953,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
           channelId: c.channelId,
           channelTitle: c.channelTitle,
           thumbnailUrl: hasThumbnailSource
-            ? `http://${getLocalIpAddress()}:${port}/api/channel/${c.channelId}/thumbnail`
+            ? assetUrl(`/api/channel/${c.channelId}/thumbnail`)
             : null,
           videoCount: countMap.get(c.channelId) ?? 0,
         };
@@ -998,7 +1016,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
           channelTitle: row.channelTitle,
           duration: row.durationSeconds ?? 0,
           thumbnailUrl: hasThumbnailSource
-            ? `http://${getLocalIpAddress()}:${port}/api/video/${row.videoId}/thumbnail`
+            ? assetUrl(`/api/video/${row.videoId}/thumbnail`)
             : null,
           downloadStatus:
             row.downloadStatus === "completed" ||
@@ -1134,7 +1152,6 @@ const createMobileSyncServer = (): MobileSyncServer => {
       res.writeHead(200, {
         "Content-Length": stat.size,
         "Content-Type": contentType,
-        "Access-Control-Allow-Origin": "*",
         "Cache-Control": "max-age=86400",
       });
 
@@ -1206,7 +1223,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
             playlistId: p.playlistId,
             title: p.title,
             thumbnailUrl: hasThumbnailSource
-              ? `http://${getLocalIpAddress()}:${port}/api/playlist/${p.playlistId}/thumbnail`
+              ? assetUrl(`/api/playlist/${p.playlistId}/thumbnail`)
               : null,
             itemCount: p.itemCount,
             channelId: p.channelId,
@@ -1303,7 +1320,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
           name: p.title,
           itemCount: channelItemCountMap.get(p.playlistId) ?? p.itemCount ?? 0,
           thumbnailUrl: hasThumbnailSource
-            ? `http://${getLocalIpAddress()}:${port}/api/playlist/${p.playlistId}/thumbnail`
+            ? assetUrl(`/api/playlist/${p.playlistId}/thumbnail`)
             : null,
           sourceType: "channel_playlist",
           sourceId: p.playlistId,
@@ -1602,7 +1619,6 @@ const createMobileSyncServer = (): MobileSyncServer => {
       res.writeHead(200, {
         "Content-Length": stat.size,
         "Content-Type": contentType,
-        "Access-Control-Allow-Origin": "*",
         "Cache-Control": "max-age=86400",
       });
 
@@ -1755,7 +1771,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
               playlistId: p.playlistId,
               title: p.title,
               thumbnailUrl: p.thumbnailPath
-                ? `http://${getLocalIpAddress()}:${port}/api/playlist/${p.playlistId}/thumbnail`
+                ? assetUrl(`/api/playlist/${p.playlistId}/thumbnail`)
                 : p.thumbnailUrl,
               itemCount: p.itemCount,
               channelId: p.channelId,
@@ -2403,22 +2419,22 @@ const createMobileSyncServer = (): MobileSyncServer => {
     req: http.IncomingMessage,
     res: http.ServerResponse
   ): Promise<void> => {
-    const url = req.url;
     const method = req.method;
 
-    // Handle CORS preflight
-    if (method === "OPTIONS") {
-      res.writeHead(204, {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Range",
-        "Access-Control-Max-Age": "86400",
+    // Every route needs the pairing code; browser requests (with an Origin) are refused outright.
+    const auth = authorizeSyncRequest(req, getMobileSyncPairingCode());
+    if (!auth.ok) {
+      logger.warn(`[MobileSyncServer] Rejected ${method} request`, {
+        status: auth.status,
+        ip: req.socket.remoteAddress,
+        origin: req.headers.origin,
       });
-      res.end();
+      sendError(res, auth.status === 401 ? "Pairing required" : "Forbidden", auth.status);
       return;
     }
+    const url = auth.url;
 
-    if (!url || (method !== "GET" && method !== "POST" && method !== "DELETE")) {
+    if (method !== "GET" && method !== "POST" && method !== "DELETE") {
       sendError(res, "Method not allowed", 405);
       return;
     }
@@ -2716,6 +2732,8 @@ const createMobileSyncServer = (): MobileSyncServer => {
         port = 0;
         resolve();
       });
+      // close() only stops new connections; drop open keep-alive/streaming ones so disabling sync is immediate.
+      server?.closeAllConnections();
     });
   };
 

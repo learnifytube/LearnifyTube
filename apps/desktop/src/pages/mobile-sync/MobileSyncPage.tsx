@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { PageContainer } from "@/components/ui/page-container";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
+import { SyncPairingCode } from "@/components/SyncPairingCode";
 import {
   Smartphone,
   Wifi,
@@ -213,6 +214,8 @@ export default function MobileSyncPage(): React.JSX.Element {
                   </div>
 
                   <div className="space-y-3">
+                    <SyncPairingCode pairingCode={syncStatus.pairingCode} />
+
                     <div>
                       <Label className="text-xs text-muted-foreground">IP Address</Label>
                       <div className="mt-1 flex items-center gap-2">

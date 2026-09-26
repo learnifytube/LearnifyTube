@@ -1,6 +1,6 @@
-import { and, desc, isNotNull, not, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, not, sql } from "drizzle-orm";
 import type { Database } from "@/api/db";
-import { youtubeVideos } from "@/api/db/schema";
+import { channels, youtubeVideos } from "@/api/db/schema";
 import { isKept } from "./kept";
 
 type SubscriptionVideo = {
@@ -14,8 +14,8 @@ type SubscriptionVideo = {
   publishedAt: number | null;
 };
 
-// Videos from Subscriptions not yet kept, newest published first. There is no "followed"
-// flag yet, so every Channel the app knows counts as a Subscription (as on the Subscriptions page).
+// Videos from Subscriptions not yet kept, newest published first. A Channel the user only
+// visited is not a Subscription, so its Videos are left out.
 export const loadNewFromSubscriptions = (db: Database, limit = 20): Promise<SubscriptionVideo[]> =>
   db
     .select({
@@ -29,7 +29,8 @@ export const loadNewFromSubscriptions = (db: Database, limit = 20): Promise<Subs
       publishedAt: youtubeVideos.publishedAt,
     })
     .from(youtubeVideos)
-    .where(and(isNotNull(youtubeVideos.channelId), not(sql`coalesce(${isKept}, 0)`)))
+    .innerJoin(channels, eq(channels.channelId, youtubeVideos.channelId))
+    .where(and(isNotNull(channels.subscribedAt), not(sql`coalesce(${isKept}, 0)`)))
     .orderBy(
       sql`${youtubeVideos.publishedAt} is null`,
       desc(youtubeVideos.publishedAt),

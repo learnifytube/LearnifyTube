@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { PageContainer } from "@/components/ui/page-container";
 import { Loader2, Search, RefreshCw } from "lucide-react";
 import { SourceVideoGrid } from "@/components/source-videos/SourceVideoGrid";
+import { SubscribedChannels } from "./components/SubscribedChannels";
 
 const PAGE_SIZE = 30;
 
@@ -16,9 +17,9 @@ export default function SubscriptionsPage(): React.JSX.Element {
   const [searchQuery, setSearchQuery] = useState("");
 
   const query = useInfiniteQuery({
-    queryKey: ["subscriptions"],
+    queryKey: ["subscriptions", "videos"],
     queryFn: async ({ pageParam = 0 }) => {
-      return await trpcClient.watchStats.listRecentVideos.query({
+      return await trpcClient.subscriptions.videos.query({
         limit: PAGE_SIZE,
         offset: pageParam,
       });
@@ -78,6 +79,8 @@ export default function SubscriptionsPage(): React.JSX.Element {
           </Button>
         </div>
       </div>
+
+      <SubscribedChannels />
 
       <Card>
         <CardHeader>

@@ -20,6 +20,7 @@ import { favoritesRouter } from "@/api/routers/favorites";
 import { syncRouter } from "@/api/routers/sync";
 import { libraryRouter } from "@/api/routers/library";
 import { onDevicesRouter } from "@/api/routers/on-devices";
+import { subscriptionsRouter } from "@/api/routers/subscriptions";
 
 // Create the root router
 export const router = t.router({
@@ -44,6 +45,7 @@ export const router = t.router({
   sync: syncRouter,
   library: libraryRouter,
   onDevices: onDevicesRouter,
+  subscriptions: subscriptionsRouter,
 });
 
 // Export type router type signature

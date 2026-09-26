@@ -13,12 +13,13 @@ const createDb = async () => {
 
 type Db = Awaited<ReturnType<typeof createDb>>;
 
-const addChannel = (db: Db, channelId: string) =>
+const addChannel = (db: Db, channelId: string, subscribedAt: number | null = 1) =>
   db.insert(schema.channels).values({
     id: channelId,
     channelId,
     channelTitle: `Channel ${channelId}`,
     createdAt: 1,
+    subscribedAt,
   });
 
 const addVideo = (
@@ -62,6 +63,14 @@ describe("loadNewFromSubscriptions", () => {
 
   it("leaves out Videos without a Channel", async () => {
     await addVideo(db, "no-channel", { channelId: null });
+    await addVideo(db, "subscribed");
+
+    expect(ids(await loadNewFromSubscriptions(db))).toEqual(["subscribed"]);
+  });
+
+  it("leaves out Videos from a Channel that is not a Subscription", async () => {
+    await addChannel(db, "visited", null);
+    await addVideo(db, "from-visited", { channelId: "visited" });
     await addVideo(db, "subscribed");
 
     expect(ids(await loadNewFromSubscriptions(db))).toEqual(["subscribed"]);

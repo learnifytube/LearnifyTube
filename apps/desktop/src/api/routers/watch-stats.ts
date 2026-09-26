@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { publicProcedure, t } from "@/api/trpc";
 import { logger } from "@/helpers/logger";
-import { eq, desc, inArray, sql } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 import { youtubeVideos, videoWatchStats } from "@/api/db/schema";
 import defaultDb from "@/api/db";
 import { isPlayedEnough } from "@/lib/watch-state";
@@ -35,25 +35,6 @@ type WatchedVideoWithStats = {
 };
 
 type ListRecentWatchedResult = WatchedVideoWithStats[];
-
-type RecentVideoInfo = {
-  id: string;
-  videoId: string;
-  title: string;
-  description: string | null;
-  channelId: string | null;
-  channelTitle: string;
-  thumbnailUrl: string | null;
-  thumbnailPath: string | null;
-  durationSeconds: number | null;
-  viewCount: number | null;
-  publishedAt: number | null;
-  downloadStatus: string | null;
-  downloadProgress: number | null;
-  downloadFilePath: string | null;
-};
-
-type ListRecentVideosResult = RecentVideoInfo[];
 
 export const watchStatsRouter = t.router({
   // Record watch progress (accumulated seconds and last position)
@@ -190,62 +171,6 @@ export const watchStatsRouter = t.router({
           };
         })
         .filter((v): v is WatchedVideoWithStats => v !== null);
-    }),
-
-  // List videos by most recently added, balanced across channels (round-robin)
-  listRecentVideos: publicProcedure
-    .input(
-      z
-        .object({
-          limit: z.number().min(1).max(200).optional(),
-          offset: z.number().min(0).optional(),
-        })
-        .optional()
-    )
-    .query(async ({ input, ctx }): Promise<ListRecentVideosResult> => {
-      const db = ctx.db ?? defaultDb;
-      const limit = input?.limit ?? 200;
-      const offset = input?.offset ?? 0;
-
-      // Round-robin approach: order by rank first, then by created_at within each rank
-      // This gives us: 1st video from each channel, then 2nd from each, then 3rd, etc.
-      // until we hit the limit - ensuring fair distribution across all channels
-      const rows = await db.all<{
-        id: string;
-        videoId: string;
-        title: string;
-        description: string | null;
-        channelId: string | null;
-        channelTitle: string;
-        thumbnailUrl: string | null;
-        thumbnailPath: string | null;
-        durationSeconds: number | null;
-        viewCount: number | null;
-        publishedAt: number | null;
-        downloadStatus: string | null;
-        downloadProgress: number | null;
-        downloadFilePath: string | null;
-      }>(sql`
-        WITH ranked_videos AS (
-          SELECT 
-            *,
-            ROW_NUMBER() OVER (PARTITION BY channel_id ORDER BY created_at DESC) as rn
-          FROM youtube_videos
-          WHERE channel_id IS NOT NULL
-        )
-        SELECT 
-          id, video_id as videoId, title, description,
-          channel_id as channelId, channel_title as channelTitle,
-          thumbnail_url as thumbnailUrl, thumbnail_path as thumbnailPath,
-          duration_seconds as durationSeconds, view_count as viewCount,
-          published_at as publishedAt, download_status as downloadStatus,
-          download_progress as downloadProgress, download_file_path as downloadFilePath
-        FROM ranked_videos
-        ORDER BY rn ASC, created_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `);
-
-      return rows;
     }),
 });
 

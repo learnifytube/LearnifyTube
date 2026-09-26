@@ -19,7 +19,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ExternalLink } from "@/components/ExternalLink";
 import { PageContainer } from "@/components/ui/page-container";
 import { toast } from "sonner";
-import { ChannelVideosTab, LibraryTab, PlaylistsTab } from "./components";
+import { ChannelVideosTab, LibraryTab, PlaylistsTab, SubscribeButton } from "./components";
 import { RefreshCw, Trash2 } from "lucide-react";
 import Thumbnail from "@/components/Thumbnail";
 
@@ -102,6 +102,8 @@ export default function ChannelPage(): React.JSX.Element {
         queryClient.invalidateQueries({ queryKey: ["channel-playlists", channelId] }),
         queryClient.invalidateQueries({ queryKey: ["playlists"] }),
         queryClient.invalidateQueries({ queryKey: ["favorites"] }),
+        queryClient.invalidateQueries({ queryKey: ["subscriptions"] }),
+        queryClient.invalidateQueries({ queryKey: ["library", "newFromSubscriptions"] }),
       ]);
 
       toast.success(`Removed "${result.channelTitle}" from channels`);
@@ -187,6 +189,11 @@ export default function ChannelPage(): React.JSX.Element {
               <div className="flex items-start justify-between gap-4">
                 <h1 className="text-2xl font-bold">{channel.channelTitle}</h1>
                 <div className="flex items-center gap-2">
+                  <SubscribeButton
+                    channelId={channel.channelId}
+                    channelTitle={channel.channelTitle}
+                    subscribed={channel.subscribedAt !== null}
+                  />
                   <Button
                     size="sm"
                     variant="outline"

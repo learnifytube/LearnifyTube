@@ -23,6 +23,9 @@ export const channels = sqliteTable(
     lastPopularFetchedAt: integer("last_popular_fetched_at"), // Last time we fetched popular videos
     lastPlaylistsFetchedAt: integer("last_playlists_fetched_at"), // Last time we fetched playlists
 
+    // Set while the Channel is a Subscription; null for a Channel the user only visited
+    subscribedAt: integer("subscribed_at"),
+
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at"),
   },

@@ -43,7 +43,8 @@ function createFakePlatform({
     loadRecords: () =>
       Object.entries(state.records).map(([videoId, uri]) => ({ videoId, uri })),
     writeRecord: (videoId, uri) => {
-      state.records[videoId] = uri;
+      if (uri) state.records[videoId] = uri;
+      else delete state.records[videoId];
     },
     exists: async (uri) => isMounted(uri) && files.has(uri),
     list: async (dirUri) => {
@@ -397,6 +398,74 @@ describe("Offline copy", () => {
       "file:///storage/USB1/LearnifyTube/videos/v10.mp4",
     );
     expect(offlineCopy.getUri("unknown")).toBeNull();
+  });
+
+  it.each([
+    ["internal storage", INTERNAL],
+    ["a picked folder", PICKED],
+    ["a USB folder", USB],
+  ])("removes an Offline copy in %s", async (_, location) => {
+    const fake = createFakePlatform({ location });
+    const offlineCopy = createOfflineCopy(fake.platform);
+    await downloadInto(offlineCopy, fake, "v14");
+
+    await offlineCopy.remove("v14");
+
+    expect(fake.files.size).toBe(0);
+    expect(offlineCopy.getUri("v14")).toBeNull();
+    expect(fake.state.records.v14).toBeUndefined();
+    await offlineCopy.scan();
+    expect(offlineCopy.getUri("v14")).toBeNull();
+  });
+
+  it("removes a copy made before a Storage location change", async () => {
+    const fake = createFakePlatform({ location: PICKED });
+    const offlineCopy = createOfflineCopy(fake.platform);
+    await downloadInto(offlineCopy, fake, "v15");
+    fake.state.location = USB;
+
+    await offlineCopy.remove("v15");
+
+    expect(fake.files.size).toBe(0);
+    expect(createOfflineCopy(fake.platform).getUri("v15")).toBeNull();
+  });
+
+  it("re-renders the hook when an Offline copy is removed", async () => {
+    const fake = createFakePlatform();
+    const offlineCopy = createOfflineCopy(fake.platform);
+    await downloadInto(offlineCopy, fake, "v16");
+    const { result } = await renderHook(() => offlineCopy.useUri("v16"));
+
+    expect(result.current).not.toBeNull();
+
+    await act(async () => {
+      await offlineCopy.remove("v16");
+    });
+    expect(result.current).toBeNull();
+  });
+
+  it("keeps a removed copy gone when an overlapping scan finishes after it", async () => {
+    const fake = createFakePlatform();
+    const offlineCopy = createOfflineCopy(fake.platform);
+    await downloadInto(offlineCopy, fake, "v17");
+    let openList = () => {};
+    const listOpened = new Promise<void>((resolve) => (openList = resolve));
+    const { list } = fake.platform;
+    fake.platform.list = async (dirUri) => {
+      const listed = await list(dirUri);
+      await listOpened;
+      return listed;
+    };
+
+    // The scan lists the copy, then the copy is removed before the scan ends.
+    const scanning = offlineCopy.scan();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await offlineCopy.remove("v17");
+    openList();
+    await scanning;
+
+    expect(offlineCopy.getUri("v17")).toBeNull();
+    expect(fake.state.records.v17).toBeUndefined();
   });
 
   it("reads bytes of a reachable Offline copy for peer-to-peer serving", async () => {

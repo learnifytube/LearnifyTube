@@ -14,7 +14,8 @@ export type OfflineCopyPlatform = {
   documentsDir: () => string;
   getStorageLocation: () => Promise<StorageLocation>;
   loadRecords: () => Array<{ videoId: string; uri: string }>;
-  writeRecord: (videoId: string, uri: string) => void;
+  /** Saves a Video's Offline copy record; null clears it. */
+  writeRecord: (videoId: string, uri: string | null) => void;
   exists: (uri: string) => Promise<boolean>;
   /** URIs of a directory's direct children. Throws if unreachable. */
   list: (dirUri: string) => Promise<string[]>;
@@ -273,6 +274,24 @@ export function createOfflineCopy(platform: OfflineCopyPlatform) {
     return dest;
   };
 
+  // Deletes the files before forgetting them, and bumps the generation so a
+  // scan that listed them before they went can't bring the Video back.
+  const remove = async (videoId: string) => {
+    ensureLoaded();
+    const saved = savedUris.get(videoId);
+    const uris = [
+      currentUris.get(videoId),
+      saved ? resolveRecord(videoId, saved) : null,
+    ];
+    for (const uri of new Set(uris)) {
+      if (uri) await platform.remove(uri).catch(() => {});
+    }
+    adoptGenerations.set(videoId, (adoptGenerations.get(videoId) ?? 0) + 1);
+    savedUris.delete(videoId);
+    platform.writeRecord(videoId, null);
+    if (currentUris.delete(videoId)) notify();
+  };
+
   /** Bytes of a reachable Offline copy, or null. Used by peer-to-peer serving. */
   const readBytes = async (videoId: string) => {
     const uri = getUri(videoId);
@@ -290,6 +309,8 @@ export function createOfflineCopy(platform: OfflineCopyPlatform) {
     useLookup: () => useSyncExternalStore(subscribe, () => lookup),
     /** Moves a finished temp file into the current Storage location, replacing any existing copy. */
     adopt,
+    /** Deletes a Video's Offline copy wherever it is stored, and its record. */
+    remove,
     /** Where a Download should write its partial file before calling `adopt`. */
     tempFileUri,
     /** Deletes a failed or cancelled Download's partial file. */

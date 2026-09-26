@@ -163,7 +163,7 @@ export function getOfflineCopyRecords() {
 }
 
 // Update video local path
-export function updateVideoLocalPath(id: string, localPath: string) {
+export function updateVideoLocalPath(id: string, localPath: string | null) {
   getDb().update(videos)
     .set({ localPath, updatedAt: Date.now() })
     .where(eq(videos.id, id))

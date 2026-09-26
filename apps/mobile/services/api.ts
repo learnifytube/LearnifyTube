@@ -10,7 +10,12 @@ import type {
   ServerDownloadStatus,
   RemoteMyList,
 } from "../types";
-import { syncServerInfoSchema } from "../../shared/mobile-sync-contract";
+import {
+  onDeviceSetSchema,
+  syncServerInfoSchema,
+  type DeviceReport,
+  type OnDeviceSet,
+} from "../../shared/mobile-sync-contract";
 import { parseWithSchema } from "../../shared/schema-utils";
 import { logger } from "./logger";
 import { useConnectionStore } from "../stores/connection";
@@ -198,6 +203,27 @@ export const api = {
       syncProtocolVersion: info.syncProtocolVersion,
     });
     return info;
+  },
+
+  /** The Videos the desktop wants this Device to hold. */
+  async getOnDeviceSet(serverUrl: string): Promise<OnDeviceSet> {
+    const response = await fetchWithTimeout(`${serverUrl}/api/on-device-set`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload: unknown = await response.json();
+    return parseWithSchema(onDeviceSetSchema, payload);
+  },
+
+  /** Tells the desktop what this Device holds and what was watched on it. */
+  async reportDevice(serverUrl: string, report: DeviceReport): Promise<void> {
+    const response = await fetchWithTimeout(
+      `${serverUrl}/api/devices/report`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(report),
+      }
+    );
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
   },
 
   async getVideos(serverUrl: string): Promise<{ videos: RemoteVideo[] }> {

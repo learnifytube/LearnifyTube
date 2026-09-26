@@ -22,6 +22,10 @@ _Avoid_: sync (for a single Video)
 The Videos the desktop wants this device to hold (see the desktop glossary). The device Downloads what is missing and removes Offline copies that left the set. Videos the user pulled on the device itself are not part of it and are left alone.
 _Avoid_: synced videos
 
+**Mirror**:
+To bring this device in line with the On-device set on connect, on return to the foreground, and every few minutes. The mirror only removes Videos it brought itself, then sends a Device report.
+_Avoid_: sync (for this act)
+
 **Download queue**:
 The Downloads not yet finished: waiting for the desktop, queued, transferring, or failed. A Video enters the library only when its Download finishes.
 _Avoid_: download list, transfers

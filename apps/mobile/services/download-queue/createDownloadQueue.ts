@@ -438,6 +438,8 @@ export function createDownloadQueue(platform: DownloadQueuePlatform) {
     useDownload: (videoId: string) =>
       useSyncExternalStore(subscribe, () => find(videoId)),
     /** Every unfinished Download, oldest request first. */
+    getQueue: () => downloads,
+    /** Same answer as `getQueue`, re-rendering as Downloads change. */
     useQueue: () => useSyncExternalStore(subscribe, () => downloads),
   };
 }

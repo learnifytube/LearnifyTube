@@ -14,7 +14,7 @@ import HistoryPage from "@/pages/history/HistoryPage";
 import MyWordsPage from "@/pages/my-words/MyWordsPage";
 import AnalyticsPage from "@/pages/analytics/AnalyticsPage";
 import StorageManagerPage from "@/pages/storage/StorageManagerPage";
-import MobileSyncPage from "@/pages/mobile-sync/MobileSyncPage";
+import DevicesPage from "@/pages/devices/DevicesPage";
 import LogPage from "@/pages/app-debug-logs/index";
 import LibraryPage from "@/pages/library/LibraryPage";
 import { LEARNING_FEATURES_ENABLED } from "@/lib/features";
@@ -155,7 +155,7 @@ const StorageRoute = createRoute({
 const MobileSyncRoute = createRoute({
   getParentRoute: () => RootRoute,
   path: "/mobile-sync",
-  component: MobileSyncPage,
+  component: DevicesPage,
 });
 
 const baseRoutes = [

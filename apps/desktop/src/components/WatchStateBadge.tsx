@@ -1,6 +1,7 @@
 import React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Circle, CircleDot, MoreVertical } from "lucide-react";
+import { CheckCircle2, Circle, CircleDot, MoreVertical, Smartphone } from "lucide-react";
+import { toast } from "sonner";
 import { trpcClient } from "@/utils/trpc";
 import { cn } from "@/lib/utils";
 import type { WatchState } from "@/lib/watch-state";
@@ -9,6 +10,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -40,17 +42,32 @@ export function WatchStateBadge({
   );
 }
 
-export function WatchStateMenu({
+// A Video card's actions: Watch state marks, and the Phone List.
+export function VideoActionsMenu({
   videoId,
   watchState,
+  onPhoneList,
 }: {
   videoId: string;
   watchState: WatchState;
+  onPhoneList: boolean;
 }): React.JSX.Element {
   const queryClient = useQueryClient();
   const setWatched = useMutation({
     mutationFn: (watched: boolean) => trpcClient.watchStats.setWatched.mutate({ videoId, watched }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["library"] }),
+  });
+  const setOnPhoneList = useMutation({
+    mutationFn: (on: boolean) => trpcClient.onDevices.setOnPhoneList.mutate({ videoId, on }),
+    onSuccess: (_result, on) => {
+      queryClient.invalidateQueries({ queryKey: ["library"] });
+      queryClient.invalidateQueries({ queryKey: ["onDevices"] });
+      toast.success(on ? "Added to the Phone List" : "Removed from the Phone List", {
+        description: on
+          ? "Your Devices fetch it the next time they connect."
+          : "Devices remove it the next time they connect, unless another List holds it.",
+      });
+    },
   });
 
   return (
@@ -79,6 +96,11 @@ export function WatchStateMenu({
             Mark as unwatched
           </DropdownMenuItem>
         )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => setOnPhoneList.mutate(!onPhoneList)}>
+          <Smartphone className="mr-2 h-4 w-4" />
+          {onPhoneList ? "Remove from Phone" : "Add to Phone"}
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

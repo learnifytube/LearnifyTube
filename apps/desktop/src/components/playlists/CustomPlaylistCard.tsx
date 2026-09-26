@@ -12,6 +12,7 @@ import Thumbnail from "@/components/Thumbnail";
 import { EditPlaylistDialog } from "./EditPlaylistDialog";
 import { DeleteCustomPlaylistDialog } from "./DeleteCustomPlaylistDialog";
 import { FavoriteButton } from "@/components/FavoriteButton";
+import { OnDevicesSwitch } from "@/components/OnDevicesSwitch";
 import { MoreVertical, Pencil, Trash2, FolderHeart } from "lucide-react";
 
 type CustomPlaylistCardProps = {
@@ -146,6 +147,7 @@ export function CustomPlaylistCard({
             </div>
           </div>
         </Link>
+        <OnDevicesSwitch listId={playlist.id} listName={playlist.name} />
       </div>
 
       <EditPlaylistDialog

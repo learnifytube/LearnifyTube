@@ -32,7 +32,10 @@ import {
   MOBILE_SYNC_PROTOCOL_VERSION,
   MIN_SUPPORTED_MOBILE_SYNC_PROTOCOL_VERSION,
   type SyncServerInfo,
+  type OnDeviceSet,
+  deviceReportSchema,
 } from "../../../shared/mobile-sync-contract";
+import { loadOnDeviceSet, recordDeviceReport } from "../api/on-device/store";
 
 /**
  * HTTP server for mobile sync - allows the mobile companion app
@@ -1689,6 +1692,52 @@ const createMobileSyncServer = (): MobileSyncServer => {
     }
   };
 
+  // GET /api/on-device-set - the Videos every Device should hold
+  const handleOnDeviceSet = async (res: http.ServerResponse): Promise<void> => {
+    try {
+      const videos = await loadOnDeviceSet(defaultDb);
+      const payload: OnDeviceSet = {
+        videos: videos.map((video) => ({
+          id: video.id,
+          title: video.title,
+          channelTitle: video.channelTitle,
+          duration: video.durationSeconds ?? 0,
+          thumbnailUrl:
+            video.thumbnailPath || video.thumbnailUrl
+              ? assetUrl(`/api/video/${video.id}/thumbnail`)
+              : null,
+        })),
+      };
+      sendJson(res, payload);
+    } catch (error) {
+      logger.error("[MobileSyncServer] Error getting On-device set", error);
+      sendError(res, "Failed to get On-device set");
+    }
+  };
+
+  // POST /api/devices/report - what a Device holds, and Watch state from it
+  const handleDeviceReport = async (
+    req: http.IncomingMessage,
+    res: http.ServerResponse
+  ): Promise<void> => {
+    try {
+      let body = "";
+      for await (const chunk of req) {
+        body += chunk;
+      }
+      const parsed = deviceReportSchema.safeParse(parseJsonUnknown(body));
+      if (!parsed.success) {
+        sendError(res, "Invalid device report", 400);
+        return;
+      }
+      await recordDeviceReport(defaultDb, parsed.data, Date.now());
+      sendJson(res, { success: true });
+    } catch (error) {
+      logger.error("[MobileSyncServer] Error recording device report", error);
+      sendError(res, "Failed to record device report");
+    }
+  };
+
   // DELETE /api/favorites/:entityType/:entityId - Remove a favorite
   const handleRemoveFavorite = async (
     res: http.ServerResponse,
@@ -2586,6 +2635,18 @@ const createMobileSyncServer = (): MobileSyncServer => {
     const downloadStatusMatch = url.match(/^(?:\/api)?\/download\/status\/([^/]+)$/);
     if (downloadStatusMatch) {
       await handleDownloadStatus(res, downloadStatusMatch[1]);
+      return;
+    }
+
+    // GET /api/on-device-set
+    if (url === "/api/on-device-set" && method === "GET") {
+      await handleOnDeviceSet(res);
+      return;
+    }
+
+    // POST /api/devices/report
+    if (url === "/api/devices/report" && method === "POST") {
+      await handleDeviceReport(req, res);
       return;
     }
 

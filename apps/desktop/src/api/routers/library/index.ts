@@ -4,21 +4,20 @@ import {
   customPlaylistItems,
   customPlaylists,
   favorites,
+  phoneListItems,
   videoWatchStats,
   youtubeVideos,
 } from "@/api/db/schema";
 import defaultDb from "@/api/db";
 import { getWatchState } from "@/lib/watch-state";
-
-// Favorites is a built-in List; it lives in its own table, so it gets a fixed id here.
-export const FAVORITES_LIST_ID = "favorites";
+import { FAVORITES_LIST_ID, PHONE_LIST_ID } from "@/lib/lists";
 
 export const libraryRouter = t.router({
   // Every Video in the Library (kept: fetched or on its way), with Watch state and Lists
   list: publicProcedure.query(async ({ ctx }) => {
     const db = ctx.db ?? defaultDb;
 
-    const [rows, listItems, favoriteRows, lists] = await Promise.all([
+    const [rows, listItems, favoriteRows, phoneRows, lists] = await Promise.all([
       db
         .select({
           videoId: youtubeVideos.videoId,
@@ -50,6 +49,7 @@ export const libraryRouter = t.router({
         .select({ videoId: favorites.entityId })
         .from(favorites)
         .where(eq(favorites.entityType, "video")),
+      db.select({ videoId: phoneListItems.videoId }).from(phoneListItems),
       db
         .select({ id: customPlaylists.id, name: customPlaylists.name })
         .from(customPlaylists)
@@ -62,6 +62,7 @@ export const libraryRouter = t.router({
     };
     listItems.forEach((item) => addToList(item.videoId, item.listId));
     favoriteRows.forEach((row) => addToList(row.videoId, FAVORITES_LIST_ID));
+    phoneRows.forEach((row) => addToList(row.videoId, PHONE_LIST_ID));
 
     return {
       videos: rows.map(({ keptAt, lastPositionSeconds, watchedAt, ...video }) => ({
@@ -71,7 +72,11 @@ export const libraryRouter = t.router({
         watchState: getWatchState({ watchedAt, lastPositionSeconds }),
         listIds: listIdsByVideo.get(video.videoId) ?? [],
       })),
-      lists: [{ id: FAVORITES_LIST_ID, name: "Favorites" }, ...lists],
+      lists: [
+        { id: FAVORITES_LIST_ID, name: "Favorites" },
+        { id: PHONE_LIST_ID, name: "Phone List" },
+        ...lists,
+      ],
     };
   }),
 });

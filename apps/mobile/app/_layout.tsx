@@ -6,6 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { useDatabase } from "../hooks/useDatabase";
 import { downloadQueue } from "../services/download-queue";
+import { deviceMirror } from "../services/device-mirror";
 import { useOfflineCopyScans } from "../hooks/useOfflineCopyScans";
 import { useLibraryStore } from "../stores/library";
 import { useNavigationLogger } from "../hooks/useNavigationLogger";
@@ -15,6 +16,11 @@ import { colors } from "../theme";
 
 function DownloadQueueRunner() {
   useEffect(() => downloadQueue.start(), []);
+  return null;
+}
+
+function DeviceMirrorRunner() {
+  useEffect(() => deviceMirror.start(), []);
   return null;
 }
 
@@ -120,6 +126,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <DatabaseInitializer>
         <DownloadQueueRunner />
+        <DeviceMirrorRunner />
         <OfflineCopyScanner />
         <NavigationLogger />
         <PresencePublisher />

@@ -2,7 +2,8 @@ import React from "react";
 import { Link } from "@tanstack/react-router";
 import { Video } from "lucide-react";
 import Thumbnail from "@/components/Thumbnail";
-import { WatchStateBadge, WatchStateMenu } from "@/components/WatchStateBadge";
+import { VideoActionsMenu, WatchStateBadge } from "@/components/WatchStateBadge";
+import { PHONE_LIST_ID } from "@/lib/lists";
 import type { LibraryVideo } from "../library-view";
 
 export type LibraryItem = LibraryVideo & {
@@ -48,7 +49,11 @@ export function LibraryVideoCard({ video }: { video: LibraryItem }): React.JSX.E
           </h3>
           <p className="truncate text-xs text-muted-foreground">{video.channelTitle}</p>
         </Link>
-        <WatchStateMenu videoId={video.videoId} watchState={video.watchState} />
+        <VideoActionsMenu
+          videoId={video.videoId}
+          watchState={video.watchState}
+          onPhoneList={video.listIds.includes(PHONE_LIST_ID)}
+        />
       </div>
     </div>
   );
@@ -86,7 +91,11 @@ export function LibraryVideoRow({ video }: { video: LibraryItem }): React.JSX.El
           </div>
         </div>
       </Link>
-      <WatchStateMenu videoId={video.videoId} watchState={video.watchState} />
+      <VideoActionsMenu
+        videoId={video.videoId}
+        watchState={video.watchState}
+        onPhoneList={video.listIds.includes(PHONE_LIST_ID)}
+      />
     </div>
   );
 }

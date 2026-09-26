@@ -11,6 +11,7 @@ import {
   type YoutubeVideo,
 } from "@/api/db/schema";
 import defaultDb from "@/api/db";
+import { setListOnDevices } from "@/api/on-device/store";
 import {
   deleteVideoLibraryData,
   findReferencedVideoIds,
@@ -253,6 +254,8 @@ export const customPlaylistsRouter = t.router({
         if (!playlist) {
           return { success: false as const, message: "Playlist not found" };
         }
+
+        await setListOnDevices(db, input.playlistId, false);
 
         const playlistItemsToDelete = await db
           .select({ videoId: customPlaylistItems.videoId })

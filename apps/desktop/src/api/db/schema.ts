@@ -579,3 +579,24 @@ export const favorites = sqliteTable(
 
 export type Favorite = typeof favorites.$inferSelect;
 export type NewFavorite = typeof favorites.$inferInsert;
+
+// Lists switched on for devices. list_id is a custom playlist id or "favorites".
+export const onDeviceLists = sqliteTable("on_device_lists", {
+  listId: text("list_id").primaryKey(),
+  createdAt: integer("created_at").notNull(),
+});
+
+// The built-in Phone List: single Videos that are always in the On-device set.
+export const phoneListItems = sqliteTable("phone_list_items", {
+  videoId: text("video_id").primaryKey(),
+  addedAt: integer("added_at").notNull(),
+});
+
+// Devices that have reported to the desktop, with the Offline copies they held then.
+export const syncDevices = sqliteTable("sync_devices", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  kind: text("kind", { enum: ["phone", "tv"] }).notNull(),
+  offlineVideoIdsJson: text("offline_video_ids_json").notNull(),
+  lastSeenAt: integer("last_seen_at").notNull(),
+});

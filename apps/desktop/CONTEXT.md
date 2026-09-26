@@ -43,6 +43,9 @@ _Avoid_: synced videos, phone list
 **Phone List**:
 A built-in List for single Videos the user wants On device without switching on a whole List. Always part of the On-device set.
 
+**Device report**:
+What a Device tells the desktop each time it mirrors: which Videos it holds and how far each was watched. Watch progress from a Device only counts when it is newer than the desktop's last change to that Video, so marking a Video on the desktop wins.
+
 ### Finding Videos
 
 **Source**:

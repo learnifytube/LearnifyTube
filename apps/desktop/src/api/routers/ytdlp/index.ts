@@ -27,6 +27,7 @@ import {
   type Channel,
 } from "@/api/db/schema";
 import defaultDb, { type Database } from "@/api/db";
+import { removeFromPhoneList } from "@/api/on-device/store";
 import { getYtDlpAssetName } from "@/api/utils/ytdlp-utils/ytdlp-utils";
 import crypto from "crypto";
 
@@ -731,6 +732,8 @@ export const ytdlpRouter = t.router({
           })
           .where(eq(youtubeVideos.videoId, input.videoId))
           .execute();
+
+        await removeFromPhoneList(db, input.videoId);
 
         logger.info("[ytdlp] Removed downloaded video", {
           videoId: input.videoId,

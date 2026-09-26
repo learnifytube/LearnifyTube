@@ -18,6 +18,7 @@ import { downloadQueue } from "../../../services/download-queue";
 import { offlineCopy } from "../../../services/offline-copy";
 import { logger } from "../../../services/logger";
 import { tvDebugInfo } from "../../../services/tvDebug";
+import { useWatchProgressRecorder } from "../../../hooks/useWatchProgressRecorder";
 import {
   TVFocusPressable,
   type TVFocusPressableHandle,
@@ -416,6 +417,7 @@ export default function TVPlayerScreen() {
     instance.loop = false;
     instance.play();
   });
+  useWatchProgressRecorder(player, video);
 
   useEffect(() => {
     setIsVideoViewReady(false);

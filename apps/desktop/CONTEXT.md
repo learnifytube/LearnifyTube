@@ -60,4 +60,9 @@ A playlist published on YouTube, used as a Source. Not a List.
 _Avoid_: playlist (unqualified)
 
 **Subscription**:
-A Channel the user follows so its new Videos show up for them to consider keeping.
+A Channel the user chose to subscribe to, so its new Videos show up for them to consider keeping. A Channel the user has only visited is not a Subscription.
+_Avoid_: followed channel
+
+**Auto-keep**:
+A Subscription setting under which the app keeps that Channel's new Videos for the user, into the Library and optionally into a chosen List. Only Videos published after it was switched on count, a handful at most per check, and never Shorts or live streams that have not aired. Anything beyond that stays a new Video for the user to keep by hand. A Subscription never auto-keeps the same Video twice, so a Video the user removed stays removed. Optionally, an auto-kept Video leaves the List once watched, but it stays in the Library. Switching auto-keep off, or unsubscribing, stops future keeps and leaves already-kept Videos alone.
+_Avoid_: auto-download, auto-subscribe

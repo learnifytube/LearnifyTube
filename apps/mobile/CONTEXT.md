@@ -1,6 +1,6 @@
 # Mobile
 
-The phone and Android TV app: pulls Videos from the desktop app over local WiFi and plays them offline for language study.
+The phone and Android TV app: pulls Videos from the desktop app over local WiFi and plays them offline.
 
 ## Language
 
@@ -17,6 +17,10 @@ _Avoid_: storage folder, video directory
 **Download**:
 The act of fetching a Video's Offline copy from the desktop app, including waiting for the desktop to fetch the Video from YouTube first. A Download produces an Offline copy; it is not the copy itself, and it ends when the copy exists. Receiving a Video from a nearby device is not a Download.
 _Avoid_: sync (for a single Video)
+
+**On-device set**:
+The Videos the desktop wants this device to hold (see the desktop glossary). The device Downloads what is missing and removes Offline copies that left the set. Videos the user pulled on the device itself are not part of it and are left alone.
+_Avoid_: synced videos
 
 **Download queue**:
 The Downloads not yet finished: waiting for the desktop, queued, transferring, or failed. A Video enters the library only when its Download finishes.

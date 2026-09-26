@@ -611,7 +611,8 @@ app.whenReady().then(async () => {
         ...details.responseHeaders,
         "Content-Security-Policy": [
           "default-src 'self'; " +
-            "script-src 'self' https://*.posthog.com; " +
+            // Dev only: Vite's React refresh preamble is an inline script
+            `script-src 'self' https://*.posthog.com${MAIN_WINDOW_VITE_DEV_SERVER_URL ? " 'unsafe-inline'" : ""}; ` +
             "connect-src 'self' http://127.0.0.1:* https://*.posthog.com; " +
             "img-src 'self' data: file: local-file: https://*.posthog.com https://i.ytimg.com https://*.ytimg.com https://yt3.ggpht.com https://yt3.googleusercontent.com;" +
             "media-src 'self' data: file: local-file: http://127.0.0.1:*; " +

@@ -1,5 +1,4 @@
 import * as FileSystemLegacy from "expo-file-system/legacy";
-import { Paths } from "expo-file-system";
 import { api } from "./api";
 import { offlineCopy } from "./offline-copy";
 
@@ -19,56 +18,6 @@ const log = (message: string, data?: unknown) => {
     console.log(`[${timestamp}] [Downloader] ${message}`);
   }
 };
-
-function getVideosDirUri(): string {
-  const documentDirectory = FileSystemLegacy.documentDirectory;
-  if (!documentDirectory) {
-    throw new Error("Document directory is not available");
-  }
-  return `${documentDirectory}videos`;
-}
-
-export function getVideoFileUri(videoId: string): string | null {
-  try {
-    return `${getVideosDirUri()}/${videoId}.mp4`;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Get the current local path for a video file.
- * This resolves the path dynamically to handle sandbox container changes.
- */
-export function getVideoLocalPath(videoId: string): string | null {
-  const videoUri = getVideoFileUri(videoId);
-  if (!videoUri) return null;
-
-  try {
-    const info = Paths.info(videoUri);
-    return info.exists && info.isDirectory === false ? videoUri : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Check if a video exists locally.
- */
-export function videoExistsLocally(videoId: string): boolean {
-  return getVideoLocalPath(videoId) !== null;
-}
-
-export async function ensureVideosDir(): Promise<string> {
-  const videosDirUri = getVideosDirUri();
-  const info = await FileSystemLegacy.getInfoAsync(videosDirUri);
-  if (!info.exists) {
-    await FileSystemLegacy.makeDirectoryAsync(videosDirUri, {
-      intermediates: true,
-    });
-  }
-  return videosDirUri;
-}
 
 export interface DownloadProgress {
   progress: number;
@@ -197,39 +146,4 @@ export async function downloadVideo(
     log(`Download error:`, error);
     throw error;
   }
-}
-
-export async function deleteVideo(videoId: string): Promise<void> {
-  const videoFileUri = getVideoFileUri(videoId);
-  if (!videoFileUri) return;
-
-  const info = await FileSystemLegacy.getInfoAsync(videoFileUri);
-  if (info.exists) {
-    await FileSystemLegacy.deleteAsync(videoFileUri, { idempotent: true });
-  }
-}
-
-export async function getStorageInfo(): Promise<{
-  used: number;
-  videoCount: number;
-}> {
-  const videosDirUri = await ensureVideosDir();
-  const files = await FileSystemLegacy.readDirectoryAsync(videosDirUri);
-  let totalSize = 0;
-  let videoCount = 0;
-
-  for (const item of files) {
-    if (!item.endsWith(".mp4")) continue;
-
-    const fileInfo = await FileSystemLegacy.getInfoAsync(`${videosDirUri}/${item}`);
-    if (!fileInfo.exists || fileInfo.isDirectory) continue;
-
-    totalSize += fileInfo.size ?? 0;
-    videoCount++;
-  }
-
-  return {
-    used: totalSize,
-    videoCount,
-  };
 }

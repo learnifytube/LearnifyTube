@@ -8,8 +8,8 @@ describe("ytdlp utils", () => {
   });
 
   test("pinned download url uses the pinned tag", () => {
-    expect(getDirectPinnedDownloadUrl("darwin")).toContain("/2026.06.09/yt-dlp_macos");
-    expect(getDirectPinnedDownloadUrl("win32")).toContain("/2026.06.09/yt-dlp.exe");
+    expect(getDirectPinnedDownloadUrl("darwin")).toContain("/2026.08.19/yt-dlp_macos");
+    expect(getDirectPinnedDownloadUrl("win32")).toContain("/2026.08.19/yt-dlp.exe");
     expect(getDirectPinnedDownloadUrl("linux")).not.toContain("/latest/");
   });
 });

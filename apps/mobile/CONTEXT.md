@@ -15,5 +15,9 @@ The place the user chose for new Offline copies: internal app storage, a folder 
 _Avoid_: storage folder, video directory
 
 **Download**:
-The act of fetching a Video's Offline copy from the desktop app. A Download produces an Offline copy; it is not the copy itself.
+The act of fetching a Video's Offline copy from the desktop app, including waiting for the desktop to fetch the Video from YouTube first. A Download produces an Offline copy; it is not the copy itself, and it ends when the copy exists. Receiving a Video from a nearby device is not a Download.
 _Avoid_: sync (for a single Video)
+
+**Download queue**:
+The Downloads not yet finished: waiting for the desktop, queued, transferring, or failed. A Video enters the library only when its Download finishes.
+_Avoid_: download list, transfers

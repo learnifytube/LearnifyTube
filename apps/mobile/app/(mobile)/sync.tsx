@@ -14,7 +14,7 @@ import {
 import { useRouter } from "expo-router";
 import { useSyncStore } from "../../stores/sync";
 import { useConnectionStore } from "../../stores/connection";
-import { useDownloadStore } from "../../stores/downloads";
+import { downloadQueue } from "../../services/download-queue";
 import { usePlaybackStore } from "../../stores/playback";
 import { savePlaylist, isPlaylistSaved } from "../../db/repositories/playlists";
 import {
@@ -45,7 +45,6 @@ import { offlineCopy } from "../../services/offline-copy";
 export default function SyncScreen() {
   const router = useRouter();
   const serverUrl = useConnectionStore((s) => s.serverUrl);
-  const queueDownload = useDownloadStore((s) => s.queueDownload);
   const startPlaylist = usePlaybackStore((s) => s.startPlaylist);
   const { channels, playlists, myLists } = useBrowseCatalog();
 
@@ -406,14 +405,9 @@ export default function SyncScreen() {
     (video: RemoteVideoWithStatus) => {
       if (!serverUrl || video.downloadStatus !== "completed") return;
 
-      queueDownload(video.id, {
-        title: video.title,
-        channelTitle: video.channelTitle,
-        duration: video.duration,
-        thumbnailUrl: video.thumbnailUrl ?? undefined,
-      });
+      downloadQueue.request(video);
     },
-    [serverUrl, queueDownload]
+    [serverUrl]
   );
 
   const handleSyncSelected = useCallback(() => {
@@ -428,12 +422,7 @@ export default function SyncScreen() {
         video.downloadStatus === "completed" &&
         !hasOfflineCopy(video.id)
       ) {
-        queueDownload(video.id, {
-          title: video.title,
-          channelTitle: video.channelTitle,
-          duration: video.duration,
-          thumbnailUrl: video.thumbnailUrl ?? undefined,
-        });
+        downloadQueue.request(video);
       }
     }
     clearVideoSelection();
@@ -444,7 +433,6 @@ export default function SyncScreen() {
     myListVideos,
     selectedVideoIds,
     hasOfflineCopy,
-    queueDownload,
     clearVideoSelection,
   ]);
 
@@ -576,12 +564,7 @@ export default function SyncScreen() {
       // Queue downloads for videos not yet synced
       for (const video of availableVideos) {
         if (!hasOfflineCopy(video.id)) {
-          queueDownload(video.id, {
-            title: video.title,
-            channelTitle: video.channelTitle,
-            duration: video.duration,
-            thumbnailUrl: video.thumbnailUrl ?? undefined,
-          });
+          downloadQueue.request(video);
         }
       }
     };

@@ -4,8 +4,8 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as ScreenOrientation from "expo-screen-orientation";
-import { useDownloadProcessor } from "../hooks/useDownloadProcessor";
 import { useDatabase } from "../hooks/useDatabase";
+import { downloadQueue } from "../services/download-queue";
 import { useOfflineCopyScans } from "../hooks/useOfflineCopyScans";
 import { useLibraryStore } from "../stores/library";
 import { useNavigationLogger } from "../hooks/useNavigationLogger";
@@ -13,8 +13,8 @@ import { usePresencePublisher } from "../hooks/usePresencePublisher";
 import { useSelfUpdateCheck } from "../hooks/useSelfUpdateCheck";
 import { colors } from "../theme";
 
-function DownloadProcessor() {
-  useDownloadProcessor();
+function DownloadQueueRunner() {
+  useEffect(() => downloadQueue.start(), []);
   return null;
 }
 
@@ -119,7 +119,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <DatabaseInitializer>
-        <DownloadProcessor />
+        <DownloadQueueRunner />
         <OfflineCopyScanner />
         <NavigationLogger />
         <PresencePublisher />

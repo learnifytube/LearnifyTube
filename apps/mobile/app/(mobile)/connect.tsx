@@ -17,7 +17,7 @@ import { useConnectionStore } from "../../stores/connection";
 import { colors } from "../../theme";
 import { api, PairingRequiredError } from "../../services/api";
 import { useLibraryStore } from "../../stores/library";
-import { useDownloadStore } from "../../stores/downloads";
+import { downloadQueue } from "../../services/download-queue";
 import { ensureDiscoveryPermissions } from "../../services/discovery-permissions";
 import { startScanning, stopScanning } from "../../services/p2p/discovery";
 import {
@@ -125,7 +125,6 @@ export default function ConnectScreen() {
   const { setServerUrl, setServerName, pairingCode, setPairingCode } =
     useConnectionStore();
   const { addVideo } = useLibraryStore();
-  const queueDownload = useDownloadStore((state) => state.queueDownload);
 
   // Start mDNS scanning on mount
   useEffect(() => {
@@ -351,12 +350,7 @@ export default function ConnectScreen() {
       });
 
       // Queue for download
-      queueDownload(video.id, {
-        title: video.title,
-        channelTitle: video.channelTitle,
-        duration: video.duration,
-        thumbnailUrl: video.thumbnailUrl,
-      });
+      downloadQueue.request(video);
     }
 
     Alert.alert(

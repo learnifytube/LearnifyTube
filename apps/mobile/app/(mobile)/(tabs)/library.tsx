@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useDownloadStore } from "../../../stores/downloads";
+import { downloadQueue } from "../../../services/download-queue";
 import { useConnectionStore } from "../../../stores/connection";
 import { useSyncStore } from "../../../stores/sync";
 import { usePlaybackStore } from "../../../stores/playback";
@@ -50,7 +50,6 @@ const LIBRARY_TABS: { key: LibraryTab; label: string }[] = [
 export default function LibraryScreen() {
   const router = useRouter();
   const serverUrl = useConnectionStore((s) => s.serverUrl);
-  const queueDownload = useDownloadStore((s) => s.queueDownload);
   const startPlaylist = usePlaybackStore((s) => s.startPlaylist);
   const { playlists, myLists } = useBrowseCatalog();
 
@@ -283,14 +282,9 @@ export default function LibraryScreen() {
   const handleSyncVideo = useCallback(
     (video: RemoteVideoWithStatus) => {
       if (!serverUrl || video.downloadStatus !== "completed") return;
-      queueDownload(video.id, {
-        title: video.title,
-        channelTitle: video.channelTitle,
-        duration: video.duration,
-        thumbnailUrl: video.thumbnailUrl ?? undefined,
-      });
+      downloadQueue.request(video);
     },
-    [serverUrl, queueDownload]
+    [serverUrl]
   );
 
   const handleSyncSelected = useCallback(() => {
@@ -301,12 +295,7 @@ export default function LibraryScreen() {
         video.downloadStatus === "completed" &&
         !hasOfflineCopy(video.id)
       ) {
-        queueDownload(video.id, {
-          title: video.title,
-          channelTitle: video.channelTitle,
-          duration: video.duration,
-          thumbnailUrl: video.thumbnailUrl ?? undefined,
-        });
+        downloadQueue.request(video);
       }
     }
     clearVideoSelection();
@@ -316,7 +305,6 @@ export default function LibraryScreen() {
     myListVideos,
     selectedVideoIds,
     hasOfflineCopy,
-    queueDownload,
     clearVideoSelection,
   ]);
 
@@ -414,12 +402,7 @@ export default function LibraryScreen() {
       if (!serverUrl) return;
       for (const video of availableVideos) {
         if (!hasOfflineCopy(video.id)) {
-          queueDownload(video.id, {
-            title: video.title,
-            channelTitle: video.channelTitle,
-            duration: video.duration,
-            thumbnailUrl: video.thumbnailUrl ?? undefined,
-          });
+          downloadQueue.request(video);
         }
       }
     };

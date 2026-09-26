@@ -1,9 +1,6 @@
 import { act, renderHook } from "@testing-library/react-native";
-import {
-  createOfflineCopy,
-  type OfflineCopyPlatform,
-  type StorageLocation,
-} from "./createOfflineCopy";
+import { createOfflineCopy, type StorageLocation } from "./createOfflineCopy";
+import { createFakeOfflineCopyPlatform } from "./fakeOfflineCopyPlatform";
 
 const INTERNAL = { kind: "internal", directoryUri: null } as const;
 const PICKED: StorageLocation = {
@@ -19,97 +16,9 @@ function basename(uri: string) {
   return uri.slice(uri.lastIndexOf("/") + 1);
 }
 
-function createFakePlatform({
-  documentsDir = "file:///container-a/Documents",
-  location = INTERNAL as StorageLocation,
-  records = {} as Record<string, string>,
-} = {}) {
-  const files = new Set<string>();
-  const contents = new Map<string, Uint8Array>();
-  const unmounted = new Set<string>();
-  const state = {
-    documentsDir,
-    location,
-    records: { ...records },
-    failCopies: false,
-  };
-
-  const isMounted = (uri: string) =>
-    ![...unmounted].some((prefix) => uri.startsWith(prefix));
-
-  const platform: OfflineCopyPlatform = {
-    documentsDir: () => state.documentsDir,
-    getStorageLocation: async () => state.location,
-    loadRecords: () =>
-      Object.entries(state.records).map(([videoId, uri]) => ({ videoId, uri })),
-    writeRecord: (videoId, uri) => {
-      if (uri) state.records[videoId] = uri;
-      else delete state.records[videoId];
-    },
-    exists: async (uri) => isMounted(uri) && files.has(uri),
-    list: async (dirUri) => {
-      if (!isMounted(dirUri)) throw new Error(`Not mounted: ${dirUri}`);
-      return [...files].filter(
-        (uri) =>
-          uri.startsWith(`${dirUri}/`) &&
-          !uri.slice(dirUri.length + 1).includes("/"),
-      );
-    },
-    ensureDir: async (parentUri, name) => {
-      if (!isMounted(parentUri)) throw new Error(`Not mounted: ${parentUri}`);
-      return `${parentUri}/${name}`;
-    },
-    createFile: async (dirUri, videoId) => {
-      // Like Android's document provider, never overwrite: pick a new name.
-      let uri = `${dirUri}/${videoId}.mp4`;
-      for (let n = 1; files.has(uri); n++)
-        uri = `${dirUri}/${videoId} (${n}).mp4`;
-      files.add(uri);
-      return uri;
-    },
-    copy: async (from, to) => {
-      if (state.failCopies) throw new Error("Disk full");
-      if (!files.has(from)) throw new Error(`Missing ${from}`);
-      files.add(to);
-      const bytes = contents.get(from);
-      if (bytes) contents.set(to, bytes);
-    },
-    move: async (from, to) => {
-      if (!files.has(from)) throw new Error(`Missing ${from}`);
-      files.delete(from);
-      files.add(to);
-      const bytes = contents.get(from);
-      if (bytes) {
-        contents.set(to, bytes);
-        contents.delete(from);
-      }
-    },
-    remove: async (uri) => {
-      files.delete(uri);
-      contents.delete(uri);
-    },
-    readBytes: async (uri) => {
-      if (!isMounted(uri) || !files.has(uri)) throw new Error(`Missing ${uri}`);
-      return contents.get(uri) ?? new Uint8Array();
-    },
-  };
-
-  return {
-    platform,
-    state,
-    files,
-    write: (uri: string, bytes?: Uint8Array) => {
-      files.add(uri);
-      if (bytes) contents.set(uri, bytes);
-    },
-    unmount: (prefix: string) => unmounted.add(prefix),
-    remount: (prefix: string) => unmounted.delete(prefix),
-  };
-}
-
 async function downloadInto(
   offlineCopy: ReturnType<typeof createOfflineCopy>,
-  fake: ReturnType<typeof createFakePlatform>,
+  fake: ReturnType<typeof createFakeOfflineCopyPlatform>,
   videoId: string,
 ) {
   const tempUri = await offlineCopy.tempFileUri(videoId);
@@ -120,7 +29,7 @@ async function downloadInto(
 
 describe("Offline copy", () => {
   it("finds an internal copy by Video ID after the app container path changes", async () => {
-    const fake = createFakePlatform({
+    const fake = createFakeOfflineCopyPlatform({
       documentsDir: "file:///container-b/Documents",
       records: { v1: "file:///container-a/Documents/videos/v1.mp4" },
     });
@@ -138,7 +47,7 @@ describe("Offline copy", () => {
   });
 
   it("finds a picked-folder copy after a scan", async () => {
-    const fake = createFakePlatform({ location: PICKED });
+    const fake = createFakeOfflineCopyPlatform({ location: PICKED });
     fake.write("content://picked/videos/v2.mp4");
     const offlineCopy = createOfflineCopy(fake.platform);
 
@@ -150,7 +59,7 @@ describe("Offline copy", () => {
   });
 
   it("places an adopted file in the USB folder", async () => {
-    const fake = createFakePlatform({ location: USB });
+    const fake = createFakeOfflineCopyPlatform({ location: USB });
     const offlineCopy = createOfflineCopy(fake.platform);
 
     const tempUri = await downloadInto(offlineCopy, fake, "v3");
@@ -163,7 +72,7 @@ describe("Offline copy", () => {
   });
 
   it("places an adopted file in internal storage", async () => {
-    const fake = createFakePlatform();
+    const fake = createFakeOfflineCopyPlatform();
     const offlineCopy = createOfflineCopy(fake.platform);
 
     await downloadInto(offlineCopy, fake, "v3");
@@ -177,7 +86,7 @@ describe("Offline copy", () => {
   });
 
   it("replaces an existing copy in the same Storage location", async () => {
-    const fake = createFakePlatform({ location: PICKED });
+    const fake = createFakeOfflineCopyPlatform({ location: PICKED });
     fake.write("content://picked/videos/v4.mp4");
     const offlineCopy = createOfflineCopy(fake.platform);
     await offlineCopy.scan();
@@ -194,7 +103,7 @@ describe("Offline copy", () => {
 
   it("replaces an existing copy in the same USB folder", async () => {
     const usbCopy = "file:///storage/USB1/LearnifyTube/videos/v4.mp4";
-    const fake = createFakePlatform({
+    const fake = createFakeOfflineCopyPlatform({
       location: USB,
       records: { v4: usbCopy },
     });
@@ -208,7 +117,7 @@ describe("Offline copy", () => {
   });
 
   it("replaces an existing copy in another Storage location", async () => {
-    const fake = createFakePlatform({
+    const fake = createFakeOfflineCopyPlatform({
       location: PICKED,
       records: { v4: "file:///container-a/Documents/videos/v4.mp4" },
     });
@@ -223,7 +132,7 @@ describe("Offline copy", () => {
   });
 
   it("cleans up a partial temp file when a Download fails or is cancelled", async () => {
-    const fake = createFakePlatform();
+    const fake = createFakeOfflineCopyPlatform();
     const offlineCopy = createOfflineCopy(fake.platform);
 
     const tempUri = await offlineCopy.tempFileUri("v5");
@@ -235,7 +144,7 @@ describe("Offline copy", () => {
   });
 
   it("cleans up the temp file and keeps the old copy when adopt fails", async () => {
-    const fake = createFakePlatform({
+    const fake = createFakeOfflineCopyPlatform({
       location: USB,
       records: { v5: "file:///container-a/Documents/videos/v5.mp4" },
     });
@@ -257,7 +166,7 @@ describe("Offline copy", () => {
 
   it("keeps the old copy in the same picked folder when adopt fails", async () => {
     const pickedCopy = "content://picked/videos/v5.mp4";
-    const fake = createFakePlatform({
+    const fake = createFakeOfflineCopyPlatform({
       location: PICKED,
       records: { v5: pickedCopy },
     });
@@ -275,7 +184,7 @@ describe("Offline copy", () => {
 
   it("keeps an adopted copy when an overlapping scan finishes after it", async () => {
     const oldCopy = "content://picked/videos/v11.mp4";
-    const fake = createFakePlatform({ records: { v11: oldCopy } });
+    const fake = createFakeOfflineCopyPlatform({ records: { v11: oldCopy } });
     fake.write(oldCopy);
     const offlineCopy = createOfflineCopy(fake.platform);
     const gate = () => {
@@ -314,7 +223,7 @@ describe("Offline copy", () => {
 
   it("returns null for an unreachable copy, keeps its record, and finds it again after a scan", async () => {
     const usbCopy = "file:///storage/USB1/LearnifyTube/videos/v6.mp4";
-    const fake = createFakePlatform({
+    const fake = createFakeOfflineCopyPlatform({
       location: USB,
       records: { v6: usbCopy },
     });
@@ -332,7 +241,7 @@ describe("Offline copy", () => {
   });
 
   it("keeps a copy made before a Storage location change findable", async () => {
-    const fake = createFakePlatform({ location: PICKED });
+    const fake = createFakeOfflineCopyPlatform({ location: PICKED });
     const offlineCopy = createOfflineCopy(fake.platform);
     await downloadInto(offlineCopy, fake, "v7");
 
@@ -346,7 +255,7 @@ describe("Offline copy", () => {
   });
 
   it("re-renders the hook when adopt completes", async () => {
-    const fake = createFakePlatform();
+    const fake = createFakeOfflineCopyPlatform();
     const offlineCopy = createOfflineCopy(fake.platform);
     const { result } = await renderHook(() => offlineCopy.useUri("v8"));
 
@@ -360,7 +269,7 @@ describe("Offline copy", () => {
 
   it("re-renders the lookup hook when a USB drive is unplugged and plugged back in", async () => {
     const usbCopy = "file:///storage/USB1/LearnifyTube/videos/v12.mp4";
-    const fake = createFakePlatform({
+    const fake = createFakeOfflineCopyPlatform({
       location: USB,
       records: { v12: usbCopy },
     });
@@ -384,7 +293,7 @@ describe("Offline copy", () => {
   });
 
   it("answers from saved records before the first scan", () => {
-    const fake = createFakePlatform({
+    const fake = createFakeOfflineCopyPlatform({
       location: PICKED,
       records: {
         v9: "content://picked/videos/v9.mp4",
@@ -405,7 +314,7 @@ describe("Offline copy", () => {
     ["a picked folder", PICKED],
     ["a USB folder", USB],
   ])("removes an Offline copy in %s", async (_, location) => {
-    const fake = createFakePlatform({ location });
+    const fake = createFakeOfflineCopyPlatform({ location });
     const offlineCopy = createOfflineCopy(fake.platform);
     await downloadInto(offlineCopy, fake, "v14");
 
@@ -419,7 +328,7 @@ describe("Offline copy", () => {
   });
 
   it("removes a copy made before a Storage location change", async () => {
-    const fake = createFakePlatform({ location: PICKED });
+    const fake = createFakeOfflineCopyPlatform({ location: PICKED });
     const offlineCopy = createOfflineCopy(fake.platform);
     await downloadInto(offlineCopy, fake, "v15");
     fake.state.location = USB;
@@ -431,7 +340,7 @@ describe("Offline copy", () => {
   });
 
   it("re-renders the hook when an Offline copy is removed", async () => {
-    const fake = createFakePlatform();
+    const fake = createFakeOfflineCopyPlatform();
     const offlineCopy = createOfflineCopy(fake.platform);
     await downloadInto(offlineCopy, fake, "v16");
     const { result } = await renderHook(() => offlineCopy.useUri("v16"));
@@ -445,7 +354,7 @@ describe("Offline copy", () => {
   });
 
   it("keeps a removed copy gone when an overlapping scan finishes after it", async () => {
-    const fake = createFakePlatform();
+    const fake = createFakeOfflineCopyPlatform();
     const offlineCopy = createOfflineCopy(fake.platform);
     await downloadInto(offlineCopy, fake, "v17");
     let openList = () => {};
@@ -469,7 +378,7 @@ describe("Offline copy", () => {
   });
 
   it("reads bytes of a reachable Offline copy for peer-to-peer serving", async () => {
-    const fake = createFakePlatform({ location: PICKED });
+    const fake = createFakeOfflineCopyPlatform({ location: PICKED });
     const bytes = new Uint8Array([1, 2, 3, 4]);
     fake.write("content://picked/videos/v13.mp4", bytes);
     fake.state.records.v13 = "content://picked/videos/v13.mp4";

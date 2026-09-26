@@ -11,10 +11,10 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLibraryStore } from "../../../stores/library";
 import { useConnectionStore } from "../../../stores/connection";
-import { useDownloadStore } from "../../../stores/downloads";
 import { usePlaybackStore } from "../../../stores/playback";
 import { useTVHistoryStore } from "../../../stores/tvHistory";
 import { api } from "../../../services/api";
+import { downloadQueue } from "../../../services/download-queue";
 import { offlineCopy } from "../../../services/offline-copy";
 import { logger } from "../../../services/logger";
 import { tvDebugInfo } from "../../../services/tvDebug";
@@ -167,12 +167,12 @@ async function waitForLocalVideoReady(
       return offlineUri;
     }
 
-    const download = useDownloadStore.getState().getDownload(videoId);
-    if (download?.status === "failed") {
+    const download = downloadQueue.getDownload(videoId);
+    if (download?.phase === "failed") {
       throw new Error(download.error || "Download to TV failed");
     }
 
-    if (download?.status === "downloading" || download?.status === "completed") {
+    if (download?.phase === "transferring") {
       options?.onProgress?.(download.progress ?? null);
     } else {
       options?.onProgress?.(null);
@@ -343,14 +343,15 @@ export default function TVPlayerScreen() {
           return;
         }
 
-        const existingDownload = useDownloadStore.getState().getDownload(id);
+        const existingDownload = downloadQueue.getDownload(id);
         if (!offlineCopy.getUri(id)) {
           tvDebugInfo("[TV Playback Debug] Queueing TV download", {
             videoId: id,
             title: video.title,
-            existingDownloadStatus: existingDownload?.status ?? null,
+            existingDownloadStatus: existingDownload?.phase ?? null,
           });
-          useDownloadStore.getState().queueDownload(id, {
+          downloadQueue.request({
+            id,
             title: video.title,
             channelTitle: video.channelTitle,
             duration: video.duration,

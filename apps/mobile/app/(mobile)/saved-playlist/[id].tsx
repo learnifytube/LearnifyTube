@@ -19,10 +19,9 @@ import { VideoGridCard } from "../../../components/VideoGridCard";
 import { getSavedPlaylistWithItems } from "../../../db/repositories/playlists";
 import type { SavedPlaylistWithItems } from "../../../db/repositories/playlists";
 import { api } from "../../../services/api";
-import { downloadManager } from "../../../services/downloadManager";
+import { downloadQueue } from "../../../services/download-queue";
 import { offlineCopy } from "../../../services/offline-copy";
 import { useConnectionStore } from "../../../stores/connection";
-import { useDownloadStore } from "../../../stores/downloads";
 import { usePlaybackStore, type StreamingVideo } from "../../../stores/playback";
 
 type SavedPlaylistItem = SavedPlaylistWithItems["items"][number];
@@ -40,8 +39,7 @@ export default function SavedPlaylistScreen() {
   const router = useRouter();
   const serverUrl = useConnectionStore((state) => state.serverUrl);
   const getOfflineUri = offlineCopy.useLookup();
-  const queueDownload = useDownloadStore((state) => state.queueDownload);
-  const downloadQueue = useDownloadStore((state) => state.queue);
+  const downloads = downloadQueue.useQueue();
   const startPlaylist = usePlaybackStore((state) => state.startPlaylist);
 
   const [playlist, setPlaylist] = useState<SavedPlaylistWithItems | null>(null);
@@ -126,10 +124,10 @@ export default function SavedPlaylistScreen() {
         if (offlineCopy.getUri(videoId) !== null) return;
         if (shouldAbort()) throw new Error(PREPARE_CANCELLED_MESSAGE);
 
-        const item = useDownloadStore.getState().getDownload(videoId);
+        const item = downloadQueue.getDownload(videoId);
         if (item) {
           wasQueued = true;
-          if (item.status === "failed") {
+          if (item.phase === "failed") {
             throw new Error(item.error || "Mobile download failed");
           }
         } else if (wasQueued) {
@@ -206,11 +204,8 @@ export default function SavedPlaylistScreen() {
         return;
       }
 
-      const existingDownload = useDownloadStore.getState().getDownload(item.videoId);
-      if (
-        existingDownload &&
-        (existingDownload.status === "queued" || existingDownload.status === "downloading")
-      ) {
+      const existingDownload = downloadQueue.getDownload(item.videoId);
+      if (existingDownload && existingDownload.phase !== "failed") {
         return;
       }
 
@@ -231,7 +226,8 @@ export default function SavedPlaylistScreen() {
         await waitForServerDownload(item.videoId, shouldAbort);
 
         if (offlineCopy.getUri(item.videoId) === null) {
-          queueDownload(item.videoId, {
+          downloadQueue.request({
+            id: item.videoId,
             title: item.title,
             channelTitle: item.channelTitle,
             duration: item.duration,
@@ -264,7 +260,6 @@ export default function SavedPlaylistScreen() {
       getOfflineUri,
       playSavedPlaylistVideo,
       preparingVideoIds,
-      queueDownload,
       serverUrl,
       setPreparingVideo,
       waitForLocalVideo,
@@ -276,7 +271,7 @@ export default function SavedPlaylistScreen() {
     (videoId: string) => {
       cancelledVideoIdsRef.current.add(videoId);
       setPreparingVideo(videoId, false);
-      downloadManager.cancel(videoId);
+      downloadQueue.cancel(videoId);
     },
     [setPreparingVideo]
   );
@@ -287,18 +282,16 @@ export default function SavedPlaylistScreen() {
         return { type: "preparing", label: "Preparing..." };
       }
 
-      const item = downloadQueue.find((download) => download.videoId === videoId);
+      const item = downloads.find((download) => download.videoId === videoId);
       if (!item) return { type: "none" };
 
-      if (item.status === "queued") return { type: "queued" };
-      if (item.status === "downloading") {
-        return { type: "downloading", progress: item.progress };
+      if (item.phase === "transferring") {
+        return { type: "downloading", progress: item.progress ?? 0 };
       }
-      if (item.status === "failed") return { type: "failed", error: item.error };
-
-      return { type: "none" };
+      if (item.phase === "failed") return { type: "failed", error: item.error };
+      return { type: "queued" };
     },
-    [downloadQueue, preparingVideoIds]
+    [downloads, preparingVideoIds]
   );
 
   if (loading) {

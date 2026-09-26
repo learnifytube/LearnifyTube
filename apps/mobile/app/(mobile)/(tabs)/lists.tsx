@@ -17,7 +17,7 @@ import { Link, useRouter, type Href } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLibraryStore } from "../../../stores/library";
-import { useDownloadStore } from "../../../stores/downloads";
+import { downloadQueue } from "../../../services/download-queue";
 import { useConnectionStore } from "../../../stores/connection";
 import { usePlaybackStore, type StreamingVideo } from "../../../stores/playback";
 import { VideoCard } from "../../../components/VideoCard";
@@ -134,7 +134,7 @@ export function SavedTabContent() {
   const router = useRouter();
 
   const videos = useLibraryStore((state) => state.videos);
-  const downloadQueue = useDownloadStore((state) => state.queue);
+  const downloads = downloadQueue.useQueue();
   const serverUrl = useConnectionStore((state) => state.serverUrl);
   const startPlaylist = usePlaybackStore((state) => state.startPlaylist);
 
@@ -160,8 +160,10 @@ export function SavedTabContent() {
 
   const getOfflineUri = offlineCopy.useLookup();
   const downloadedVideos = videos.filter((v) => getOfflineUri(v.id) !== null);
-  const activeDownloads = downloadQueue.filter((d) => d.status === "downloading");
-  const queuedDownloads = downloadQueue.filter((d) => d.status === "queued");
+  const activeDownloads = downloads.filter((d) => d.phase === "transferring");
+  const queuedDownloads = downloads.filter(
+    (d) => d.phase === "queued" || d.phase === "waiting-for-desktop"
+  );
 
   const getVideoResumeSeconds = useCallback(
     (videoId: string, duration: number) => {
@@ -318,7 +320,7 @@ export function SavedTabContent() {
                   {activeDownloads.length > 0 && (
                     <Text style={styles.downloadStatusText}>
                       {activeDownloads.length} downloading
-                      {activeDownloads[0] && ` (${activeDownloads[0].progress}%)`}
+                      {activeDownloads[0] && ` (${activeDownloads[0].progress ?? 0}%)`}
                     </Text>
                   )}
                   {queuedDownloads.length > 0 && (

@@ -9,8 +9,7 @@ import {
 } from "react-native";
 import { Link, type Href } from "expo-router";
 import type { Video } from "../types";
-import { useDownloadStore } from "../stores/downloads";
-import { downloadManager } from "../services/downloadManager";
+import { downloadQueue } from "../services/download-queue";
 import { offlineCopy } from "../services/offline-copy";
 import { colors, radius, spacing, fontSize, fontWeight } from "../theme";
 import { Check, AlertCircle, Film } from "../theme/icons";
@@ -37,21 +36,19 @@ export function VideoCard({
   playerHref,
   resumeLabel,
 }: VideoCardProps) {
-  const download = useDownloadStore((state) =>
-    state.queue.find((d) => d.videoId === video.id)
-  );
+  const download = downloadQueue.useDownload(video.id);
 
   const isDownloaded = offlineCopy.useUri(video.id) !== null;
-  const isDownloading = download?.status === "downloading";
-  const isQueued = download?.status === "queued";
-  const isFailed = download?.status === "failed";
+  const isDownloading = download?.phase === "transferring";
+  const isFailed = download?.phase === "failed";
+  const isQueued = !!download && !isDownloading && !isFailed;
 
   const handleCancel = () => {
-    downloadManager.cancel(video.id);
+    downloadQueue.cancel(video.id);
   };
 
   const handleRetry = () => {
-    downloadManager.retry(video.id);
+    downloadQueue.request(video);
   };
 
   const href = playerHref ?? (`/player/${video.id}` as Href);

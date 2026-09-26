@@ -28,10 +28,10 @@ The two route groups import and navigate only within themselves; `scripts/check-
 ## Architecture
 
 - **Desktop sync** — `services/api.ts` is the REST client for the desktop's mobile sync server; the version handshake lives in `apps/shared/mobile-sync-contract.ts`. It attaches the pairing code from `stores/connection.ts` to every request, and to image/video URLs as `?token=`; build desktop URLs with its `get*Url` helpers. A 401 surfaces as `PairingRequiredError`.
-- **Downloads** — queued in `stores/downloads.ts` (AsyncStorage-persisted; in-flight items reset to queued on hydration), driven by `hooks/useDownloadProcessor.ts`, processed by `services/downloadManager.ts` (concurrency, retry backoff, cancellation). `services/downloader.ts` transfers to a temp file, then the manager hands it to the Offline copy module's `adopt`.
+- **Downloads** — `services/download-queue/` owns the Download queue: `downloadQueue.request(video)` (does nothing if the Offline copy exists or the Download is on its way; retries a failed one), `cancel`, `waitUntilReady(videoId, signal)` (aborting stops the wait, not the Download), `getDownload`, and the `useDownload` / `useQueue` hooks. Inside, it waits for the desktop to fetch the Video, transfers two at a time with retry backoff, adds the Video to the library and hands the file to the Offline copy module's `adopt`; it runs only while the desktop is connected and the app is in the foreground (`app/_layout.tsx` starts it) and persists to AsyncStorage.
 - **Persistence** — SQLite via expo-sqlite + Drizzle (`db/schema.ts`, `db/repositories/`); migrations run on app start. Zustand stores in `stores/`; `library.ts` mirrors SQLite, the rest persist to AsyncStorage.
 - **P2P sharing** — `services/p2p/`: mDNS discovery (react-native-zeroconf) plus a local server/client. The server serves Offline copies via `offlineCopy.readBytes`; the client downloads to a temp file and the share screen calls `adopt`.
-- **File system** — prefer the expo-file-system SDK 54+ `Paths`/`Directory`/`File` API for new code; `downloader.ts`, `storage-location.ts`, `app-update.ts`, and the Offline copy platform still use `expo-file-system/legacy` (picked-folder `content://` URIs).
+- **File system** — prefer the expo-file-system SDK 54+ `Paths`/`Directory`/`File` API for new code; `storage-location.ts`, the Download queue platform, `app-update.ts`, and the Offline copy platform still use `expo-file-system/legacy` (picked-folder `content://` URIs).
 
 ## Offline copies
 

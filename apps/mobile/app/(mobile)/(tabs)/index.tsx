@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { Link, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useDownloadStore } from "../../../stores/downloads";
+import { downloadQueue } from "../../../services/download-queue";
 import { useConnectionStore } from "../../../stores/connection";
 import { useSyncStore } from "../../../stores/sync";
 import { usePlaybackStore } from "../../../stores/playback";
@@ -35,8 +35,6 @@ import { offlineCopy } from "../../../services/offline-copy";
 export default function HomeScreen() {
   const serverUrl = useConnectionStore((s) => s.serverUrl);
   const isConnected = !!serverUrl;
-
-  const queueDownload = useDownloadStore((s) => s.queueDownload);
   const { channels } = useBrowseCatalog();
 
   const {
@@ -303,14 +301,9 @@ export default function HomeScreen() {
     (video: RemoteVideoWithStatus) => {
       if (!serverUrl || video.downloadStatus !== "completed") return;
 
-      queueDownload(video.id, {
-        title: video.title,
-        channelTitle: video.channelTitle,
-        duration: video.duration,
-        thumbnailUrl: video.thumbnailUrl ?? undefined,
-      });
+      downloadQueue.request(video);
     },
-    [serverUrl, queueDownload]
+    [serverUrl]
   );
 
   const handleSyncSelected = useCallback(() => {
@@ -321,12 +314,7 @@ export default function HomeScreen() {
         video.downloadStatus === "completed" &&
         !hasOfflineCopy(video.id)
       ) {
-        queueDownload(video.id, {
-          title: video.title,
-          channelTitle: video.channelTitle,
-          duration: video.duration,
-          thumbnailUrl: video.thumbnailUrl ?? undefined,
-        });
+        downloadQueue.request(video);
       }
     }
     clearVideoSelection();
@@ -334,7 +322,6 @@ export default function HomeScreen() {
     channelVideos,
     selectedVideoIds,
     hasOfflineCopy,
-    queueDownload,
     clearVideoSelection,
   ]);
 
@@ -435,12 +422,7 @@ export default function HomeScreen() {
       // Queue downloads for videos not yet synced
       for (const video of availableVideos) {
         if (!hasOfflineCopy(video.id)) {
-          queueDownload(video.id, {
-            title: video.title,
-            channelTitle: video.channelTitle,
-            duration: video.duration,
-            thumbnailUrl: video.thumbnailUrl ?? undefined,
-          });
+          downloadQueue.request(video);
         }
       }
     };

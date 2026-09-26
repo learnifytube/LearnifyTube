@@ -726,6 +726,7 @@ export const ytdlpRouter = t.router({
             downloadFilePath: null,
             downloadFileSize: null,
             lastDownloadedAt: null,
+            keptAt: null,
             updatedAt: Date.now(),
           })
           .where(eq(youtubeVideos.videoId, input.videoId))

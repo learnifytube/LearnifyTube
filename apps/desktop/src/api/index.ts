@@ -18,6 +18,7 @@ import { learningStatsRouter } from "@/api/routers/learning-stats";
 import { backgroundJobsRouter } from "@/api/routers/background-jobs";
 import { favoritesRouter } from "@/api/routers/favorites";
 import { syncRouter } from "@/api/routers/sync";
+import { libraryRouter } from "@/api/routers/library";
 
 // Create the root router
 export const router = t.router({
@@ -40,6 +41,7 @@ export const router = t.router({
   backgroundJobs: backgroundJobsRouter,
   favorites: favoritesRouter,
   sync: syncRouter,
+  library: libraryRouter,
 });
 
 // Export type router type signature

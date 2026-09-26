@@ -169,6 +169,7 @@ export function QuickAddDialog({ open, onOpenChange }: QuickAddDialogProps): Rea
     onSuccess: (res) => {
       if (res.success) {
         queryClient.invalidateQueries({ queryKey: ["queue", "status"] });
+        queryClient.invalidateQueries({ queryKey: ["library"] });
         toast.success(`Download added to queue (${res.downloadIds.length})`);
       } else {
         toast.error(res.message ?? "Failed to start download");

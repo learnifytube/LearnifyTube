@@ -1,17 +1,16 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import {
   Home,
   Clapperboard,
-  History,
   Users,
   List,
-  Brain,
-  BarChart3,
   HardDrive,
   ScrollText,
   Settings,
   FolderHeart,
   Smartphone,
+  Library,
+  Plus,
 } from "lucide-react";
 import { Link, useMatches } from "@tanstack/react-router";
 import { logger } from "@/helpers/logger";
@@ -36,6 +35,7 @@ import {
 import { SidebarThemeToggle } from "@/components/SidebarThemeToggle";
 import { MinimizedPlayer } from "@/components/MinimizedPlayer";
 import { Logo } from "@/components/Logo";
+import { QuickAddDialog } from "@/components/QuickAddDialog";
 
 // Check if we're in development mode
 // In Electron renderer, check window.location - if it's http(s)://, we're in dev mode
@@ -70,36 +70,45 @@ type SidebarItemConfig = {
 
 // Sidebar groups configuration
 const SIDEBAR_GROUPS: Array<{
-  label: string;
+  label?: string;
   items: SidebarItemConfig[];
+  addUrl?: boolean;
 }> = [
   {
-    label: "LEARN",
     items: [
-      { id: "home", title: "Home", icon: Home, url: "/" },
-      { id: "my-words", title: "Flashcards", icon: Brain, url: "/my-words" },
-      { id: "analytics", title: "Analytics", icon: BarChart3, url: "/analytics" },
-      { id: "history", title: "History", icon: History, url: "/history" },
+      { id: "home", title: "Up next", icon: Home, url: "/" },
+      { id: "library", title: "Library", icon: Library, url: "/library" },
+      { id: "my-playlists", title: "Lists", icon: FolderHeart, url: "/my-playlists" },
     ],
   },
   {
-    label: "LIBRARY",
+    label: "EXPLORE",
     items: [
-      { id: "my-playlists", title: "My Lists", icon: FolderHeart, url: "/my-playlists" },
       { id: "channels", title: "Channels", icon: Users, url: "/channels" },
-      { id: "playlists", title: "Playlists", icon: List, url: "/playlists" },
+      { id: "playlists", title: "YouTube playlists", icon: List, url: "/playlists" },
       { id: "subscriptions", title: "Subscriptions", icon: Clapperboard, url: "/subscriptions" },
     ],
+    addUrl: true,
   },
   {
-    label: "MANAGE",
+    items: [{ id: "mobile-sync", title: "Devices", icon: Smartphone, url: "/mobile-sync" }],
+  },
+  {
     items: [
       { id: "storage", title: "Storage", icon: HardDrive, url: "/storage" },
-      { id: "mobile-sync", title: "Mobile Sync", icon: Smartphone, url: "/mobile-sync" },
       { id: "settings", title: "Settings", icon: Settings, url: "/settings" },
       { id: "logs", title: "Logs", icon: ScrollText, url: "/app-debug-logs" },
     ],
   },
+];
+
+// Core pages can't be hidden, even by sidebar preferences stored before they existed
+const ALWAYS_VISIBLE: SidebarItem[] = [
+  "home",
+  "library",
+  "my-playlists",
+  "mobile-sync",
+  "settings",
 ];
 
 export function AppSidebar({
@@ -107,8 +116,9 @@ export function AppSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>): React.JSX.Element {
   const [activeItem, setActiveItem] = useState<string | null>(null);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const matches = useMatches();
-  const currentPath = useMemo(() => matches[matches.length - 1]?.pathname ?? "/", [matches]);
+  const currentPath = matches[matches.length - 1]?.pathname ?? "/";
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
 
@@ -116,37 +126,13 @@ export function AppSidebar({
   const sidebarPreferences = useAtomValue(sidebarPreferencesAtom);
 
   // Filter groups and items based on user preferences
-  const filteredGroups = useMemo(() => {
-    return SIDEBAR_GROUPS.map((group) => ({
-      ...group,
-      items: group.items.filter((item) => {
-        // Always hide logs if not in dev mode
-        if (item.id === "logs" && !isDevelopment()) {
-          return false;
-        }
-        // Special logic: Flashcards visibility is tied to "my-words" preference
-        if (item.id === "flashcards") {
-          return sidebarPreferences.visibleItems.includes("my-words");
-        }
-        // Home is always visible (maps to dashboard in preferences)
-        if (item.id === "home") {
-          return (
-            sidebarPreferences.visibleItems.includes("home") ||
-            sidebarPreferences.visibleItems.includes("dashboard")
-          );
-        }
-        // My Playlists is always visible (new item, may not be in stored preferences)
-        if (item.id === "my-playlists") {
-          return true;
-        }
-        // Mobile Sync is always visible (new item, may not be in stored preferences)
-        if (item.id === "mobile-sync") {
-          return true;
-        }
-        return sidebarPreferences.visibleItems.includes(item.id);
-      }),
-    })).filter((group) => group.items.length > 0);
-  }, [sidebarPreferences.visibleItems]);
+  const filteredGroups = SIDEBAR_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => {
+      if (item.id === "logs") return isDevelopment();
+      return ALWAYS_VISIBLE.includes(item.id) || sidebarPreferences.visibleItems.includes(item.id);
+    }),
+  })).filter((group) => group.items.length > 0 || group.addUrl);
 
   return (
     <Sidebar
@@ -178,10 +164,12 @@ export function AppSidebar({
 
       <SidebarContent>
         {filteredGroups.map((group) => (
-          <SidebarGroup key={group.label}>
-            <SidebarGroupLabel className="text-xs font-medium text-muted-foreground/70">
-              {group.label}
-            </SidebarGroupLabel>
+          <SidebarGroup key={group.items[0]?.id ?? group.label}>
+            {group.label && (
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground/70">
+                {group.label}
+              </SidebarGroupLabel>
+            )}
             <SidebarMenu>
               {group.items.map((item) => (
                 <SidebarMenuItem key={item.title}>
@@ -214,6 +202,18 @@ export function AppSidebar({
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {group.addUrl && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    tooltip="Add URL"
+                    className="gap-2 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    onClick={() => setQuickAddOpen(true)}
+                  >
+                    <Plus className="size-4" />
+                    <span>Add URL</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroup>
         ))}
@@ -224,6 +224,7 @@ export function AppSidebar({
       </SidebarFooter>
 
       <SidebarRail className="border-primary/20 dark:border-primary/10" />
+      <QuickAddDialog open={quickAddOpen} onOpenChange={setQuickAddOpen} />
     </Sidebar>
   );
 }

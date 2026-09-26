@@ -60,7 +60,7 @@ export function TranscriptWord({
         cursor: word.trim() ? "pointer" : "default",
         minHeight: showInlineTranslations && hasTranslation ? "1.8em" : "auto",
       }}
-      title={word.trim() ? "Double-click to quick save" : undefined}
+      title={word.trim() && onClick ? "Double-click to quick save" : undefined}
     >
       <span
         className={`relative ${

@@ -7,6 +7,7 @@ export type ThemeMode = "light" | "dark";
 
 export type SidebarItem =
   | "home"
+  | "library"
   | "dashboard"
   | "channels"
   | "playlists"
@@ -94,6 +95,7 @@ export interface UserPreferences {
 export const DEFAULT_SIDEBAR_PREFERENCES: SidebarPreferences = {
   visibleItems: [
     "home",
+    "library",
     "dashboard",
     "channels",
     "playlists",
@@ -194,6 +196,7 @@ const isSidebarItem = (value: unknown): value is SidebarItem =>
   typeof value === "string" &&
   [
     "home",
+    "library",
     "dashboard",
     "channels",
     "playlists",
@@ -210,7 +213,9 @@ const isSidebarItem = (value: unknown): value is SidebarItem =>
   ].includes(value);
 
 const parseSidebarItems = (value: unknown, fallback: SidebarItem[]): SidebarItem[] =>
-  Array.isArray(value) ? value.filter((item): item is SidebarItem => isSidebarItem(item)) : fallback;
+  Array.isArray(value)
+    ? value.filter((item): item is SidebarItem => isSidebarItem(item))
+    : fallback;
 
 const parseEnum = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => {
   if (typeof value !== "string") {

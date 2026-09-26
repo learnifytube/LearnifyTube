@@ -3,6 +3,8 @@ import { Link } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Download, Clock, Video } from "lucide-react";
 import Thumbnail from "@/components/Thumbnail";
+import { WatchStateBadge } from "@/components/WatchStateBadge";
+import type { WatchState } from "@/lib/watch-state";
 
 type DownloadedVideo = {
   videoId: string;
@@ -11,7 +13,8 @@ type DownloadedVideo = {
   thumbnailPath: string | null;
   channelTitle: string | null;
   durationSeconds: number | null;
-  lastDownloadedAt: number | null;
+  downloadStatus: string | null;
+  watchState: WatchState;
 };
 
 type RecentDownloadsSectionProps = {
@@ -29,7 +32,7 @@ export function RecentDownloadsSection({
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg">
             <Download className="h-5 w-5 text-primary" />
-            Recent Downloads
+            Recently kept
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -55,7 +58,7 @@ export function RecentDownloadsSection({
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg">
             <Download className="h-5 w-5 text-primary" />
-            Recent Downloads
+            Recently kept
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -64,8 +67,10 @@ export function RecentDownloadsSection({
               <Download className="h-8 w-8 text-muted-foreground" />
             </div>
             <div className="space-y-1">
-              <p className="font-medium">No downloads yet</p>
-              <p className="text-sm text-muted-foreground">Download videos to watch them offline</p>
+              <p className="font-medium">Nothing kept yet</p>
+              <p className="text-sm text-muted-foreground">
+                Add a URL or keep a Video from a Channel
+              </p>
             </div>
           </div>
         </CardContent>
@@ -78,7 +83,7 @@ export function RecentDownloadsSection({
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg">
           <Download className="h-5 w-5 text-primary" />
-          Recent Downloads
+          Recently kept
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -115,10 +120,12 @@ function VideoCard({ video }: { video: DownloadedVideo }): React.JSX.Element {
           </div>
         )}
 
-        {/* Downloaded indicator */}
-        <div className="absolute left-2 top-2 rounded bg-green-600/90 px-1.5 py-0.5 text-xs font-medium text-white">
-          <Download className="inline h-3 w-3" />
-        </div>
+        <WatchStateBadge watchState={video.watchState} className="absolute left-2 top-2" />
+        {video.downloadStatus !== "completed" && (
+          <div className="absolute right-2 top-2 rounded bg-amber-600/90 px-1.5 py-0.5 text-xs font-medium text-white">
+            <Download className="inline h-3 w-3" />
+          </div>
+        )}
       </div>
 
       <div className="mt-2 space-y-1">

@@ -22,6 +22,7 @@ import {
   secondarySubtitleLangAtom,
 } from "@/context/transcriptSettings";
 import { logger } from "@/helpers/logger";
+import { LEARNING_FEATURES_ENABLED } from "@/lib/features";
 
 interface TranscriptSettingsDialogProps {
   open: boolean;
@@ -181,16 +182,18 @@ export function TranscriptSettingsDialog({
           </div>
 
           {/* Show Inline Translations */}
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="show-inline-translations"
-              checked={showInlineTranslations}
-              onCheckedChange={(checked) => setShowInlineTranslations(checked === true)}
-            />
-            <Label htmlFor="show-inline-translations" className="cursor-pointer text-xs">
-              Show saved word translations inline
-            </Label>
-          </div>
+          {LEARNING_FEATURES_ENABLED && (
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="show-inline-translations"
+                checked={showInlineTranslations}
+                onCheckedChange={(checked) => setShowInlineTranslations(checked === true)}
+              />
+              <Label htmlFor="show-inline-translations" className="cursor-pointer text-xs">
+                Show saved word translations inline
+              </Label>
+            </div>
+          )}
 
           <div className="my-2 h-px bg-border" />
 

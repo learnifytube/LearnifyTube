@@ -63,6 +63,7 @@ export const youtubeVideos = sqliteTable(
     errorType: text("error_type"), // 'restricted' | 'network' | 'format' | 'unknown'
     isRetryable: integer("is_retryable", { mode: "boolean" }),
     lastDownloadedAt: integer("last_downloaded_at"),
+    keptAt: integer("kept_at"), // when the Video joined the Library; null = not kept
 
     // Video optimization fields
     optimizationStatus: text("optimization_status", {
@@ -200,6 +201,7 @@ export const videoWatchStats = sqliteTable(
     totalWatchSeconds: integer("total_watch_seconds").default(0),
     lastPositionSeconds: integer("last_position_seconds").default(0),
     lastWatchedAt: integer("last_watched_at"),
+    watchedAt: integer("watched_at"), // set when ~90% played or marked watched; null otherwise
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at"),
   },

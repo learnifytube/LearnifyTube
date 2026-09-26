@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Plus, Play } from "lucide-react";
+import { LEARNING_FEATURES_ENABLED } from "@/lib/features";
 import { trpcClient } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/ui/page-container";
@@ -28,12 +29,14 @@ export default function HomePage(): React.JSX.Element {
     refetchOnWindowFocus: false,
   });
 
-  // Fetch recently downloaded videos
-  const recentDownloadsQuery = useQuery({
-    queryKey: ["ytdlp", "downloadedVideosDetailed"],
-    queryFn: () => trpcClient.ytdlp.listDownloadedVideosDetailed.query({ limit: 10 }),
-    refetchOnWindowFocus: false,
+  // The Library, most recently kept first (includes Videos still on their way)
+  const libraryQuery = useQuery({
+    queryKey: ["library", "list"],
+    queryFn: () => trpcClient.library.list.query(),
   });
+  const recentlyKept = [...(libraryQuery.data?.videos ?? [])]
+    .sort((a, b) => b.keptAt - a.keptAt)
+    .slice(0, 10);
 
   // Fetch recent playlists
   const recentPlaylistsQuery = useQuery({
@@ -63,20 +66,22 @@ export default function HomePage(): React.JSX.Element {
             {getGreeting()}!
           </h1>
           <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-            Ready to continue your learning journey?
+            Pick up where you left off.
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            onClick={() => navigate({ to: "/my-words" })}
-            variant="default"
-            className="shrink-0 gap-2 bg-orange-500 hover:bg-orange-600"
-            size="lg"
-          >
-            <Play className="h-4 w-4" />
-            <span className="hidden sm:inline">Start Study Session</span>
-            <span className="sm:hidden">Study</span>
-          </Button>
+          {LEARNING_FEATURES_ENABLED && (
+            <Button
+              onClick={() => navigate({ to: "/my-words" })}
+              variant="default"
+              className="shrink-0 gap-2 bg-orange-500 hover:bg-orange-600"
+              size="lg"
+            >
+              <Play className="h-4 w-4" />
+              <span className="hidden sm:inline">Start Study Session</span>
+              <span className="sm:hidden">Study</span>
+            </Button>
+          )}
           <Button
             onClick={() => setQuickAddOpen(true)}
             variant="outline"
@@ -84,7 +89,7 @@ export default function HomePage(): React.JSX.Element {
             size="lg"
           >
             <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">Add Video</span>
+            <span className="hidden sm:inline">Add URL</span>
             <span className="sm:hidden">Add</span>
           </Button>
         </div>
@@ -95,25 +100,12 @@ export default function HomePage(): React.JSX.Element {
         totalWords={statsQuery.data?.flashcards.total ?? 0}
         retentionRate={retentionRate}
         weeklyMinutes={statsQuery.data?.watchTime.weekMinutes ?? 0}
-        totalVideos={statsQuery.data?.videos.total ?? 0}
-        isLoading={isLoading}
+        totalVideos={libraryQuery.data?.videos.length ?? 0}
+        isLoading={isLoading || libraryQuery.isLoading}
       />
 
-      {/* Recent Downloads */}
-      <RecentDownloadsSection
-        videos={
-          recentDownloadsQuery.data?.map((v) => ({
-            videoId: v.videoId,
-            title: v.title,
-            thumbnailUrl: v.thumbnailUrl,
-            thumbnailPath: v.thumbnailPath,
-            channelTitle: v.channelTitle,
-            durationSeconds: v.durationSeconds,
-            lastDownloadedAt: v.lastDownloadedAt,
-          })) ?? []
-        }
-        isLoading={recentDownloadsQuery.isLoading}
-      />
+      {/* Recently kept */}
+      <RecentDownloadsSection videos={recentlyKept} isLoading={libraryQuery.isLoading} />
 
       {/* Recent Playlists */}
       <RecentPlaylistsSection

@@ -18,6 +18,7 @@ import { PlaybackData } from "@/context/playerStore";
 import { toast } from "sonner";
 import { TranscriptContent } from "./TranscriptContent";
 import { TranslationTooltip } from "./TranslationTooltip";
+import { LEARNING_FEATURES_ENABLED } from "@/lib/features";
 import { TranscriptSettingsDialog } from "./TranscriptSettingsDialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -67,7 +68,8 @@ export function TranscriptPanel({
   const { toast: toastHook } = useToast();
 
   // Atoms for settings and shared state
-  const [showInlineTranslations] = useAtom(showInlineTranslationsAtom);
+  const [showInlineTranslationsPreference] = useAtom(showInlineTranslationsAtom);
+  const showInlineTranslations = LEARNING_FEATURES_ENABLED && showInlineTranslationsPreference;
   const [translationTargetLang] = useAtom(translationTargetLangAtom);
   const [fontFamily] = useAtom(fontFamilyAtom);
   const [fontSize] = useAtom(fontSizeAtom);
@@ -932,9 +934,9 @@ export function TranscriptPanel({
                 handleTranscriptSelect();
               }}
               onKeyDown={handleTranscriptKeyDown}
-              onWordMouseEnter={handleWordMouseEnter}
-              onWordMouseLeave={handleWordMouseLeave}
-              onWordClick={handleQuickSave}
+              onWordMouseEnter={LEARNING_FEATURES_ENABLED ? handleWordMouseEnter : () => {}}
+              onWordMouseLeave={LEARNING_FEATURES_ENABLED ? handleWordMouseLeave : () => {}}
+              onWordClick={LEARNING_FEATURES_ENABLED ? handleQuickSave : undefined}
               isSelecting={isSelecting}
               containerRef={transcriptContainerRef}
               segRefs={segRefs}
@@ -943,7 +945,7 @@ export function TranscriptPanel({
             />
 
             {/* Translation Tooltip - appears on long hover */}
-            {hoverTranslation && (
+            {LEARNING_FEATURES_ENABLED && hoverTranslation && (
               <TranslationTooltip
                 word={hoverTranslation.word}
                 translation={hoverTranslation.translation}
@@ -966,7 +968,7 @@ export function TranscriptPanel({
         {/* Controls at bottom */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2">
           {/* Left side - hint text */}
-          {!isCollapsed && segments.length > 0 && (
+          {LEARNING_FEATURES_ENABLED && !isCollapsed && segments.length > 0 && (
             <p className="text-xs italic text-muted-foreground">
               💡 Hover to translate • Double-click to quick save • Saved words in blue
             </p>

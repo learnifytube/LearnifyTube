@@ -13,6 +13,7 @@ import { VocabularySidebar } from "@/components/VocabularySidebar";
 import { AISummarySidebar } from "@/components/AISummarySidebar";
 import { QuizSidebar } from "@/components/QuizSidebar";
 import { Button } from "@/components/ui/button";
+import { LEARNING_FEATURES_ENABLED } from "@/lib/features";
 
 type TabType = "annotations" | "vocabulary" | "ai-summary" | "quiz";
 
@@ -24,11 +25,11 @@ interface VideoToolsPanelProps {
 }
 
 const TABS = [
-  { id: "annotations" as const, label: "Notes", icon: StickyNote },
-  { id: "vocabulary" as const, label: "Vocab", icon: BookOpen },
-  { id: "ai-summary" as const, label: "AI", icon: Sparkles },
-  { id: "quiz" as const, label: "Quiz", icon: Brain },
-];
+  { id: "annotations" as const, label: "Notes", icon: StickyNote, learning: false },
+  { id: "vocabulary" as const, label: "Vocab", icon: BookOpen, learning: true },
+  { id: "ai-summary" as const, label: "AI", icon: Sparkles, learning: true },
+  { id: "quiz" as const, label: "Quiz", icon: Brain, learning: true },
+].filter((tab) => LEARNING_FEATURES_ENABLED || !tab.learning);
 
 export function VideoToolsPanel({
   videoId,

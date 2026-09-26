@@ -1,6 +1,7 @@
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Brain, Target, Clock, Video } from "lucide-react";
+import { LEARNING_FEATURES_ENABLED } from "@/lib/features";
 
 type QuickStatsRowProps = {
   totalWords: number;
@@ -17,7 +18,7 @@ export function QuickStatsRow({
   totalVideos,
   isLoading,
 }: QuickStatsRowProps): React.JSX.Element {
-  const stats = [
+  const learningStats = [
     {
       label: "Words Learned",
       value: totalWords,
@@ -32,6 +33,9 @@ export function QuickStatsRow({
       color: "text-green-500",
       bgColor: "bg-green-50 dark:bg-green-950/30",
     },
+  ];
+  const stats = [
+    ...(LEARNING_FEATURES_ENABLED ? learningStats : []),
     {
       label: "This Week",
       value: formatTime(weeklyMinutes),
@@ -40,7 +44,7 @@ export function QuickStatsRow({
       bgColor: "bg-blue-50 dark:bg-blue-950/30",
     },
     {
-      label: "Videos",
+      label: "In Library",
       value: totalVideos,
       icon: Video,
       color: "text-orange-500",
@@ -50,8 +54,10 @@ export function QuickStatsRow({
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[1, 2, 3, 4].map((i) => (
+      <div
+        className={`grid grid-cols-2 gap-3 ${LEARNING_FEATURES_ENABLED ? "sm:grid-cols-4" : ""}`}
+      >
+        {stats.map((_, i) => (
           <Card key={i}>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -69,7 +75,7 @@ export function QuickStatsRow({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className={`grid grid-cols-2 gap-3 ${LEARNING_FEATURES_ENABLED ? "sm:grid-cols-4" : ""}`}>
       {stats.map((stat) => (
         <Card key={stat.label} className="transition-shadow hover:shadow-md">
           <CardContent className="p-4">

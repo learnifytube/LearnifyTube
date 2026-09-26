@@ -11,6 +11,7 @@ import { PlayerTab } from "./tabs/PlayerTab";
 import { LearningTab } from "./tabs/LearningTab";
 import { SystemTab } from "./tabs/SystemTab";
 import { SyncTab } from "./tabs/SyncTab";
+import { LEARNING_FEATURES_ENABLED } from "@/lib/features";
 
 export function CustomizationSection(): React.JSX.Element {
   const queryClient = useQueryClient();
@@ -49,9 +50,7 @@ export function CustomizationSection(): React.JSX.Element {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Settings</h1>
-          <p className="text-sm text-muted-foreground">
-            Personalize LearnifyTube to match your learning style
-          </p>
+          <p className="text-sm text-muted-foreground">Personalize LearnifyTube</p>
         </div>
         <Button variant="outline" size="sm" onClick={resetPreferences}>
           <RotateCcw className="mr-2 h-4 w-4" />
@@ -60,7 +59,9 @@ export function CustomizationSection(): React.JSX.Element {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList
+          className={`grid w-full ${LEARNING_FEATURES_ENABLED ? "grid-cols-6" : "grid-cols-5"}`}
+        >
           <TabsTrigger value="appearance">
             <Eye className="mr-2 h-4 w-4" />
             Appearance
@@ -73,10 +74,12 @@ export function CustomizationSection(): React.JSX.Element {
             <Play className="mr-2 h-4 w-4" />
             Player
           </TabsTrigger>
-          <TabsTrigger value="learning">
-            <BookOpen className="mr-2 h-4 w-4" />
-            Learning
-          </TabsTrigger>
+          {LEARNING_FEATURES_ENABLED && (
+            <TabsTrigger value="learning">
+              <BookOpen className="mr-2 h-4 w-4" />
+              Learning
+            </TabsTrigger>
+          )}
           <TabsTrigger value="sync">
             <Smartphone className="mr-2 h-4 w-4" />
             Sync
@@ -99,9 +102,11 @@ export function CustomizationSection(): React.JSX.Element {
           <PlayerTab preferences={preferences} updatePreferences={updatePreferences} />
         </TabsContent>
 
-        <TabsContent value="learning">
-          <LearningTab preferences={preferences} updatePreferences={updatePreferences} />
-        </TabsContent>
+        {LEARNING_FEATURES_ENABLED && (
+          <TabsContent value="learning">
+            <LearningTab preferences={preferences} updatePreferences={updatePreferences} />
+          </TabsContent>
+        )}
 
         <TabsContent value="sync">
           <SyncTab />

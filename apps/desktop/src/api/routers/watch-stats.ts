@@ -4,6 +4,7 @@ import { logger } from "@/helpers/logger";
 import { eq, desc, inArray, sql } from "drizzle-orm";
 import { youtubeVideos, videoWatchStats } from "@/api/db/schema";
 import defaultDb from "@/api/db";
+import { isPlayedEnough } from "@/lib/watch-state";
 
 // Return types for watch-stats router
 type RecordProgressSuccess = {
@@ -74,6 +75,15 @@ export const watchStatsRouter = t.router({
           .where(eq(videoWatchStats.videoId, input.videoId))
           .limit(1);
 
+        const [video] = await db
+          .select({ durationSeconds: youtubeVideos.durationSeconds })
+          .from(youtubeVideos)
+          .where(eq(youtubeVideos.videoId, input.videoId))
+          .limit(1);
+        const playedEnough =
+          input.positionSeconds !== undefined &&
+          isPlayedEnough(input.positionSeconds, video?.durationSeconds ?? null);
+
         if (existing.length === 0) {
           await db.insert(videoWatchStats).values({
             id: crypto.randomUUID(),
@@ -81,6 +91,7 @@ export const watchStatsRouter = t.router({
             totalWatchSeconds: Math.floor(input.deltaSeconds),
             lastPositionSeconds: Math.floor(input.positionSeconds ?? 0),
             lastWatchedAt: now,
+            watchedAt: playedEnough ? now : null,
             createdAt: now,
             updatedAt: now,
           });
@@ -97,6 +108,7 @@ export const watchStatsRouter = t.router({
                 input.positionSeconds ?? prev.lastPositionSeconds ?? 0
               ),
               lastWatchedAt: now,
+              watchedAt: prev.watchedAt ?? (playedEnough ? now : null),
               updatedAt: now,
             })
             .where(eq(videoWatchStats.videoId, input.videoId));
@@ -106,6 +118,22 @@ export const watchStatsRouter = t.router({
         logger.error("[watch-stats] recordProgress failed", e);
         return { success: false };
       }
+    }),
+
+  // Mark a Video watched, or back to unwatched (which also forgets where playback stopped)
+  setWatched: publicProcedure
+    .input(z.object({ videoId: z.string(), watched: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = ctx.db ?? defaultDb;
+      const now = Date.now();
+      const changes = input.watched
+        ? { watchedAt: now, updatedAt: now }
+        : { watchedAt: null, lastPositionSeconds: 0, updatedAt: now };
+      await db
+        .insert(videoWatchStats)
+        .values({ id: crypto.randomUUID(), videoId: input.videoId, createdAt: now, ...changes })
+        .onConflictDoUpdate({ target: videoWatchStats.videoId, set: changes });
+      return { success: true };
     }),
 
   // List recently watched videos joined with metadata

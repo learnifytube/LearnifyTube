@@ -7,14 +7,18 @@ import { Badge } from "@/components/ui/badge";
 import type { SidebarItem } from "@/lib/types/user-preferences";
 
 const SIDEBAR_ITEMS: { id: SidebarItem; label: string; description: string }[] = [
-  { id: "dashboard", label: "Dashboard", description: "Overview and quick stats" },
-  { id: "channels", label: "Channels", description: "Browse YouTube channels" },
-  { id: "playlists", label: "Playlists", description: "Manage playlists" },
-  { id: "subscriptions", label: "Subscriptions", description: "Your subscribed channels" },
-  { id: "history", label: "History", description: "Watch history" },
-  { id: "my-words", label: "My Words", description: "Saved vocabulary" },
-  { id: "storage", label: "Storage", description: "Manage downloaded videos" },
-  { id: "logs", label: "Logs", description: "Debug logs (dev mode)" },
+  { id: "channels", label: "Channels", description: "Find Videos from YouTube channels" },
+  {
+    id: "playlists",
+    label: "YouTube playlists",
+    description: "Find Videos from YouTube playlists",
+  },
+  {
+    id: "subscriptions",
+    label: "Subscriptions",
+    description: "New Videos from Channels you follow",
+  },
+  { id: "storage", label: "Storage", description: "Disk space used by your Library" },
   { id: "settings", label: "Settings", description: "App configuration" },
 ];
 

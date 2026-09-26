@@ -16,6 +16,8 @@ import AnalyticsPage from "@/pages/analytics/AnalyticsPage";
 import StorageManagerPage from "@/pages/storage/StorageManagerPage";
 import MobileSyncPage from "@/pages/mobile-sync/MobileSyncPage";
 import LogPage from "@/pages/app-debug-logs/index";
+import LibraryPage from "@/pages/library/LibraryPage";
+import { LEARNING_FEATURES_ENABLED } from "@/lib/features";
 
 // Check if we're in development mode
 // In Electron renderer, check window.location - if it's http(s)://, we're in dev mode
@@ -138,6 +140,12 @@ const AnalyticsRoute = createRoute({
   component: AnalyticsPage,
 });
 
+const LibraryRoute = createRoute({
+  getParentRoute: () => RootRoute,
+  path: "/library",
+  component: LibraryPage,
+});
+
 const StorageRoute = createRoute({
   getParentRoute: () => RootRoute,
   path: "/storage",
@@ -162,8 +170,8 @@ const baseRoutes = [
   MyPlaylistsRoute,
   SubscriptionsRoute,
   HistoryRoute,
-  MyWordsRoute,
-  AnalyticsRoute,
+  ...(LEARNING_FEATURES_ENABLED ? [MyWordsRoute, AnalyticsRoute] : []),
+  LibraryRoute,
   StorageRoute,
   MobileSyncRoute,
 ];

@@ -1,10 +1,5 @@
-import { desc, eq, inArray } from "drizzle-orm";
-import {
-  youtubeVideos,
-  userPreferences,
-  playlistItems,
-  channelPlaylists,
-} from "@/api/db/schema";
+import { desc, eq, inArray, sql } from "drizzle-orm";
+import { youtubeVideos, userPreferences, playlistItems, channelPlaylists } from "@/api/db/schema";
 import type { Database } from "@/api/db";
 import { DEFAULT_QUEUE_CONFIG } from "./config";
 import type { QueueConfig, QueueStatus, QueueStats, QueuedDownload } from "./types";
@@ -78,18 +73,12 @@ const sanitizeFolderName = (name: string): string => {
  * Returns the playlist title to use as a folder name, or null when the video
  * is not associated with any channel playlist.
  */
-const getPrimaryPlaylistTitle = async (
-  db: Database,
-  videoId: string
-): Promise<string | null> => {
+const getPrimaryPlaylistTitle = async (db: Database, videoId: string): Promise<string | null> => {
   try {
     const rows = await db
       .select({ title: channelPlaylists.title })
       .from(playlistItems)
-      .innerJoin(
-        channelPlaylists,
-        eq(channelPlaylists.playlistId, playlistItems.playlistId)
-      )
+      .innerJoin(channelPlaylists, eq(channelPlaylists.playlistId, playlistItems.playlistId))
       .where(eq(playlistItems.videoId, videoId))
       .orderBy(playlistItems.position)
       .limit(1);
@@ -328,6 +317,7 @@ const createQueueManager = (
         .set({
           downloadStatus: "downloading",
           downloadProgress: progress,
+          keptAt: sql`COALESCE(${youtubeVideos.keptAt}, ${item.addedAt})`,
           updatedAt: Date.now(),
         })
         .where(eq(youtubeVideos.videoId, vid))
@@ -359,6 +349,7 @@ const createQueueManager = (
           downloadFilePath: filePath,
           downloadFileSize: fileSize || null,
           lastDownloadedAt: Date.now(),
+          keptAt: sql`COALESCE(${youtubeVideos.keptAt}, ${item.addedAt})`,
           updatedAt: Date.now(),
         })
         .where(eq(youtubeVideos.videoId, item.videoId))
@@ -663,9 +654,7 @@ const createQueueManager = (
           // Get output path from preferences or use default.
           // Layout: <downloadsRoot>/<channelTitle>/<playlistTitle?>/<filename>
           const downloadsRoot = await getDownloadPath(db);
-          const channelFolder = item.channelTitle
-            ? sanitizeFolderName(item.channelTitle)
-            : "";
+          const channelFolder = item.channelTitle ? sanitizeFolderName(item.channelTitle) : "";
           const playlistTitle = item.videoId
             ? await getPrimaryPlaylistTitle(db, item.videoId)
             : null;
@@ -689,6 +678,8 @@ const createQueueManager = (
               .set({
                 downloadStatus: "downloading",
                 downloadProgress: 0,
+                // The row may only exist now: QuickAdd fetches metadata while the Video is queued
+                keptAt: sql`COALESCE(${youtubeVideos.keptAt}, ${item.addedAt})`,
                 updatedAt: Date.now(),
               })
               .where(eq(youtubeVideos.videoId, item.videoId))
@@ -819,9 +810,7 @@ const createQueueManager = (
               // A "queued"/"downloading" status with no in-memory entry means the
               // previous run was interrupted; allow the user to re-add it.
               if (status === "downloading" || status === "queued") {
-                const liveEntry = Array.from(queue.values()).find(
-                  (q) => q.videoId === videoId
-                );
+                const liveEntry = Array.from(queue.values()).find((q) => q.videoId === videoId);
                 if (liveEntry) {
                   logger.info("[queue-manager] Skipping duplicate - already in progress", {
                     videoId,
@@ -931,6 +920,7 @@ const createQueueManager = (
               .set({
                 downloadStatus: "queued",
                 downloadProgress: 0,
+                keptAt: sql`COALESCE(${youtubeVideos.keptAt}, ${now})`,
                 updatedAt: now,
               })
               .where(eq(youtubeVideos.videoId, videoId))
@@ -1084,6 +1074,7 @@ const createQueueManager = (
           .update(youtubeVideos)
           .set({
             downloadStatus: "cancelled",
+            keptAt: null,
             updatedAt: Date.now(),
           })
           .where(eq(youtubeVideos.videoId, item.videoId));
@@ -1300,6 +1291,7 @@ const createQueueManager = (
           downloadFilePath: null,
           downloadFileSize: null,
           lastDownloadedAt: null,
+          keptAt: null,
           updatedAt: Date.now(),
         })
         .where(eq(youtubeVideos.downloadStatus, "completed"))

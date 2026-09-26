@@ -15,10 +15,10 @@ import {
 
 const LIBRARY_ONLY = "library-only";
 
-type Settings = { enabled: boolean; listId?: string | null };
+type Settings = { enabled: boolean; listId?: string | null; removeWatched?: boolean };
 
-// Auto-keep for a subscribed Channel: on/off, the List new Videos also go into, and how the
-// last check went.
+// Auto-keep for a subscribed Channel: on/off, the List new Videos also go into (and whether
+// they leave it once watched), and how the last check went.
 export function AutoKeepControl({ channelId }: { channelId: string }): React.JSX.Element | null {
   const queryClient = useQueryClient();
   const statusQuery = useQuery({
@@ -39,7 +39,7 @@ export function AutoKeepControl({ channelId }: { channelId: string }): React.JSX
         return;
       }
       await queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
-      if (settings.listId === undefined) {
+      if (settings.listId === undefined && settings.removeWatched === undefined) {
         toast.success(settings.enabled ? "Auto-keep on" : "Auto-keep off");
       }
     },
@@ -90,6 +90,20 @@ export function AutoKeepControl({ channelId }: { channelId: string }): React.JSX
         </Select>
         {status.listDeleted && <span className="text-destructive">List was deleted</span>}
       </div>
+
+      {status.listId !== null && !status.listDeleted && (
+        <div className="flex items-center gap-2">
+          <Switch
+            id="auto-keep-remove-watched"
+            checked={status.removeWatched}
+            onCheckedChange={(removeWatched) =>
+              mutation.mutate({ enabled: status.enabled, removeWatched })
+            }
+            disabled={mutation.isPending}
+          />
+          <Label htmlFor="auto-keep-remove-watched">Remove from the List once watched</Label>
+        </div>
+      )}
 
       {status.enabled && (
         <span className={status.lastCheckFailed ? "text-destructive" : "text-muted-foreground"}>

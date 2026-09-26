@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { publicProcedure, t } from "@/api/trpc";
 import { logger } from "@/helpers/logger";
-import { eq, desc, inArray } from "drizzle-orm";
+import { desc, inArray } from "drizzle-orm";
 import { youtubeVideos, videoWatchStats } from "@/api/db/schema";
 import defaultDb from "@/api/db";
-import { isPlayedEnough } from "@/lib/watch-state";
+import { recordWatchProgress, setWatched } from "@/api/library/watch";
 
 // Return types for watch-stats router
 type RecordProgressSuccess = {
@@ -47,53 +47,8 @@ export const watchStatsRouter = t.router({
       })
     )
     .mutation(async ({ input, ctx }): Promise<RecordProgressResult> => {
-      const db = ctx.db ?? defaultDb;
-      const now = Date.now();
       try {
-        const existing = await db
-          .select()
-          .from(videoWatchStats)
-          .where(eq(videoWatchStats.videoId, input.videoId))
-          .limit(1);
-
-        const [video] = await db
-          .select({ durationSeconds: youtubeVideos.durationSeconds })
-          .from(youtubeVideos)
-          .where(eq(youtubeVideos.videoId, input.videoId))
-          .limit(1);
-        const playedEnough =
-          input.positionSeconds !== undefined &&
-          isPlayedEnough(input.positionSeconds, video?.durationSeconds ?? null);
-
-        if (existing.length === 0) {
-          await db.insert(videoWatchStats).values({
-            id: crypto.randomUUID(),
-            videoId: input.videoId,
-            totalWatchSeconds: Math.floor(input.deltaSeconds),
-            lastPositionSeconds: Math.floor(input.positionSeconds ?? 0),
-            lastWatchedAt: now,
-            watchedAt: playedEnough ? now : null,
-            createdAt: now,
-            updatedAt: now,
-          });
-        } else {
-          const prev = existing[0];
-          await db
-            .update(videoWatchStats)
-            .set({
-              totalWatchSeconds: Math.max(
-                0,
-                (prev.totalWatchSeconds ?? 0) + Math.floor(input.deltaSeconds)
-              ),
-              lastPositionSeconds: Math.floor(
-                input.positionSeconds ?? prev.lastPositionSeconds ?? 0
-              ),
-              lastWatchedAt: now,
-              watchedAt: prev.watchedAt ?? (playedEnough ? now : null),
-              updatedAt: now,
-            })
-            .where(eq(videoWatchStats.videoId, input.videoId));
-        }
+        await recordWatchProgress(ctx.db ?? defaultDb, input);
         return { success: true };
       } catch (e) {
         logger.error("[watch-stats] recordProgress failed", e);
@@ -105,15 +60,7 @@ export const watchStatsRouter = t.router({
   setWatched: publicProcedure
     .input(z.object({ videoId: z.string(), watched: z.boolean() }))
     .mutation(async ({ input, ctx }) => {
-      const db = ctx.db ?? defaultDb;
-      const now = Date.now();
-      const changes = input.watched
-        ? { watchedAt: now, updatedAt: now }
-        : { watchedAt: null, lastPositionSeconds: 0, updatedAt: now };
-      await db
-        .insert(videoWatchStats)
-        .values({ id: crypto.randomUUID(), videoId: input.videoId, createdAt: now, ...changes })
-        .onConflictDoUpdate({ target: videoWatchStats.videoId, set: changes });
+      await setWatched(ctx.db ?? defaultDb, input.videoId, input.watched);
       return { success: true };
     }),
 

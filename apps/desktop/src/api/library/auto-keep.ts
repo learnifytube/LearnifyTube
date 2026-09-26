@@ -4,6 +4,7 @@ import { autoKeepConsidered, channels, customPlaylists } from "@/api/db/schema";
 import { logger } from "@/helpers/logger";
 import { selectAutoKeep, type LatestVideo } from "@/lib/auto-keep";
 import { BUILT_IN_LIST_NAMES } from "@/lib/lists";
+import { recordAutoKeptEntries, removeWatchedAutoKept } from "./auto-keep-lists";
 import { keepVideos, type KeepQueue } from "./keep";
 
 export type AutoKeepDeps = {
@@ -20,6 +21,7 @@ export const autoKeepColumns = {
   customListName: customPlaylists.name,
   checkedAt: channels.autoKeepCheckedAt,
   checkFailed: channels.autoKeepCheckFailed,
+  removeWatched: channels.autoKeepRemoveWatched,
 };
 
 type AutoKeepRow = {
@@ -28,6 +30,7 @@ type AutoKeepRow = {
   customListName: string | null;
   checkedAt: number | null;
   checkFailed: boolean | null;
+  removeWatched: boolean;
 };
 
 // A Subscription's Auto-keep as the user sees it. A target List that no longer exists is
@@ -39,6 +42,8 @@ export type AutoKeepStatus = {
   listDeleted: boolean;
   lastCheckedAt: number | null;
   lastCheckFailed: boolean;
+  // Remove a Video from the target List once it is watched
+  removeWatched: boolean;
 };
 
 export const describeAutoKeep = (row: AutoKeepRow): AutoKeepStatus => {
@@ -52,6 +57,7 @@ export const describeAutoKeep = (row: AutoKeepRow): AutoKeepStatus => {
     listDeleted: row.listId !== null && listName === null,
     lastCheckedAt: row.checkedAt,
     lastCheckFailed: row.checkFailed ?? false,
+    removeWatched: row.removeWatched,
   };
 };
 
@@ -75,18 +81,24 @@ export const getAutoKeep = async (
 };
 
 // Switch Auto-keep on or off for a Subscription, or change its target List (null: Library
-// only; left out: unchanged). Switching on records when, and remembers every Video of the
-// Channel the app already knows as considered, so none of them is ever auto-kept; follow it
-// with takeAutoKeepBaseline to do the same for what YouTube lists right now.
+// only) or "Remove from the List once watched" (either left out: unchanged). Switching on
+// records when, and remembers every Video of the Channel the app already knows as
+// considered, so none of them is ever auto-kept; follow it with takeAutoKeepBaseline to do
+// the same for what YouTube lists right now. While both Auto-keep and "Remove once watched"
+// are on, saving takes the Videos it auto-kept that are already watched out of their List.
 export const setAutoKeep = async (
   db: Database,
   channelId: string,
-  { enabled, listId }: { enabled: boolean; listId?: string | null },
+  {
+    enabled,
+    listId,
+    removeWatched,
+  }: { enabled: boolean; listId?: string | null; removeWatched?: boolean },
   now = Date.now()
 ): Promise<"not-subscribed" | "switched-on" | "saved"> => {
   const subscription = and(eq(channels.channelId, channelId), isNotNull(channels.subscribedAt));
   const [current] = await db
-    .select({ since: channels.autoKeepSince })
+    .select({ since: channels.autoKeepSince, removeWatched: channels.autoKeepRemoveWatched })
     .from(channels)
     .where(subscription);
   if (!current) return "not-subscribed";
@@ -103,9 +115,13 @@ export const setAutoKeep = async (
     .set({
       autoKeepSince: enabled ? (current.since ?? now) : null,
       ...(listId !== undefined && { autoKeepListId: listId }),
+      ...(removeWatched !== undefined && { autoKeepRemoveWatched: removeWatched }),
       updatedAt: now,
     })
     .where(subscription);
+  if (enabled && (removeWatched ?? current.removeWatched)) {
+    await removeWatchedAutoKept(db, { channelId });
+  }
   return switchingOn ? "switched-on" : "saved";
 };
 
@@ -147,8 +163,17 @@ const checkSubscription = async (
 
     if (keep.length > 0) {
       const targetListId = listId !== null && !listDeleted ? listId : undefined;
+      const keptAt = Date.now();
       const result = await keepVideos(db, deps.queue, keep, targetListId);
       if (!result.success && result.reason === "failed") throw new Error(result.message);
+      if (targetListId) {
+        await recordAutoKeptEntries(db, {
+          channelId,
+          listId: targetListId,
+          videoIds: keep,
+          since: keptAt,
+        });
+      }
     }
     if (markConsidered.length > 0) {
       const now = Date.now();

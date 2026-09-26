@@ -6,7 +6,15 @@ import { eq, inArray } from "drizzle-orm";
 import * as schema from "@/api/db/schema";
 import type { LatestVideo } from "@/lib/auto-keep";
 import { PHONE_LIST_ID } from "@/lib/lists";
-import { loadOnDeviceSetIds, setListOnDevices } from "@/api/on-device/store";
+import {
+  addToPhoneList,
+  loadOnDeviceSetIds,
+  recordDeviceReport,
+  removeFromPhoneList,
+  setListOnDevices,
+} from "@/api/on-device/store";
+import { addToList } from "./add-to-list";
+import { recordWatchProgress, setWatched } from "./watch";
 import { getAutoKeep, runAutoKeepChecks, setAutoKeep, takeAutoKeepBaseline } from "./auto-keep";
 import { loadNewFromSubscriptions } from "./new-from-subscriptions";
 import { setSubscribed } from "./subscriptions";
@@ -261,5 +269,202 @@ describe("Auto-keep", () => {
   it("cannot be switched on for a Channel that is not a Subscription", async () => {
     await setSubscribed(db, CHANNEL, false);
     expect(await setAutoKeep(db, CHANNEL, { enabled: true })).toBe("not-subscribed");
+  });
+});
+
+describe("Auto-keep: Remove from the List once watched", () => {
+  let db: Db;
+  let youtube: ReturnType<typeof createChannelListing>;
+  const OTHER = "other-chan";
+  const deps = () => ({ fetchLatest: youtube.fetchLatest, queue: createQueue(db) });
+  const check = () => runAutoKeepChecks(db, deps());
+
+  const listVideoIds = async () =>
+    (await db.query.customPlaylistItems.findMany()).map((i) => i.videoId).sort();
+
+  // Plays a Video to the given fraction of its 100 seconds on the desktop
+  const playOnDesktop = (videoId: string, fraction: number) =>
+    recordWatchProgress(db, { videoId, deltaSeconds: 5, positionSeconds: 100 * fraction });
+
+  const reportFromDevice = (videoId: string, fraction: number) =>
+    recordDeviceReport(
+      db,
+      {
+        deviceId: "tv",
+        name: "TV",
+        kind: "tv",
+        offlineVideoIds: [videoId],
+        watch: [{ videoId, lastPositionSeconds: 100 * fraction, lastWatchedAt: Date.now() + 1 }],
+      },
+      Date.now()
+    );
+
+  // Auto-keep a new Video of the Channel into the target List
+  const autoKeep = async (videoId: string) => {
+    youtube.publish(videoId);
+    await check();
+    await db
+      .update(schema.youtubeVideos)
+      .set({ durationSeconds: 100 })
+      .where(eq(schema.youtubeVideos.videoId, videoId));
+  };
+
+  beforeEach(async () => {
+    db = await createDb();
+    youtube = createChannelListing(db);
+    for (const channelId of [CHANNEL, OTHER]) {
+      await db.insert(schema.channels).values({
+        id: channelId,
+        channelId,
+        channelTitle: channelId,
+        createdAt: 1,
+        subscribedAt: 1,
+      });
+    }
+    await db.insert(schema.customPlaylists).values({ id: "list", name: "Commute", createdAt: 1 });
+    await setListOnDevices(db, "list", true);
+    await setAutoKeep(db, CHANNEL, { enabled: true, listId: "list", removeWatched: true });
+  });
+
+  it("is off by default", async () => {
+    await setAutoKeep(db, OTHER, { enabled: true, listId: "list" });
+    expect(await getAutoKeep(db, OTHER)).toMatchObject({ removeWatched: false });
+    expect(await getAutoKeep(db, CHANNEL)).toMatchObject({ removeWatched: true });
+  });
+
+  it("removes an auto-kept Video from the List once ~90% played on the desktop", async () => {
+    await autoKeep("new");
+
+    await playOnDesktop("new", 0.5);
+    expect(await listVideoIds()).toEqual(["new"]);
+
+    await playOnDesktop("new", 0.9);
+    expect(await listVideoIds()).toEqual([]);
+    expect(await loadOnDeviceSetIds(db)).toEqual(new Set());
+    const video = await db.query.youtubeVideos.findFirst({
+      where: eq(schema.youtubeVideos.videoId, "new"),
+    });
+    expect(video?.keptAt).not.toBeNull();
+    const stats = await db.query.videoWatchStats.findFirst();
+    expect(stats?.watchedAt).not.toBeNull();
+  });
+
+  it("removes an auto-kept Video from the List when marked watched", async () => {
+    await autoKeep("new");
+    await setWatched(db, "new", true);
+    expect(await listVideoIds()).toEqual([]);
+  });
+
+  it("removes an auto-kept Video from the List when a Device reports it watched", async () => {
+    await autoKeep("new");
+
+    await reportFromDevice("new", 0.95);
+
+    expect(await listVideoIds()).toEqual([]);
+    expect(await loadOnDeviceSetIds(db)).toEqual(new Set());
+  });
+
+  it("does not put the Video back when it is marked unwatched", async () => {
+    await autoKeep("new");
+    await setWatched(db, "new", true);
+    await setWatched(db, "new", false);
+    await check();
+    expect(await listVideoIds()).toEqual([]);
+  });
+
+  it("leaves a Video the user added to the List by hand", async () => {
+    await autoKeep("auto");
+    youtube.publish("by-hand", { isShort: true }); // never auto-kept
+    await youtube.fetchLatest(CHANNEL);
+    await db
+      .update(schema.youtubeVideos)
+      .set({ durationSeconds: 100 })
+      .where(eq(schema.youtubeVideos.videoId, "by-hand"));
+    await addToList(db, "list", ["by-hand"]);
+
+    await playOnDesktop("by-hand", 1);
+    await playOnDesktop("auto", 1);
+
+    expect(await listVideoIds()).toEqual(["by-hand"]);
+  });
+
+  it("leaves a Video the user put back into the List after removing it", async () => {
+    await autoKeep("new");
+    await db.delete(schema.customPlaylistItems);
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await addToList(db, "list", ["new"]);
+
+    await playOnDesktop("new", 1);
+
+    expect(await listVideoIds()).toEqual(["new"]);
+  });
+
+  it("leaves a Video another Subscription auto-kept into the same List", async () => {
+    await setAutoKeep(db, OTHER, { enabled: true, listId: "list" });
+    youtube.publish("theirs");
+    // Only the other Channel lists the new Video
+    await runAutoKeepChecks(db, {
+      ...deps(),
+      fetchLatest: async (channelId) => (channelId === OTHER ? youtube.fetchLatest(OTHER) : []),
+    });
+    await db.update(schema.youtubeVideos).set({ durationSeconds: 100 });
+
+    await playOnDesktop("theirs", 1);
+
+    expect(await listVideoIds()).toEqual(["theirs"]);
+  });
+
+  it("changes nothing while the switch is off", async () => {
+    await setAutoKeep(db, CHANNEL, { enabled: true, removeWatched: false });
+    await autoKeep("new");
+
+    await playOnDesktop("new", 1);
+    await reportFromDevice("new", 1);
+
+    expect(await listVideoIds()).toEqual(["new"]);
+  });
+
+  it("removes already-watched auto-kept Videos as soon as the switch goes on", async () => {
+    await setAutoKeep(db, CHANNEL, { enabled: true, removeWatched: false });
+    await autoKeep("new");
+    await playOnDesktop("new", 1);
+    expect(await listVideoIds()).toEqual(["new"]);
+
+    await setAutoKeep(db, CHANNEL, { enabled: true, removeWatched: true });
+
+    expect(await listVideoIds()).toEqual([]);
+  });
+
+  it("removes already-watched auto-kept Videos when Auto-keep goes back on", async () => {
+    await autoKeep("new");
+    await setAutoKeep(db, CHANNEL, { enabled: false, removeWatched: true });
+    await playOnDesktop("new", 1);
+    expect(await listVideoIds()).toEqual(["new"]);
+
+    await setAutoKeep(db, CHANNEL, { enabled: true });
+
+    expect(await listVideoIds()).toEqual([]);
+  });
+
+  it("removes from the Phone List as the target List too", async () => {
+    await setAutoKeep(db, CHANNEL, { enabled: true, listId: PHONE_LIST_ID });
+    await autoKeep("new");
+    expect(await loadOnDeviceSetIds(db)).toEqual(new Set(["new"]));
+
+    await playOnDesktop("new", 1);
+
+    expect(await loadOnDeviceSetIds(db)).toEqual(new Set());
+  });
+
+  it("leaves the Phone List entry the user put back by hand", async () => {
+    await setAutoKeep(db, CHANNEL, { enabled: true, listId: PHONE_LIST_ID });
+    await autoKeep("new");
+    await removeFromPhoneList(db, "new");
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await addToPhoneList(db, "new");
+
+    await playOnDesktop("new", 1);
+
+    expect(await loadOnDeviceSetIds(db)).toEqual(new Set(["new"]));
   });
 });

@@ -39,7 +39,8 @@ export const subscriptionsRouter = t.router({
     .input(z.object({ channelId: z.string() }))
     .query(({ input, ctx }) => getAutoKeep(ctx.db ?? defaultDb, input.channelId)),
 
-  // Switch Auto-keep on or off, or pick its target List (null: Library only). Switching on
+  // Switch Auto-keep on or off, pick its target List (null: Library only) or switch "Remove
+  // from the List once watched". Switching on
   // takes the baseline straight away, so it waits for YouTube.
   setAutoKeep: publicProcedure
     .input(
@@ -47,6 +48,7 @@ export const subscriptionsRouter = t.router({
         channelId: z.string(),
         enabled: z.boolean(),
         listId: z.string().nullable().optional(),
+        removeWatched: z.boolean().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {

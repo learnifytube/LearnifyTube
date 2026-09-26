@@ -32,6 +32,10 @@ export const channels = sqliteTable(
     autoKeepListId: text("auto_keep_list_id"),
     autoKeepCheckedAt: integer("auto_keep_checked_at"),
     autoKeepCheckFailed: integer("auto_keep_check_failed", { mode: "boolean" }),
+    // Remove a Video Auto-keep put into a List from that List once it is watched
+    autoKeepRemoveWatched: integer("auto_keep_remove_watched", { mode: "boolean" })
+      .notNull()
+      .default(false),
 
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at"),
@@ -52,6 +56,22 @@ export const autoKeepConsidered = sqliteTable(
     consideredAt: integer("considered_at").notNull(),
   },
   (table) => [primaryKey({ columns: [table.channelId, table.videoId] })]
+);
+
+// List entries a Subscription's Auto-keep added, with the entry's own added time, so they can
+// be told apart from Videos the user put in the same List (or put back after removing them).
+export const autoKeepListItems = sqliteTable(
+  "auto_keep_list_items",
+  {
+    listId: text("list_id").notNull(),
+    videoId: text("video_id").notNull(),
+    channelId: text("channel_id").notNull(),
+    addedAt: integer("added_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.listId, table.videoId] }),
+    index("auto_keep_list_items_video_id_idx").on(table.videoId),
+  ]
 );
 
 export const youtubeVideos = sqliteTable(

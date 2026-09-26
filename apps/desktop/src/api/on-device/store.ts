@@ -12,6 +12,7 @@ import {
 } from "@/api/db/schema";
 import { computeOnDeviceSet } from "./on-device-set";
 import { mergeDeviceWatch } from "./device-watch";
+import { removeWatchedAutoKept } from "@/api/library/auto-keep-lists";
 
 import { FAVORITES_LIST_ID } from "@/lib/lists";
 
@@ -131,6 +132,7 @@ export const recordDeviceReport = async (
   ]);
   const durations = new Map(videos.map((v) => [v.videoId, v.durationSeconds]));
   const statsByVideo = new Map(stats.map((s) => [s.videoId, s]));
+  const becameWatched: string[] = [];
 
   for (const entry of report.watch) {
     // Only Videos the desktop knows; a Device can hold Videos from another desktop.
@@ -138,6 +140,7 @@ export const recordDeviceReport = async (
     const existing = statsByVideo.get(entry.videoId) ?? null;
     const changes = mergeDeviceWatch(existing, entry, durations.get(entry.videoId) ?? null);
     if (!changes) continue;
+    if (changes.watchedAt && !existing?.watchedAt) becameWatched.push(entry.videoId);
     if (existing) {
       await db
         .update(videoWatchStats)
@@ -153,6 +156,7 @@ export const recordDeviceReport = async (
       });
     }
   }
+  await removeWatchedAutoKept(db, { videoIds: becameWatched });
 };
 
 // Each Device as it last reported, measured against the current On-device set.

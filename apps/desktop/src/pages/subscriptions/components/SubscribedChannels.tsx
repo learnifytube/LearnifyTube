@@ -3,6 +3,32 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { trpcClient } from "@/utils/trpc";
 import Thumbnail from "@/components/Thumbnail";
+import { Repeat } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+type AutoKeep = Awaited<ReturnType<typeof trpcClient.subscriptions.list.query>>[number]["autoKeep"];
+
+// Whether a Subscription auto-keeps, and where to, when it does
+function AutoKeepBadge({ autoKeep }: { autoKeep: AutoKeep }): React.JSX.Element | null {
+  if (!autoKeep.enabled) return null;
+  const problem = autoKeep.listDeleted
+    ? "List was deleted"
+    : autoKeep.lastCheckFailed
+      ? "last check failed"
+      : null;
+  return (
+    <span
+      className={cn(
+        "flex items-center gap-1 text-xs",
+        problem ? "text-destructive" : "text-muted-foreground"
+      )}
+    >
+      <Repeat className="h-3 w-3" />
+      Auto-keep{autoKeep.listName && !autoKeep.listDeleted ? ` → ${autoKeep.listName}` : ""}
+      {problem && ` (${problem})`}
+    </span>
+  );
+}
 
 // The user's Subscriptions as a compact row of Channels, each linking to its Channel page
 export function SubscribedChannels(): React.JSX.Element | null {
@@ -39,6 +65,7 @@ export function SubscribedChannels(): React.JSX.Element | null {
             fallbackIcon={<div className="h-6 w-6 rounded-full bg-muted" />}
           />
           <span className="max-w-[12rem] truncate">{channel.channelTitle}</span>
+          <AutoKeepBadge autoKeep={channel.autoKeep} />
         </Link>
       ))}
     </div>

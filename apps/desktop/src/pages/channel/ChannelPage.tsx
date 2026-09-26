@@ -19,7 +19,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ExternalLink } from "@/components/ExternalLink";
 import { PageContainer } from "@/components/ui/page-container";
 import { toast } from "sonner";
-import { ChannelVideosTab, LibraryTab, PlaylistsTab, SubscribeButton } from "./components";
+import {
+  AutoKeepControl,
+  ChannelVideosTab,
+  LibraryTab,
+  PlaylistsTab,
+  SubscribeButton,
+} from "./components";
 import { RefreshCw, Trash2 } from "lucide-react";
 import Thumbnail from "@/components/Thumbnail";
 
@@ -217,6 +223,8 @@ export default function ChannelPage(): React.JSX.Element {
                   </Button>
                 </div>
               </div>
+
+              {channel.subscribedAt !== null && <AutoKeepControl channelId={channel.channelId} />}
 
               {channel.channelDescription && (
                 <p className="line-clamp-3 text-sm text-muted-foreground">

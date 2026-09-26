@@ -1,12 +1,14 @@
 import { asc, eq, isNotNull, sql } from "drizzle-orm";
 import type { Database } from "@/api/db";
-import { channels, youtubeVideos } from "@/api/db/schema";
+import { channels, customPlaylists, youtubeVideos } from "@/api/db/schema";
+import { autoKeepColumns, describeAutoKeep, type AutoKeepStatus } from "./auto-keep";
 
 type Subscription = {
   channelId: string;
   channelTitle: string;
   thumbnailUrl: string | null;
   thumbnailPath: string | null;
+  autoKeep: AutoKeepStatus;
 };
 
 type SubscriptionVideo = Pick<
@@ -28,7 +30,8 @@ type SubscriptionVideo = Pick<
 >;
 
 // Subscribe or unsubscribe a Channel. Unsubscribing leaves every kept Video alone; it only
-// stops the Channel's new Videos showing up. Returns false when the app does not know the Channel.
+// stops the Channel's new Videos showing up and switches Auto-keep off.
+// Returns false when the app does not know the Channel.
 export const setSubscribed = async (
   db: Database,
   channelId: string,
@@ -38,6 +41,7 @@ export const setSubscribed = async (
     .update(channels)
     .set({
       subscribedAt: subscribed ? sql`coalesce(${channels.subscribedAt}, ${Date.now()})` : null,
+      ...(!subscribed && { autoKeepSince: null }),
       updatedAt: Date.now(),
     })
     .where(eq(channels.channelId, channelId))
@@ -45,17 +49,26 @@ export const setSubscribed = async (
   return updated.length > 0;
 };
 
-export const listSubscriptions = (db: Database): Promise<Subscription[]> =>
-  db
+export const listSubscriptions = async (db: Database): Promise<Subscription[]> => {
+  const rows = await db
     .select({
-      channelId: channels.channelId,
       channelTitle: channels.channelTitle,
       thumbnailUrl: channels.thumbnailUrl,
       thumbnailPath: channels.thumbnailPath,
+      ...autoKeepColumns,
     })
     .from(channels)
+    .leftJoin(customPlaylists, eq(customPlaylists.id, channels.autoKeepListId))
     .where(isNotNull(channels.subscribedAt))
     .orderBy(asc(sql`lower(${channels.channelTitle})`));
+  return rows.map((row) => ({
+    channelId: row.channelId,
+    channelTitle: row.channelTitle,
+    thumbnailUrl: row.thumbnailUrl,
+    thumbnailPath: row.thumbnailPath,
+    autoKeep: describeAutoKeep(row),
+  }));
+};
 
 // Videos from Subscriptions for the Subscriptions page, balanced across Channels: the newest
 // found from each Subscription, then the second newest from each, and so on.

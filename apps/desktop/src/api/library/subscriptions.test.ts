@@ -5,6 +5,7 @@ import { migrate } from "drizzle-orm/libsql/migrator";
 import * as schema from "@/api/db/schema";
 import { listSubscriptions, loadSubscriptionVideos, setSubscribed } from "./subscriptions";
 import { loadNewFromSubscriptions } from "./new-from-subscriptions";
+import { setAutoKeep } from "./auto-keep";
 
 const createDb = async () => {
   const db = drizzle(createClient({ url: ":memory:" }), { schema });
@@ -99,6 +100,23 @@ describe("Subscriptions", () => {
       const subscriptions = await listSubscriptions(db);
 
       expect(subscriptions.map((s) => s.channelId)).toEqual(["a", "b"]);
+    });
+
+    it("shows each Subscription's Auto-keep and its target List", async () => {
+      await addChannel(db, "off", 1);
+      await addChannel(db, "on", 1);
+      await addChannel(db, "orphaned", 1);
+      await db.insert(schema.customPlaylists).values({ id: "list", name: "Commute", createdAt: 1 });
+      await setAutoKeep(db, "on", { enabled: true, listId: "list" });
+      await setAutoKeep(db, "orphaned", { enabled: true, listId: "gone" });
+
+      const autoKeep = Object.fromEntries(
+        (await listSubscriptions(db)).map((s) => [s.channelId, s.autoKeep])
+      );
+
+      expect(autoKeep.off).toMatchObject({ enabled: false, listName: null });
+      expect(autoKeep.on).toMatchObject({ enabled: true, listName: "Commute", listDeleted: false });
+      expect(autoKeep.orphaned).toMatchObject({ enabled: true, listDeleted: true });
     });
   });
 

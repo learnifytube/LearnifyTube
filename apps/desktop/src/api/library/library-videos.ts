@@ -9,7 +9,7 @@ import {
   youtubeVideos,
 } from "@/api/db/schema";
 import { getWatchState, type WatchState } from "@/lib/watch-state";
-import { FAVORITES_LIST_ID, PHONE_LIST_ID } from "@/lib/lists";
+import { BUILT_IN_LIST_NAMES, FAVORITES_LIST_ID, PHONE_LIST_ID } from "@/lib/lists";
 import { isKept } from "./kept";
 
 type LibraryVideo = {
@@ -84,8 +84,8 @@ export const loadLibraryVideos = async (
       listIds: listIdsByVideo.get(video.videoId) ?? [],
     })),
     lists: [
-      { id: FAVORITES_LIST_ID, name: "Favorites" },
-      { id: PHONE_LIST_ID, name: "Phone List" },
+      { id: FAVORITES_LIST_ID, name: BUILT_IN_LIST_NAMES[FAVORITES_LIST_ID] },
+      { id: PHONE_LIST_ID, name: BUILT_IN_LIST_NAMES[PHONE_LIST_ID] },
       ...lists,
     ],
   };

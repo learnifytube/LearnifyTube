@@ -22,6 +22,7 @@ import { setWindowReferences } from "./api/routers/window";
 
 import { logger } from "./helpers/logger";
 import { initializeQueueManager } from "./services/download-queue/queue-manager";
+import { startAutoKeep } from "./services/auto-keep";
 import defaultDb from "./api/db";
 import { userPreferences } from "./api/db/schema";
 import { isLikelyMdnsTransportError, logMdnsDiagnosticSnapshot } from "./main/mdnsDiagnostics";
@@ -379,6 +380,8 @@ app.whenReady().then(async () => {
     logger.info("[app] Initializing download queue manager");
     await initializeQueueManager(defaultDb, { autoStart: true });
     logger.info("[app] Download queue manager initialized");
+
+    startAutoKeep(defaultDb);
 
     // Check if mobile sync should auto-start based on user preference
     try {

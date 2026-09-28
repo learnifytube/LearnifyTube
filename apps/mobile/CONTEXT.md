@@ -26,6 +26,10 @@ _Avoid_: synced videos
 To bring this device in line with the On-device set on connect, on return to the foreground, and every few minutes. The mirror only removes Videos it brought itself, then sends a Device report.
 _Avoid_: sync (for this act)
 
+**Offline mode**:
+The Device cannot reach the desktop, whether it was never paired, the desktop is off, or the connection dropped. The Device shows and plays only its Offline copies and keeps Watch progress for the next Device report. It is a normal way to use the app, not an error.
+_Avoid_: disconnected mode, no-server state
+
 **Download queue**:
 The Downloads not yet finished: waiting for the desktop, queued, transferring, or failed. A Video enters the library only when its Download finishes.
 _Avoid_: download list, transfers

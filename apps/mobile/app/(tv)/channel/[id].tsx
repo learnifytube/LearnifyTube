@@ -195,7 +195,6 @@ export default function TVChannelDetailScreen() {
   const channelId = Array.isArray(id) ? id[0] : id;
   const channelTitle = (Array.isArray(title) ? title[0] : title) ?? channelId ?? "";
   const serverUrl = useConnectionStore((state) => state.serverUrl);
-  const disconnect = useConnectionStore((state) => state.disconnect);
   const startPlaylist = usePlaybackStore((state) => state.startPlaylist);
   const upsertRecentPlaylist = useTVHistoryStore(
     (state) => state.upsertRecentPlaylist
@@ -463,7 +462,8 @@ export default function TVChannelDetailScreen() {
           false
         );
       } catch {
-        disconnect();
+        // The desktop may still be fetching this playlist; only the connection's health
+        // check decides whether it is gone.
         if (openCachedPlaylist(cachedPlaylistId, playlistId, playlistTitle)) {
           return;
         }
@@ -474,7 +474,6 @@ export default function TVChannelDetailScreen() {
     [
       channelId,
       channelPlaylists,
-      disconnect,
       isUsingOfflineFallback,
       openCachedPlaylist,
       serverUrl,

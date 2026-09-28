@@ -33,3 +33,13 @@ _Avoid_: disconnected mode, no-server state
 **Download queue**:
 The Downloads not yet finished: waiting for the desktop, queued, transferring, or failed. A Video enters the library only when its Download finishes.
 _Avoid_: download list, transfers
+
+### Connecting to the desktop
+
+**Desktop connection**:
+The Device's one link to the desktop app. It is connecting, connected, in Offline mode, waiting for a new Pairing code, or facing a desktop too old or too new to sync with. Only its own health check decides between connected and Offline mode; a slow or failed request for a collection or Video does not.
+_Avoid_: server connection, sync status
+
+**Pairing code**:
+The code the desktop shows in Settings → Sync, which the Device sends with every request. When the desktop rejects it, the Device must be paired again.
+_Avoid_: token, password

@@ -7,6 +7,8 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import { useDatabase } from "../hooks/useDatabase";
 import { downloadQueue } from "../services/download-queue";
 import { deviceMirror } from "../services/device-mirror";
+import { startDesktopConnection } from "../services/desktop-connection";
+import { getAppSurface } from "../core/hooks/useAppSurface";
 import { useOfflineCopyScans } from "../hooks/useOfflineCopyScans";
 import { useLibraryStore } from "../stores/library";
 import { useNavigationLogger } from "../hooks/useNavigationLogger";
@@ -16,6 +18,15 @@ import { colors } from "../theme";
 
 function DownloadQueueRunner() {
   useEffect(() => downloadQueue.start(), []);
+  return null;
+}
+
+// The phone still connects from its own screens.
+function DesktopConnectionRunner() {
+  useEffect(() => {
+    if (getAppSurface() !== "tv") return;
+    return startDesktopConnection();
+  }, []);
   return null;
 }
 
@@ -125,6 +136,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <DatabaseInitializer>
+        <DesktopConnectionRunner />
         <DownloadQueueRunner />
         <DeviceMirrorRunner />
         <OfflineCopyScanner />

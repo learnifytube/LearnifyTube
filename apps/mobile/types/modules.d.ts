@@ -24,6 +24,7 @@ declare module "react-native-zeroconf" {
     on(event: "error", callback: (error: Error) => void): void;
     on(event: "start" | "stop" | "found" | "update", callback: () => void): void;
     removeAllListeners(event: string): void;
+    removeListener(event: string, callback: (...args: never[]) => void): void;
   }
 
   export default Zeroconf;

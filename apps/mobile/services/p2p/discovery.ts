@@ -1,4 +1,4 @@
-import Zeroconf from "react-native-zeroconf";
+import Zeroconf, { type ZeroconfService } from "react-native-zeroconf";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import type { DiscoveredPeer } from "../../types";
@@ -208,99 +208,105 @@ export function unpublishService() {
   }
 }
 
-export function startScanning(callbacks: {
+type PeerCallbacks = {
   onPeerFound: (peer: DiscoveredPeer) => void;
   onPeerLost: (name: string) => void;
   onError?: (error: Error) => void;
-}) {
-  ensureInitialized();
+};
+
+// One scan serves every screen and module listening for peers; it stops when the last one leaves.
+const subscribers = new Set<PeerCallbacks>();
+const knownPeers = new Map<string, DiscoveredPeer>();
+
+const onResolved = (service: ZeroconfService) => {
+  const platform =
+    getTxtStringValue(service?.txt, "platform")?.toLowerCase() ?? undefined;
+  log("Service resolved:", {
+    name: service.name,
+    host: service.host,
+    addresses: service.addresses,
+    port: service.port,
+    platform,
+    txt: service.txt,
+  });
+
+  if (service.name === getDeviceName()) {
+    log("Ignoring self");
+    return;
+  }
+
+  // Only show desktop peers for sync connections.
+  if (platform && platform !== "desktop") {
+    log("Ignoring non-desktop service", { name: service.name, platform });
+    return;
+  }
+
+  if (!service.port || service.port <= 0) {
+    log("Ignoring service with invalid port", {
+      name: service.name,
+      port: service.port,
+    });
+    return;
+  }
+
+  const rawHosts: string[] = [];
+  if (typeof service.host === "string") {
+    rawHosts.push(service.host);
+  }
+  if (Array.isArray(service.addresses)) {
+    for (const address of service.addresses) {
+      if (typeof address === "string") {
+        rawHosts.push(address);
+      }
+    }
+  }
+
+  const hosts = Array.from(
+    new Set(
+      rawHosts
+        .map(normalizeHostCandidate)
+        .filter((host) => !shouldIgnoreHost(host))
+    )
+  );
+
+  if (hosts.length === 0) {
+    log("Ignoring service with missing host", { name: service.name });
+    return;
+  }
+
+  const primaryHost =
+    hosts.find((host) => isIPv4(host)) ??
+    hosts.find((host) => host.toLowerCase().endsWith(".local")) ??
+    hosts[0];
+
+  const peer: DiscoveredPeer = {
+    name: service.name,
+    host: primaryHost,
+    hosts,
+    port: service.port,
+    videoCount: parseInt(service.txt?.videoCount || "0", 10),
+  };
+  log("Peer found:", peer);
+  knownPeers.set(peer.name, peer);
+  for (const subscriber of subscribers) subscriber.onPeerFound(peer);
+};
+
+const onRemove = (name: string) => {
+  log("Service removed:", name);
+  knownPeers.delete(name);
+  for (const subscriber of subscribers) subscriber.onPeerLost(name);
+};
+
+const onScanError = (error: Error) => {
+  log("Scan error:", error);
+  for (const subscriber of subscribers) subscriber.onError?.(error);
+};
+
+function scan() {
   const implType = getZeroconfImplType();
   log(`Starting scan for _${SERVICE_TYPE}._tcp services`, {
     implType: implType ?? "default",
   });
-
-  zeroconf.on("resolved", (service) => {
-    const platform =
-      getTxtStringValue(service?.txt, "platform")?.toLowerCase() ?? undefined;
-    log("Service resolved:", {
-      name: service.name,
-      host: service.host,
-      addresses: service.addresses,
-      port: service.port,
-      platform,
-      txt: service.txt,
-    });
-
-    if (service.name === getDeviceName()) {
-      log("Ignoring self");
-      return;
-    }
-
-    // Only show desktop peers for sync connections.
-    if (platform && platform !== "desktop") {
-      log("Ignoring non-desktop service", { name: service.name, platform });
-      return;
-    }
-
-    if (!service.port || service.port <= 0) {
-      log("Ignoring service with invalid port", {
-        name: service.name,
-        port: service.port,
-      });
-      return;
-    }
-
-    const rawHosts: string[] = [];
-    if (typeof service.host === "string") {
-      rawHosts.push(service.host);
-    }
-    if (Array.isArray(service.addresses)) {
-      for (const address of service.addresses) {
-        if (typeof address === "string") {
-          rawHosts.push(address);
-        }
-      }
-    }
-
-    const hosts = Array.from(
-      new Set(
-        rawHosts
-          .map(normalizeHostCandidate)
-          .filter((host) => !shouldIgnoreHost(host))
-      )
-    );
-
-    if (hosts.length === 0) {
-      log("Ignoring service with missing host", { name: service.name });
-      return;
-    }
-
-    const primaryHost =
-      hosts.find((host) => isIPv4(host)) ??
-      hosts.find((host) => host.toLowerCase().endsWith(".local")) ??
-      hosts[0];
-
-    const peer: DiscoveredPeer = {
-      name: service.name,
-      host: primaryHost,
-      hosts,
-      port: service.port,
-      videoCount: parseInt(service.txt?.videoCount || "0", 10),
-    };
-    log("Peer found:", peer);
-    callbacks.onPeerFound(peer);
-  });
-
-  zeroconf.on("remove", (name) => {
-    log("Service removed:", name);
-    callbacks.onPeerLost(name);
-  });
-
-  zeroconf.on("error", (error) => {
-    log("Scan error:", error);
-    callbacks.onError?.(error);
-  });
-
   if (implType) {
     invokeZeroconf("scan", SERVICE_TYPE, "tcp", "local.", implType);
   } else {
@@ -309,7 +315,7 @@ export function startScanning(callbacks: {
   log("Scan started");
 }
 
-export function stopScanning() {
+function stopScan() {
   const implType = getZeroconfImplType();
   log("Stopping scan");
   if (implType) {
@@ -317,10 +323,48 @@ export function stopScanning() {
   } else {
     invokeZeroconf("stop");
   }
-  zeroconf.removeAllListeners("resolved");
-  zeroconf.removeAllListeners("remove");
-  zeroconf.removeAllListeners("error");
   log("Scan stopped");
+}
+
+/** Reports desktops found through mDNS, starting with those already known, until unsubscribed. */
+export function subscribeToPeers(callbacks: PeerCallbacks) {
+  ensureInitialized();
+  subscribers.add(callbacks);
+  if (subscribers.size === 1) {
+    zeroconf.on("resolved", onResolved);
+    zeroconf.on("remove", onRemove);
+    zeroconf.on("error", onScanError);
+    scan();
+  } else {
+    for (const peer of knownPeers.values()) callbacks.onPeerFound(peer);
+  }
+  return () => {
+    if (!subscribers.delete(callbacks) || subscribers.size > 0) return;
+    stopScan();
+    knownPeers.clear();
+    zeroconf.removeListener("resolved", onResolved);
+    zeroconf.removeListener("remove", onRemove);
+    zeroconf.removeListener("error", onScanError);
+  };
+}
+
+/** Starts the scan over, so desktops announce themselves again. */
+export function rescanPeers() {
+  if (subscribers.size === 0) return;
+  stopScan();
+  scan();
+}
+
+let unsubscribeScreen: (() => void) | null = null;
+
+export function startScanning(callbacks: PeerCallbacks) {
+  unsubscribeScreen?.();
+  unsubscribeScreen = subscribeToPeers(callbacks);
+}
+
+export function stopScanning() {
+  unsubscribeScreen?.();
+  unsubscribeScreen = null;
 }
 
 export function cleanup() {

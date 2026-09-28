@@ -4,8 +4,6 @@ import {
   ActivityIndicator,
   Alert,
   DeviceEventEmitter,
-  PermissionsAndroid,
-  Platform,
   StyleSheet,
   Text,
   View,
@@ -16,12 +14,13 @@ import {
 import { RefreshCw, Settings } from "lucide-react-native";
 import { router, type Href } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useConnectionStore } from "../../stores/connection";
 import { usePlaybackStore, type StreamingVideo } from "../../stores/playback";
 import { useTVHistoryStore } from "../../stores/tvHistory";
 import { api } from "../../services/api";
-import { startScanning, stopScanning } from "../../services/p2p/discovery";
-import { getAndroidEmulatorHostConnectUrls } from "../../services/android-emulator";
+import {
+  desktopConnection,
+  type DesktopConnectionState,
+} from "../../services/desktop-connection";
 import {
   cacheRemoteChannels,
   cacheRemoteCollectionVideos,
@@ -34,10 +33,6 @@ import {
 } from "../../services/browseCache";
 import { logger } from "../../services/logger";
 import { isTVDebugEnabled, tvDebugInfo } from "../../services/tvDebug";
-import {
-  assertSyncCompatibility,
-  SyncCompatibilityError,
-} from "../../services/sync-compatibility";
 import {
   buildCachedPlaylistId,
   getAllSavedPlaylistsWithProgress,
@@ -64,23 +59,15 @@ import {
 } from "../../components/tv/grid";
 import { useLibraryCatalog } from "../../core/hooks/useLibraryCatalog";
 import { offlineCopy, type OfflineCopy } from "../../services/offline-copy";
+import { describeConnectionProblem } from "../../components/tv/connectionText";
 import type {
-  DiscoveredPeer,
   RemoteChannel,
   RemoteMyList,
   RemotePlaylist,
   RemoteVideoWithStatus,
 } from "../../types";
 
-const DEFAULT_SYNC_PORT = 53318;
-const LEGACY_SYNC_PORT = 8384;
-const ANDROID_NEARBY_WIFI_DEVICES_PERMISSION =
-  "android.permission.NEARBY_WIFI_DEVICES";
-const MAX_AUTO_CONNECT_ATTEMPTS = 30;
-const AUTO_CONNECT_RETRY_MS = 3000;
-
 type TVBrowseMode = "playlists" | "mylists" | "channels" | "history";
-type ConnectionStage = "connecting" | "connected" | "offline";
 
 type BaseGridCard = {
   id: string;
@@ -92,84 +79,54 @@ type BaseGridCard = {
 
 type OfflineSavedPlaylist = ReturnType<typeof getAllSavedPlaylistsWithProgress>[number];
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return `${error.name}: ${error.message}`;
+const CATALOG_ERROR =
+  "Couldn't load everything from the desktop. Press refresh to try again.";
+
+function ConnectionIndicator({
+  connection,
+  onPairAgain,
+  onFocus,
+}: {
+  connection: DesktopConnectionState;
+  onPairAgain: () => void;
+  onFocus: () => void;
+}) {
+  if (connection.status === "pairingRequired") {
+    return (
+      <TVFocusPressable
+        style={[styles.indicator, styles.indicatorAction]}
+        onPress={onPairAgain}
+        onFocus={onFocus}
+      >
+        <View style={[styles.indicatorDot, styles.indicatorDotWarning]} />
+        <Text style={styles.indicatorText}>Pair again</Text>
+      </TVFocusPressable>
+    );
   }
 
-  return String(error);
-}
-
-function normalizeDiscoveredHost(host: string): string {
-  const trimmed = host.trim().replace(/%.+$/, "");
-  if (trimmed.includes(":") && !trimmed.startsWith("[")) {
-    return `[${trimmed}]`;
-  }
-  return trimmed;
-}
-
-function hostPriority(host: string): number {
-  const bare = host.replace(/^\[/, "").replace(/\]$/, "").toLowerCase();
-  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(bare)) return 0;
-  if (bare.endsWith(".local")) return 1;
-  if (bare.includes(":")) return 2;
-  return 3;
-}
-
-function buildDiscoveredConnectUrls(device: DiscoveredPeer): string[] {
-  const hosts = (
-    device.hosts && device.hosts.length > 0 ? device.hosts : [device.host]
-  )
-    .map(normalizeDiscoveredHost)
-    .filter((host) => host.length > 0)
-    .sort((a, b) => hostPriority(a) - hostPriority(b));
-
-  if (hosts.length === 0) return [];
-
-  const ports = [device.port, DEFAULT_SYNC_PORT, LEGACY_SYNC_PORT].filter(
-    (value, index, arr): value is number =>
-      Number.isInteger(value) && value > 0 && arr.indexOf(value) === index
+  const label =
+    connection.status === "connected"
+      ? "Connected"
+      : connection.status === "incompatible"
+        ? "Update needed"
+        : connection.status === "connecting"
+          ? "Connecting…"
+          : "Offline";
+  return (
+    <View style={styles.indicator}>
+      <View
+        style={[
+          styles.indicatorDot,
+          connection.status === "connected"
+            ? styles.indicatorDotConnected
+            : connection.status === "incompatible"
+              ? styles.indicatorDotWarning
+              : null,
+        ]}
+      />
+      <Text style={styles.indicatorText}>{label}</Text>
+    </View>
   );
-
-  const urls: string[] = [];
-  for (const host of hosts) {
-    for (const port of ports) {
-      urls.push(`http://${host}:${port}`);
-    }
-  }
-  return Array.from(new Set(urls));
-}
-
-function getAndroidApiLevel(): number {
-  if (Platform.OS !== "android") return 0;
-  if (typeof Platform.Version === "number") return Platform.Version;
-  const parsed = Number.parseInt(String(Platform.Version), 10);
-  return Number.isNaN(parsed) ? 0 : parsed;
-}
-
-async function ensureDiscoveryPermissions(): Promise<boolean> {
-  if (Platform.OS !== "android") return true;
-
-  const apiLevel = getAndroidApiLevel();
-  if (apiLevel < 33) return true;
-
-  const permission =
-    ANDROID_NEARBY_WIFI_DEVICES_PERMISSION as Parameters<
-      typeof PermissionsAndroid.check
-    >[0];
-
-  const alreadyGranted = await PermissionsAndroid.check(permission);
-  if (alreadyGranted) return true;
-
-  const result = await PermissionsAndroid.request(permission, {
-    title: "Allow Nearby Devices",
-    message:
-      "LearnifyTube needs Nearby devices permission to discover your desktop app on local Wi-Fi.",
-    buttonPositive: "Allow",
-    buttonNegative: "Not now",
-  });
-
-  return result === PermissionsAndroid.RESULTS.GRANTED;
 }
 
 function toStreamingVideos(
@@ -205,10 +162,8 @@ function resolveThumbnailUrl(
 export default function TVHomeScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const { videos, offlineVideos, getOfflineUri } = useLibraryCatalog();
-  const serverUrl = useConnectionStore((state) => state.serverUrl);
-  const setServerUrl = useConnectionStore((state) => state.setServerUrl);
-  const setServerName = useConnectionStore((state) => state.setServerName);
-  const disconnect = useConnectionStore((state) => state.disconnect);
+  const connection = desktopConnection.useConnection();
+  const serverUrl = connection.url;
   const startPlaylist = usePlaybackStore((state) => state.startPlaylist);
   const recentPlaylists = useTVHistoryStore((state) => state.recentPlaylists);
   const upsertRecentPlaylist = useTVHistoryStore(
@@ -217,8 +172,6 @@ export default function TVHomeScreen() {
 
   const [mode, setMode] = useState<TVBrowseMode>("playlists");
 
-  const [connectionStage, setConnectionStage] = useState<ConnectionStage>("connecting");
-  const [autoConnectAttempt, setAutoConnectAttempt] = useState(0);
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
   const [playlists, setPlaylists] = useState<RemotePlaylist[]>([]);
@@ -242,12 +195,6 @@ export default function TVHomeScreen() {
   );
   const cardRefs = useRef<Array<TVFocusPressableHandle | null>>([]);
 
-  const [discoveredCount, setDiscoveredCount] = useState(0);
-  const discoveredPeersRef = useRef<DiscoveredPeer[]>([]);
-  const emulatorHostConnectUrls = useMemo(
-    () => getAndroidEmulatorHostConnectUrls([DEFAULT_SYNC_PORT, LEGACY_SYNC_PORT]),
-    []
-  );
   const gridColumns = useMemo(() => getTVGridColumns(windowWidth), [windowWidth]);
   const pageSize = useMemo(() => getTVGridPageSize(gridColumns), [gridColumns]);
   const gridCardWidth = useMemo(
@@ -263,11 +210,7 @@ export default function TVHomeScreen() {
     [gridCardHeight, gridCardWidth]
   );
 
-  const autoConnectRunIdRef = useRef(0);
-  const autoConnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const catalogFailedRef = useRef(false);
-
-  const canStream = !!serverUrl && connectionStage === "connected";
+  const canStream = !!serverUrl && connection.status === "connected";
 
   const logOfflinePlaylistSnapshot = useCallback(
     (reason: string, playlistsSnapshot: OfflineSavedPlaylist[]) => {
@@ -334,111 +277,6 @@ export default function TVHomeScreen() {
     }, [refreshOfflineCatalog])
   );
 
-  const clearAutoConnectTimer = useCallback(() => {
-    if (autoConnectTimerRef.current) {
-      clearTimeout(autoConnectTimerRef.current);
-      autoConnectTimerRef.current = null;
-    }
-  }, []);
-
-  const connectWithCandidates = useCallback(
-    async (candidateUrls: string[], fallbackName: string): Promise<boolean> => {
-      if (candidateUrls.length === 0) return false;
-
-      let lastError: unknown = null;
-
-      for (const baseUrl of candidateUrls) {
-        try {
-          const info = await api.getInfo(baseUrl);
-          assertSyncCompatibility(info);
-
-          setServerUrl(baseUrl);
-          setServerName(info.name ?? fallbackName);
-          setCatalogError(null);
-          return true;
-        } catch (error) {
-          if (error instanceof SyncCompatibilityError) {
-            setCatalogError(error.message);
-            return false;
-          }
-          lastError = error;
-        }
-      }
-
-      if (lastError) {
-        setCatalogError(getErrorMessage(lastError));
-      }
-
-      return false;
-    },
-    [setServerName, setServerUrl]
-  );
-
-  const connectToPeer = useCallback(
-    async (peer: DiscoveredPeer): Promise<boolean> => {
-      const candidateUrls = buildDiscoveredConnectUrls(peer);
-      return connectWithCandidates(candidateUrls, peer.name);
-    },
-    [connectWithCandidates]
-  );
-
-  const runAutoConnectAttempt = useCallback(
-    async (runId: number, attemptIndex: number) => {
-      if (autoConnectRunIdRef.current !== runId) return;
-
-      if (attemptIndex >= MAX_AUTO_CONNECT_ATTEMPTS) {
-        setConnectionStage("offline");
-        return;
-      }
-
-      setConnectionStage("connecting");
-      setAutoConnectAttempt(attemptIndex + 1);
-
-      const peers = discoveredPeersRef.current;
-      const targetPeer = peers[0];
-
-      let connected = false;
-      if (targetPeer) {
-        connected = await connectToPeer(targetPeer);
-      } else if (emulatorHostConnectUrls.length > 0) {
-        connected = await connectWithCandidates(emulatorHostConnectUrls, "Desktop Host");
-      }
-
-      if (autoConnectRunIdRef.current !== runId) return;
-
-      if (connected) {
-        setConnectionStage("connected");
-        return;
-      }
-
-      autoConnectTimerRef.current = setTimeout(() => {
-        void runAutoConnectAttempt(runId, attemptIndex + 1);
-      }, AUTO_CONNECT_RETRY_MS);
-    },
-    [connectToPeer, connectWithCandidates, emulatorHostConnectUrls]
-  );
-
-  const startAutoConnect = useCallback(
-    (hardReset = true) => {
-      catalogFailedRef.current = false;
-      autoConnectRunIdRef.current += 1;
-      const runId = autoConnectRunIdRef.current;
-
-      clearAutoConnectTimer();
-      setAutoConnectAttempt(0);
-      setConnectionStage("connecting");
-
-      if (hardReset) {
-        disconnect();
-      }
-
-      autoConnectTimerRef.current = setTimeout(() => {
-        void runAutoConnectAttempt(runId, 0);
-      }, AUTO_CONNECT_RETRY_MS);
-    },
-    [clearAutoConnectTimer, disconnect, runAutoConnectAttempt]
-  );
-
   const loadRemoteCollections = useCallback(async () => {
     if (!serverUrl) {
       setPlaylists([]);
@@ -458,8 +296,7 @@ export default function TVHomeScreen() {
       let nextPlaylists = getCachedPlaylists();
       let nextMyLists = getCachedMyLists();
       let nextChannels = getCachedChannels();
-      const errorMessages: string[] = [];
-      let successCount = 0;
+      let failed = false;
 
       if (playlistResult.status === "fulfilled") {
         nextPlaylists = await cacheRemotePlaylists(
@@ -476,16 +313,14 @@ export default function TVHomeScreen() {
             remoteItemCount: playlist.itemCount,
           })),
         });
-        successCount += 1;
       } else {
-        errorMessages.push(getErrorMessage(playlistResult.reason));
+        failed = true;
       }
 
       if (myListResult.status === "fulfilled") {
         nextMyLists = await cacheRemoteMyLists(serverUrl, myListResult.value.mylists);
-        successCount += 1;
       } else {
-        errorMessages.push(getErrorMessage(myListResult.reason));
+        failed = true;
       }
 
       if (channelResult.status === "fulfilled") {
@@ -493,103 +328,32 @@ export default function TVHomeScreen() {
           serverUrl,
           channelResult.value.channels
         );
-        successCount += 1;
       } else {
-        errorMessages.push(getErrorMessage(channelResult.reason));
+        failed = true;
       }
 
       setPlaylists(nextPlaylists);
       setMyLists(nextMyLists);
       setChannels(nextChannels);
       refreshOfflineCatalog("remote-catalog-loaded");
-      setCatalogError(errorMessages[0] ?? null);
-
-      if (successCount > 0) {
-        catalogFailedRef.current = false;
-        setConnectionStage("connected");
-        return;
-      }
-
-      catalogFailedRef.current = true;
-      disconnect();
-      setConnectionStage("offline");
-    } catch (error) {
+      // A failed catalog request only affects this screen; the connection's health check
+      // decides whether the desktop is gone.
+      setCatalogError(failed ? CATALOG_ERROR : null);
+    } catch {
       setPlaylists(getCachedPlaylists());
       setMyLists(getCachedMyLists());
       setChannels(getCachedChannels());
       refreshOfflineCatalog("remote-catalog-load-failed");
-      catalogFailedRef.current = true;
-      disconnect();
-      setConnectionStage("offline");
-      setCatalogError(getErrorMessage(error));
+      setCatalogError(CATALOG_ERROR);
     } finally {
       setIsLoadingCatalog(false);
     }
-  }, [disconnect, refreshOfflineCatalog, serverUrl]);
+  }, [refreshOfflineCatalog, serverUrl]);
 
+  // Reconnecting refreshes the tabs in place; focus and paging stay where they are.
   useEffect(() => {
-    let cancelled = false;
-
-    const beginScan = async () => {
-      const granted = await ensureDiscoveryPermissions();
-      if (!granted || cancelled) return;
-
-      startScanning({
-        onPeerFound: (peer) => {
-          if (cancelled) return;
-
-          const nextPeers = (() => {
-            const existing = discoveredPeersRef.current.find((item) => item.name === peer.name);
-            if (existing) {
-              return discoveredPeersRef.current.map((item) =>
-                item.name === peer.name ? peer : item
-              );
-            }
-            return [...discoveredPeersRef.current, peer];
-          })().sort((a, b) => a.name.localeCompare(b.name));
-
-          discoveredPeersRef.current = nextPeers;
-          setDiscoveredCount(nextPeers.length);
-        },
-        onPeerLost: (name) => {
-          if (cancelled) return;
-
-          const nextPeers = discoveredPeersRef.current.filter((item) => item.name !== name);
-          discoveredPeersRef.current = nextPeers;
-          setDiscoveredCount(nextPeers.length);
-        },
-        onError: (error) => {
-          if (cancelled) return;
-          setCatalogError(getErrorMessage(error));
-        },
-      });
-    };
-
-    void beginScan();
-
-    return () => {
-      cancelled = true;
-      clearAutoConnectTimer();
-      stopScanning();
-    };
-  }, [clearAutoConnectTimer]);
-
-  useEffect(() => {
-    if (!serverUrl) {
-      if (catalogFailedRef.current) {
-        // Catalog load failed — stay offline instead of immediately reconnecting.
-        // The user must press the WiFi button to retry.
-        catalogFailedRef.current = false;
-        setConnectionStage("offline");
-        return;
-      }
-      startAutoConnect(false);
-      return;
-    }
-
-    setConnectionStage("connected");
-    void loadRemoteCollections();
-  }, [loadRemoteCollections, serverUrl, startAutoConnect]);
+    if (serverUrl) void loadRemoteCollections();
+  }, [loadRemoteCollections, serverUrl]);
 
   const playSavedPlaylistFromCache = useCallback(
     (savedPlaylistId: string): boolean => {
@@ -656,10 +420,7 @@ export default function TVHomeScreen() {
 
   const playRemoteCollection = useCallback(
     async (kind: "playlist" | "mylist", id: string, title: string) => {
-      if (!serverUrl) {
-        setConnectionStage("offline");
-        return;
-      }
+      if (!serverUrl) return;
 
       try {
         const response =
@@ -713,12 +474,9 @@ export default function TVHomeScreen() {
         });
         startPlaylist(nextPlaylistId, title, streamingVideos, 0, serverUrl);
         router.push(`/(tv)/player/${streamingVideos[0].id}` as Href);
-      } catch (error) {
-        disconnect();
-        setConnectionStage("offline");
-        setCatalogError(getErrorMessage(error));
+      } catch {
+        // The desktop may still be fetching this collection; the connection stays as it is.
         refreshOfflineCatalog();
-        startAutoConnect(false);
 
         const cachedPlaylistId = buildCachedPlaylistId(kind, id);
         if (playSavedPlaylistFromCache(cachedPlaylistId)) {
@@ -726,20 +484,18 @@ export default function TVHomeScreen() {
         }
 
         Alert.alert(
-          "Playback unavailable",
-          "Reconnect to desktop or download videos in this list first."
+          "Not ready yet",
+          "The desktop couldn't open this list just now. Try again in a moment."
         );
       }
     },
     [
-      disconnect,
       getOfflineUri,
       myLists,
       playlists,
       playSavedPlaylistFromCache,
       refreshOfflineCatalog,
       serverUrl,
-      startAutoConnect,
       startPlaylist,
       upsertRecentPlaylist,
     ]
@@ -927,26 +683,21 @@ export default function TVHomeScreen() {
   }, [channelCards, historyCards, mode, myListCards, playlistCards]);
   const hasAnyOfflineCache =
     offlineSavedPlaylists.length > 0 || offlineVideos.length > 0 || recentPlaylists.length > 0;
-  const emptyStateText = useMemo(() => {
-    if (!hasAnyOfflineCache && connectionStage === "connecting") {
-      return discoveredCount > 0
-        ? `Searching nearby desktop... (${discoveredCount})`
-        : emulatorHostConnectUrls.length > 0
-          ? "Searching nearby desktop... Trying emulator host..."
-          : "Searching nearby desktop... (0)";
-    }
-
-    if (mode === "playlists") return "No cached playlists yet";
-    if (mode === "mylists") return "No cached my lists yet";
-    if (mode === "channels") return "No cached channels yet";
-    return "No history yet";
-  }, [
-    connectionStage,
-    discoveredCount,
-    emulatorHostConnectUrls.length,
-    hasAnyOfflineCache,
-    mode,
-  ]);
+  const isFreshTV = !hasAnyOfflineCache && !canStream;
+  // Shown once the first attempt has settled, so a paired TV never focuses a button that
+  // disappears as it connects.
+  const showConnectButton = !canStream && connection.status !== "connecting";
+  const focusConnectButton = isFreshTV && showConnectButton;
+  const emptyStateText = isFreshTV
+    ? "Nothing on this TV yet"
+    : mode === "playlists"
+      ? "No playlists here yet"
+      : mode === "mylists"
+        ? "No lists here yet"
+        : mode === "channels"
+          ? "No channels here yet"
+          : "No history yet";
+  const openPairing = () => router.push("/(tv)/connect" as Href);
 
   const currentOffset = pageOffsets[mode];
   const maxOffset = Math.max(0, activeCards.length - pageSize);
@@ -1149,7 +900,7 @@ export default function TVHomeScreen() {
             style={[styles.modeTab, mode === "playlists" && styles.modeTabActive]}
             onPress={() => setMode("playlists")}
             onFocus={() => setIsGridFocused(false)}
-            hasTVPreferredFocus
+            hasTVPreferredFocus={!focusConnectButton}
           >
             <Text style={styles.modeTabText}>Playlists</Text>
           </TVFocusPressable>
@@ -1177,9 +928,17 @@ export default function TVHomeScreen() {
         </View>
 
         <View style={styles.iconActions}>
+          <ConnectionIndicator
+            connection={connection}
+            onPairAgain={openPairing}
+            onFocus={() => setIsGridFocused(false)}
+          />
           <TVFocusPressable
             style={styles.iconButton}
-            onPress={() => void loadRemoteCollections()}
+            onPress={() => {
+              desktopConnection.retryNow();
+              if (serverUrl) void loadRemoteCollections();
+            }}
             onFocus={() => setIsGridFocused(false)}
             disabled={isLoadingCatalog}
           >
@@ -1208,7 +967,24 @@ export default function TVHomeScreen() {
       {!isLoadingCatalog && activeCards.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyText}>{emptyStateText}</Text>
-          {catalogError ? <Text style={styles.errorText}>{catalogError}</Text> : null}
+          {isFreshTV ? (
+            <Text style={styles.emptyHint}>
+              {describeConnectionProblem(connection)}
+            </Text>
+          ) : null}
+          {catalogError && canStream ? (
+            <Text style={styles.errorText}>{catalogError}</Text>
+          ) : null}
+          {showConnectButton ? (
+            <TVFocusPressable
+              style={styles.connectButton}
+              onPress={openPairing}
+              onFocus={() => setIsGridFocused(false)}
+              hasTVPreferredFocus={focusConnectButton}
+            >
+              <Text style={styles.connectButtonText}>Connect to desktop</Text>
+            </TVFocusPressable>
+          ) : null}
         </View>
       ) : (
         <FlatList
@@ -1334,6 +1110,56 @@ const styles = StyleSheet.create({
     color: "#fffef2",
     fontSize: 22,
     fontWeight: "800",
+  },
+  emptyHint: {
+    color: "#eaf5ff",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  connectButton: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: "#ffd93d",
+    backgroundColor: "#ff6b6b",
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  connectButtonText: {
+    color: "#fffef2",
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  indicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: "rgba(15, 27, 58, 0.6)",
+  },
+  indicatorAction: {
+    borderWidth: 2,
+    borderColor: "#ffd93d",
+  },
+  indicatorDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#94a3b8",
+  },
+  indicatorDotConnected: {
+    backgroundColor: "#40c4aa",
+  },
+  indicatorDotWarning: {
+    backgroundColor: "#ffb86b",
+  },
+  indicatorText: {
+    color: "#fffef2",
+    fontSize: 16,
+    fontWeight: "700",
   },
   errorText: {
     color: "#ffe3e3",

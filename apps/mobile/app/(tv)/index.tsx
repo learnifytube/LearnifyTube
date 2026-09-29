@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
-  Alert,
   DeviceEventEmitter,
   StyleSheet,
   Text,
@@ -68,6 +67,8 @@ import {
   describeConnectionStatus,
 } from "../../components/tv/connectionText";
 import { useTVBackInterceptor } from "../../components/tv/tvBack";
+import { useTVMessage } from "../../components/tv/TVMessage";
+import { collectionNotReady } from "../../components/tv/tvMessages";
 import type {
   RemoteChannel,
   RemoteMyList,
@@ -175,6 +176,11 @@ export default function TVHomeScreen() {
   );
 
   const [mode, setMode] = useState<TVBrowseMode>("playlists");
+  const {
+    show: showTVMessage,
+    isOpen: isTVMessageOpen,
+    element: tvMessageElement,
+  } = useTVMessage();
 
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
@@ -443,10 +449,7 @@ export default function TVHomeScreen() {
         return;
       }
 
-      Alert.alert(
-        "Not ready yet",
-        "The desktop couldn't open this list just now. Try again in a moment.",
-      );
+      showTVMessage(collectionNotReady);
     }
   };
 
@@ -523,7 +526,7 @@ export default function TVHomeScreen() {
     const subscription = DeviceEventEmitter.addListener(
       "onHWKeyEvent",
       (event: { eventType?: string; eventKeyAction?: number }) => {
-        if (!isGridFocused) return;
+        if (!isGridFocused || isTVMessageOpen) return;
         if (!pageItems.length) return;
         if (
           typeof event.eventKeyAction === "number" &&
@@ -596,6 +599,7 @@ export default function TVHomeScreen() {
     pageItems.length,
     pageOffset,
     pageSize,
+    isTVMessageOpen,
   ]);
 
   return (
@@ -759,6 +763,7 @@ export default function TVHomeScreen() {
           }}
         />
       )}
+      {tvMessageElement}
     </SafeAreaView>
   );
 }

@@ -8,6 +8,9 @@ const statusLabels: Record<DesktopConnectionState["status"], string> = {
   incompatible: "Update needed",
 };
 
+export const pairingRequiredText =
+  "The desktop needs its pairing code. Enter the code shown in desktop Settings → Sync.";
+
 /** The connection state in a few words, the same on every TV screen. */
 export function describeConnectionStatus(connection: DesktopConnectionState) {
   return statusLabels[connection.status];
@@ -16,7 +19,7 @@ export function describeConnectionStatus(connection: DesktopConnectionState) {
 /** Why the TV isn't connected, in the viewer's words. */
 export function describeConnectionProblem(connection: DesktopConnectionState) {
   if (connection.status === "pairingRequired") {
-    return "The desktop needs its pairing code. Enter the code shown in desktop Settings → Sync.";
+    return pairingRequiredText;
   }
   if (connection.status === "incompatible") {
     return connection.incompatibility === "mobile_update_required"

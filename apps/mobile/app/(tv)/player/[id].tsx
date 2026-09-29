@@ -28,6 +28,18 @@ import {
   planSeek,
   type PendingSeek,
 } from "../../../components/tv/playerSeek";
+import {
+  TVMessageButton,
+  TVMessageCard,
+} from "../../../components/tv/TVMessage";
+import {
+  DesktopFetchFailedError,
+  DesktopStillFetchingError,
+  describeVideoFailure,
+  desktopGettingVideo,
+  notOnThisTV,
+  type TVMessageContent,
+} from "../../../components/tv/tvMessages";
 import { colors, fontSize, fontWeight, radius, spacing } from "../../../theme";
 import type { ServerDownloadStatus } from "../../../types";
 
@@ -147,7 +159,7 @@ async function ensureServerVideoReady(
 
   const response = await api.requestServerDownload(serverUrl, { videoId });
   if (!response.success && !response.status) {
-    throw new Error(response.message || "Server refused download request");
+    throw new DesktopFetchFailedError(response.message || null);
   }
 
   const startedAt = Date.now();
@@ -158,7 +170,7 @@ async function ensureServerVideoReady(
     onStatus?.(status);
 
     if (status.status === "failed") {
-      throw new Error(status.error || "Server download failed");
+      throw new DesktopFetchFailedError(status.error);
     }
 
     if (status.status === "completed") {
@@ -171,7 +183,7 @@ async function ensureServerVideoReady(
     await sleep(SERVER_DOWNLOAD_POLL_MS);
   }
 
-  throw new Error("Server download timed out");
+  throw new DesktopStillFetchingError();
 }
 
 export default function TVPlayerScreen() {
@@ -190,7 +202,9 @@ export default function TVPlayerScreen() {
 
   const [prefetchState, setPrefetchState] = useState<PrefetchState>("idle");
   const [prepareState, setPrepareState] = useState<SourcePrepareState>("idle");
-  const [prepareError, setPrepareError] = useState<string | null>(null);
+  const [prepareError, setPrepareError] = useState<TVMessageContent | null>(
+    null
+  );
   const [prepareProgress, setPrepareProgress] = useState<number | null>(null);
   const [prepareRetryVersion, setPrepareRetryVersion] = useState(0);
   const [isVideoViewReady, setIsVideoViewReady] = useState(false);
@@ -299,7 +313,11 @@ export default function TVPlayerScreen() {
   useEffect(() => {
     if (!id) {
       setPrepareState("failed");
-      setPrepareError("Video ID is missing");
+      setPrepareError({
+        title: "Video not found",
+        text: "Go back and pick another Video.",
+        canRetry: false,
+      });
       setPrepareProgress(null);
       return;
     }
@@ -325,7 +343,7 @@ export default function TVPlayerScreen() {
         reason: "no-local-file-and-no-server",
       });
       setPrepareState("failed");
-      setPrepareError("Video is not available offline");
+      setPrepareError(notOnThisTV);
       setPrepareProgress(null);
       return;
     }
@@ -373,7 +391,7 @@ export default function TVPlayerScreen() {
           error: getErrorMessage(error),
         });
         setPrepareState("failed");
-        setPrepareError(getErrorMessage(error));
+        setPrepareError(describeVideoFailure(error));
         setPrepareProgress(null);
       }
     };
@@ -664,36 +682,34 @@ export default function TVPlayerScreen() {
   }, [effectiveServerUrl, nextOfflineUri, nextVideo?.id]);
 
   if (!id || !source) {
+    const failure =
+      prepareState === "failed" ? (prepareError ?? notOnThisTV) : null;
+    const canRetry = !!failure?.canRetry && !!id && !!effectiveServerUrl;
+    const message = failure ?? {
+      title: desktopGettingVideo,
+      text:
+        prepareProgress !== null
+          ? `${Math.max(0, Math.round(prepareProgress))}% done`
+          : "Please wait",
+    };
+
     return (
       <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
-        <TVFocusPressable onPress={() => router.back()} style={styles.backButton} hasTVPreferredFocus>
-          <Text style={styles.backButtonText}>Back</Text>
-        </TVFocusPressable>
         <View style={styles.centered}>
-          {prepareState === "preparing" ? (
-            <>
-              <Text style={styles.errorText}>Preparing video...</Text>
-              <Text style={styles.channel}>
-                {prepareProgress !== null
-                  ? `Desktop progress ${Math.max(0, Math.round(prepareProgress))}%`
-                  : "Please wait"}
-              </Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.errorText}>
-                {prepareError ?? "Video source is not available"}
-              </Text>
-              {id && effectiveServerUrl ? (
-                <TVFocusPressable
-                  style={styles.retryPrepareButton}
-                  onPress={() => setPrepareRetryVersion((prev) => prev + 1)}
-                >
-                  <Text style={styles.retryPrepareButtonText}>Retry</Text>
-                </TVFocusPressable>
-              ) : null}
-            </>
-          )}
+          <TVMessageCard message={message}>
+            {canRetry ? (
+              <TVMessageButton
+                label="Retry"
+                onPress={() => setPrepareRetryVersion((prev) => prev + 1)}
+                hasTVPreferredFocus
+              />
+            ) : null}
+            <TVMessageButton
+              label="Back"
+              onPress={() => router.back()}
+              hasTVPreferredFocus={!canRetry}
+            />
+          </TVMessageCard>
         </View>
       </SafeAreaView>
     );
@@ -861,27 +877,6 @@ const styles = StyleSheet.create({
   videoFrame: {
     flex: 1,
   },
-  backButton: {
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "#ffd93d",
-    backgroundColor: "#ff6b6b",
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  backButtonText: {
-    color: "#fffef2",
-    fontSize: 20,
-    fontWeight: "900",
-  },
-  navButton: {
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "#ffd93d",
-    backgroundColor: "#ff8a00",
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
   navButtonDisabled: {
     opacity: 0.5,
   },
@@ -996,30 +991,5 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-  },
-  errorText: {
-    color: "#fecaca",
-    fontSize: 22,
-    fontWeight: "700",
-  },
-  channel: {
-    color: "#e5f2ff",
-    fontSize: 20,
-    fontWeight: "700",
-    marginTop: 8,
-  },
-  retryPrepareButton: {
-    marginTop: 16,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "#ffd93d",
-    backgroundColor: "#2d7ff9",
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  retryPrepareButtonText: {
-    color: "#fffef2",
-    fontSize: 20,
-    fontWeight: "900",
   },
 });

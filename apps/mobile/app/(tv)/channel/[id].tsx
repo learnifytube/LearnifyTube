@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   DeviceEventEmitter,
   FlatList,
   StyleSheet,
@@ -51,6 +50,13 @@ import { useLibraryCatalog } from "../../../core/hooks/useLibraryCatalog";
 import { offlineCopy, type OfflineCopy } from "../../../services/offline-copy";
 import { videoThumbnails } from "../../../services/video-thumbnails";
 import { useTVBackInterceptor } from "../../../components/tv/tvBack";
+import { useTVMessage } from "../../../components/tv/TVMessage";
+import {
+  collectionNotReady,
+  describeDesktopRequestFailure,
+  notOnThisTV,
+  type TVMessageContent,
+} from "../../../components/tv/tvMessages";
 import type { RemotePlaylist, RemoteVideoWithStatus, Video } from "../../../types";
 
 type DetailMode = "playlists" | "videos";
@@ -75,13 +81,6 @@ type ActivePlaylistContext = {
   id: string;
   title: string;
 };
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return `${error.name}: ${error.message}`;
-  }
-  return String(error);
-}
 
 function toStreamingVideos(
   input: RemoteVideoWithStatus[],
@@ -226,7 +225,12 @@ export default function TVChannelDetailScreen() {
   );
   const cardRefs = useRef<Array<TVFocusPressableHandle | null>>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<TVMessageContent | null>(null);
+  const {
+    show: showTVMessage,
+    isOpen: isTVMessageOpen,
+    element: tvMessageElement,
+  } = useTVMessage();
   const [emptyMessage, setEmptyMessage] = useState("No playlists or videos");
   const [isUsingOfflineFallback, setIsUsingOfflineFallback] = useState(!serverUrl);
   const [activePlaylist, setActivePlaylist] =
@@ -249,7 +253,11 @@ export default function TVChannelDetailScreen() {
 
   const loadChannelData = useCallback(async () => {
     if (!channelId && !channelTitle) {
-      setError("Channel not found");
+      setError({
+        title: "Channel not found",
+        text: "Go back and pick another channel.",
+        canRetry: false,
+      });
       setIsLoading(false);
       return;
     }
@@ -301,7 +309,7 @@ export default function TVChannelDetailScreen() {
       let nextChannelPlaylists = hasOfflinePlaylists ? offlineFallback.playlists : [];
       let nextChannelVideos = hasOfflineVideos ? offlineFallback.videos : [];
       let hasRemoteSuccess = false;
-      let nextError: string | null = null;
+      let nextError: unknown = null;
 
       if (playlistsResult.status === "fulfilled") {
         const cachedPlaylists = await cacheRemotePlaylists(
@@ -313,7 +321,7 @@ export default function TVChannelDetailScreen() {
         );
         hasRemoteSuccess = true;
       } else {
-        nextError = getErrorMessage(playlistsResult.reason);
+        nextError = playlistsResult.reason;
       }
 
       if (channelVideosResult.status === "fulfilled") {
@@ -327,7 +335,7 @@ export default function TVChannelDetailScreen() {
         });
         hasRemoteSuccess = true;
       } else if (!nextError) {
-        nextError = getErrorMessage(channelVideosResult.reason);
+        nextError = channelVideosResult.reason;
       }
 
       if (hasRemoteSuccess) {
@@ -362,7 +370,7 @@ export default function TVChannelDetailScreen() {
         return;
       }
 
-      setError(nextError ?? "Failed to load channel");
+      setError(describeDesktopRequestFailure(nextError));
     } catch (nextError) {
       if (hasOfflineFallback) {
         setChannelPlaylists(offlineFallback.playlists);
@@ -379,7 +387,7 @@ export default function TVChannelDetailScreen() {
         setIsUsingOfflineFallback(true);
         setEmptyMessage(offlineEmptyStateMessage);
       } else {
-        setError(getErrorMessage(nextError));
+        setError(describeDesktopRequestFailure(nextError));
       }
     } finally {
       setIsLoading(false);
@@ -479,10 +487,7 @@ export default function TVChannelDetailScreen() {
         if (openCachedPlaylist(cachedPlaylistId, playlistId, playlistTitle)) {
           return;
         }
-        Alert.alert(
-          "Not ready yet",
-          "The desktop couldn't open this playlist just now. Try again in a moment."
-        );
+        showTVMessage(collectionNotReady);
       } finally {
         setIsResolvingPlaylist(false);
       }
@@ -494,6 +499,7 @@ export default function TVChannelDetailScreen() {
       openCachedPlaylist,
       serverUrl,
       showPlaylistVideos,
+      showTVMessage,
     ]
   );
 
@@ -504,10 +510,7 @@ export default function TVChannelDetailScreen() {
       const canStream = !!serverUrl && !isUsingOfflineFallback;
 
       if (!canStream && !getOfflineUri(videoId)) {
-        Alert.alert(
-          "Offline mode",
-          "Download this video first or reconnect to desktop to stream it."
-        );
+        showTVMessage(notOnThisTV);
         return;
       }
 
@@ -555,6 +558,7 @@ export default function TVChannelDetailScreen() {
       getOfflineUri,
       isUsingOfflineFallback,
       serverUrl,
+      showTVMessage,
       startPlaylist,
       upsertRecentPlaylist,
     ]
@@ -658,7 +662,7 @@ export default function TVChannelDetailScreen() {
     const subscription = DeviceEventEmitter.addListener(
       "onHWKeyEvent",
       (event: { eventType?: string; eventKeyAction?: number }) => {
-        if (!isGridFocused) return;
+        if (!isGridFocused || isTVMessageOpen) return;
         if (!pageItems.length) return;
         if (typeof event.eventKeyAction === "number" && event.eventKeyAction !== 0) {
           return;
@@ -712,6 +716,7 @@ export default function TVChannelDetailScreen() {
     maxOffset,
     pageItems.length,
     pageSize,
+    isTVMessageOpen,
   ]);
 
   return (
@@ -749,11 +754,17 @@ export default function TVChannelDetailScreen() {
 
       {!isLoading && error ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Could not load channel</Text>
-          <Text style={styles.errorText}>{error}</Text>
-          <TVFocusPressable style={styles.retryButton} onPress={() => void loadChannelData()}>
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TVFocusPressable>
+          <Text style={styles.emptyText}>{error.title}</Text>
+          <Text style={styles.errorText}>{error.text}</Text>
+          {error.canRetry ? (
+            <TVFocusPressable
+              style={styles.retryButton}
+              onPress={() => void loadChannelData()}
+              hasTVPreferredFocus
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TVFocusPressable>
+          ) : null}
         </View>
       ) : null}
 
@@ -820,6 +831,7 @@ export default function TVChannelDetailScreen() {
           }}
         />
       ) : null}
+      {tvMessageElement}
     </SafeAreaView>
   );
 }

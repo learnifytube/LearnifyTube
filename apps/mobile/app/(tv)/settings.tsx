@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Constants from "expo-constants";
 import {
   ActivityIndicator,
-  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -31,6 +30,8 @@ import {
   describeConnectionStatus,
 } from "../../components/tv/connectionText";
 import { TVFocusPressable } from "../../components/tv/TVFocusPressable";
+import { useTVMessage } from "../../components/tv/TVMessage";
+import { storageFolderFailed } from "../../components/tv/tvMessages";
 
 const LOG_PAGE_SIZE = 16;
 
@@ -41,16 +42,12 @@ function getAndroidApiLevel(): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return `${error.name}: ${error.message}`;
-  return String(error);
-}
-
 export default function TVSettingsScreen() {
   const connection = desktopConnection.useConnection();
   const isConnected = connection.status === "connected";
 
   const [input, setInput] = useState("");
+  const { show: showTVMessage, element: tvMessageElement } = useTVMessage();
   const [isManualConnectPending, setIsManualConnectPending] = useState(false);
   const [manualFailure, setManualFailure] = useState<string | null>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
@@ -156,7 +153,7 @@ export default function TVSettingsScreen() {
         });
       }
     } catch (error) {
-      Alert.alert("Storage folder", getErrorMessage(error));
+      showTVMessage(storageFolderFailed);
       logger.error(
         "[TV Settings] Failed to select video storage folder",
         error,
@@ -164,7 +161,7 @@ export default function TVSettingsScreen() {
     } finally {
       setIsSelectingStorage(false);
     }
-  }, [isSelectingStorage]);
+  }, [isSelectingStorage, showTVMessage]);
 
   const handleUseInternalStorage = useCallback(async () => {
     const location = await setInternalVideoStorage();
@@ -462,6 +459,7 @@ export default function TVSettingsScreen() {
           </View>
         </View>
       ) : null}
+      {tvMessageElement}
     </SafeAreaView>
   );
 }

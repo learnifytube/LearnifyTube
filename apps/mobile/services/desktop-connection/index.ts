@@ -124,20 +124,7 @@ export function startDesktopConnection() {
   void whenHydrated().then(() => {
     if (cancelled) return;
     publish();
-    const unsubscribeConnection = desktopConnection.subscribe(publish);
-    // TV Settings still connects and disconnects through the store; follow it.
-    const unsubscribeStore = useConnectionStore.subscribe((state, previous) => {
-      if (state.serverUrl === previous.serverUrl) return;
-      const { url } = desktopConnection.getState();
-      if (state.serverUrl === url) return;
-      if (state.serverUrl)
-        void desktopConnection.connectManually(state.serverUrl);
-      else if (url) desktopConnection.disconnect();
-    });
-    unsubscribe = () => {
-      unsubscribeConnection();
-      unsubscribeStore();
-    };
+    unsubscribe = desktopConnection.subscribe(publish);
   });
 
   return () => {

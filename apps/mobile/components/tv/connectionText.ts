@@ -1,5 +1,18 @@
 import type { DesktopConnectionState } from "../../services/desktop-connection";
 
+const statusLabels: Record<DesktopConnectionState["status"], string> = {
+  connected: "Connected",
+  connecting: "Connecting…",
+  offline: "Offline mode",
+  pairingRequired: "Pairing required",
+  incompatible: "Update needed",
+};
+
+/** The connection state in a few words, the same on every TV screen. */
+export function describeConnectionStatus(connection: DesktopConnectionState) {
+  return statusLabels[connection.status];
+}
+
 /** Why the TV isn't connected, in the viewer's words. */
 export function describeConnectionProblem(connection: DesktopConnectionState) {
   if (connection.status === "pairingRequired") {

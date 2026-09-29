@@ -60,7 +60,10 @@ import {
 import { useLibraryCatalog } from "../../core/hooks/useLibraryCatalog";
 import { offlineCopy, type OfflineCopy } from "../../services/offline-copy";
 import { videoThumbnails } from "../../services/video-thumbnails";
-import { describeConnectionProblem } from "../../components/tv/connectionText";
+import {
+  describeConnectionProblem,
+  describeConnectionStatus,
+} from "../../components/tv/connectionText";
 import { useTVBackInterceptor } from "../../components/tv/tvBack";
 import type {
   RemoteChannel,
@@ -101,19 +104,14 @@ function ConnectionIndicator({
         onFocus={onFocus}
       >
         <View style={[styles.indicatorDot, styles.indicatorDotWarning]} />
-        <Text style={styles.indicatorText}>Pair again</Text>
+        <Text style={styles.indicatorText}>
+          {describeConnectionStatus(connection)}
+        </Text>
       </TVFocusPressable>
     );
   }
 
-  const label =
-    connection.status === "connected"
-      ? "Connected"
-      : connection.status === "incompatible"
-        ? "Update needed"
-        : connection.status === "connecting"
-          ? "Connecting…"
-          : "Offline";
+  const label = describeConnectionStatus(connection);
   return (
     <View style={styles.indicator}>
       <View

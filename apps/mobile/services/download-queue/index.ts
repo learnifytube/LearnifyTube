@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystemLegacy from "expo-file-system/legacy";
 import { api } from "../api";
 import { offlineCopy } from "../offline-copy";
+import { videoThumbnails } from "../video-thumbnails";
 import { useConnectionStore } from "../../stores/connection";
 import { useLibraryStore } from "../../stores/library";
 import {
@@ -93,6 +94,7 @@ const platform: DownloadQueuePlatform = {
     },
   },
   addToLibrary: (video) => useLibraryStore.getState().addVideo(video),
+  storeThumbnail: videoThumbnails.store,
   loadQueue: async () => {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (!raw) return [];

@@ -82,6 +82,8 @@ function createHarness({
     requested: [] as string[],
     cancelled: [] as string[],
     reports: [] as unknown[],
+    thumbnails: new Set<string>(),
+    thumbnailFailures: new Set<string>(),
   };
   const platform: DeviceMirrorPlatform = {
     getServerUrl: () => state.serverUrl,
@@ -107,6 +109,13 @@ function createHarness({
     },
     removeFromLibrary: (videoId) => {
       state.library.delete(videoId);
+    },
+    hasThumbnail: (videoId) => state.thumbnails.has(videoId),
+    storeThumbnail: async (_serverUrl, video) => {
+      if (state.thumbnailFailures.has(video.id)) {
+        throw new Error("Thumbnail request failed with HTTP 500");
+      }
+      state.thumbnails.add(video.id);
     },
     getWatchProgress: () => [
       { videoId: "a", lastPositionSeconds: 60, lastWatchedAt: 10 },
@@ -166,6 +175,21 @@ describe("device mirror", () => {
         watch: [{ videoId: "a", lastPositionSeconds: 60, lastWatchedAt: 10 }],
       },
     ]);
+  });
+
+  it("stores missing thumbnails for Videos in the set the Device already holds", async () => {
+    const { state, mirror } = createHarness({
+      set: ["held", "stored", "failing", "new"],
+      library: ["held", "stored", "failing", "pulled"],
+    });
+    state.thumbnails.add("stored");
+    state.thumbnailFailures.add("failing");
+
+    await mirror.syncNow();
+
+    expect([...state.thumbnails].sort()).toEqual(["held", "stored"]);
+    expect(state.requested).toEqual(["new"]);
+    expect(state.reports).toHaveLength(1);
   });
 
   it("leaves the Device alone when the desktop is too old to serve the set", async () => {

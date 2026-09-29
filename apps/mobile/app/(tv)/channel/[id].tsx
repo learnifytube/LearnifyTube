@@ -50,6 +50,7 @@ import {
 } from "../../../components/tv/grid";
 import { useLibraryCatalog } from "../../../core/hooks/useLibraryCatalog";
 import { offlineCopy, type OfflineCopy } from "../../../services/offline-copy";
+import { videoThumbnails } from "../../../services/video-thumbnails";
 import type { RemotePlaylist, RemoteVideoWithStatus, Video } from "../../../types";
 
 type DetailMode = "playlists" | "videos";
@@ -200,6 +201,7 @@ export default function TVChannelDetailScreen() {
     (state) => state.upsertRecentPlaylist
   );
   const { videos, offlineVideos, getOfflineUri } = useLibraryCatalog();
+  const getStoredThumbnail = videoThumbnails.useLookup();
 
   const [detailMode, setDetailMode] = useState<DetailMode>("playlists");
   const [channelPlaylists, setChannelPlaylists] = useState<RemotePlaylist[]>([]);
@@ -591,11 +593,19 @@ export default function TVChannelDetailScreen() {
       title: item.title,
       subtitle: item.channelTitle,
       thumbnailUrl:
+        getStoredThumbnail(item.id) ??
         resolveThumbnailUrl(thumbnailServerUrl, item.thumbnailUrl) ??
         (thumbnailServerUrl ? api.getThumbnailUrl(thumbnailServerUrl, item.id) : null),
       type: "video",
     }));
-  }, [channelPlaylists, channelVideos, detailMode, isUsingOfflineFallback, serverUrl]);
+  }, [
+    channelPlaylists,
+    channelVideos,
+    detailMode,
+    getStoredThumbnail,
+    isUsingOfflineFallback,
+    serverUrl,
+  ]);
 
   const maxOffset = Math.max(0, cards.length - pageSize);
   const clampedOffset = Math.min(pageOffset, maxOffset);

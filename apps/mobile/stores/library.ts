@@ -3,6 +3,7 @@ import { subscribeWithSelector } from "zustand/middleware";
 import type { Video, Transcript } from "../types";
 import * as videoRepo from "../db/repositories/videos";
 import { offlineCopy } from "../services/offline-copy";
+import { videoThumbnails } from "../services/video-thumbnails";
 
 interface LibraryStore {
   videos: Video[];
@@ -24,10 +25,11 @@ interface LibraryStore {
 }
 
 // Reads the Offline copy's record before the Video's row is deleted.
-function removeOfflineCopy(videoId: string) {
+function removeFromDevice(videoId: string) {
   offlineCopy.remove(videoId).catch((error) => {
     console.error("[Library] Failed to remove Offline copy:", error);
   });
+  videoThumbnails.remove(videoId);
 }
 
 // Convert DB video to app Video type
@@ -167,7 +169,7 @@ export const useLibraryStore = create<LibraryStore>()(
 
     removeVideo: (id) => {
       try {
-        removeOfflineCopy(id);
+        removeFromDevice(id);
         videoRepo.deleteVideo(id);
         get().loadVideos();
       } catch (error) {
@@ -181,7 +183,7 @@ export const useLibraryStore = create<LibraryStore>()(
       try {
         const videos = get().videos;
         for (const video of videos) {
-          removeOfflineCopy(video.id);
+          removeFromDevice(video.id);
           videoRepo.deleteVideo(video.id);
         }
         set({ videos: [] });

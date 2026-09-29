@@ -59,6 +59,7 @@ import {
 } from "../../components/tv/grid";
 import { useLibraryCatalog } from "../../core/hooks/useLibraryCatalog";
 import { offlineCopy, type OfflineCopy } from "../../services/offline-copy";
+import { videoThumbnails } from "../../services/video-thumbnails";
 import { describeConnectionProblem } from "../../components/tv/connectionText";
 import type {
   RemoteChannel,
@@ -162,6 +163,7 @@ function resolveThumbnailUrl(
 export default function TVHomeScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const { videos, offlineVideos, getOfflineUri } = useLibraryCatalog();
+  const getStoredThumbnail = videoThumbnails.useLookup();
   const connection = desktopConnection.useConnection();
   const serverUrl = connection.url;
   const startPlaylist = usePlaybackStore((state) => state.startPlaylist);
@@ -665,6 +667,7 @@ export default function TVHomeScreen() {
       const total = item.videos.length;
       const currentPosition = total > 0 ? Math.min(item.lastIndex + 1, total) : 0;
       const currentVideo = item.videos[item.lastIndex];
+      const firstVideo = item.videos[0];
       const historyServerUrl = canStream ? item.serverUrl ?? serverUrl ?? null : null;
       const subtitle = currentVideo
         ? `Resume ${currentPosition}/${total} - ${currentVideo.title}`
@@ -675,14 +678,16 @@ export default function TVHomeScreen() {
         title: item.title,
         subtitle,
         thumbnailUrl:
+          (currentVideo && getStoredThumbnail(currentVideo.id)) ??
+          (firstVideo && getStoredThumbnail(firstVideo.id)) ??
           resolveThumbnailUrl(historyServerUrl, currentVideo?.thumbnailUrl) ??
-          resolveThumbnailUrl(historyServerUrl, item.videos[0]?.thumbnailUrl),
+          resolveThumbnailUrl(historyServerUrl, firstVideo?.thumbnailUrl),
         type: "history",
       });
     }
 
     return cards;
-  }, [canStream, getOfflineUri, recentPlaylists, serverUrl]);
+  }, [canStream, getOfflineUri, getStoredThumbnail, recentPlaylists, serverUrl]);
 
   const activeCards = useMemo(() => {
     if (mode === "playlists") return playlistCards;

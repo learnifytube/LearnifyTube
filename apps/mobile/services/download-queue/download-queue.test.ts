@@ -44,6 +44,8 @@ function createHarness({ saved = [] as StoredDownload[] } = {}) {
   const statusRequests: string[] = [];
   const transfers: Transfer[] = [];
   const library = new Map<string, Video>();
+  const storedThumbnails = new Map<string, string | undefined>();
+  const thumbnailFailures = new Set<string>();
   let persisted: StoredDownload[] = saved;
 
   const platform: DownloadQueuePlatform = {
@@ -102,6 +104,13 @@ function createHarness({ saved = [] as StoredDownload[] } = {}) {
     addToLibrary: (video) => {
       library.set(video.id, video);
     },
+    storeThumbnail: async (_serverUrl, videoId, thumbnailUrl) => {
+      await Promise.resolve();
+      if (thumbnailFailures.has(videoId)) {
+        throw new Error("Thumbnail request failed with HTTP 500");
+      }
+      storedThumbnails.set(videoId, thumbnailUrl);
+    },
     loadQueue: async () => persisted,
     saveQueue: (downloads) => {
       persisted = downloads;
@@ -116,6 +125,8 @@ function createHarness({ saved = [] as StoredDownload[] } = {}) {
     offlineCopy,
     device,
     library,
+    storedThumbnails,
+    thumbnailFails: (id: string) => thumbnailFailures.add(id),
     transfers,
     statusRequests,
     persisted: () => persisted,
@@ -167,6 +178,33 @@ describe("Download queue", () => {
       transcripts: [{ language: "en", segments: [] }],
     });
     expect(h.queue.getDownload("v1")).toBeNull();
+  });
+
+  it("stores the thumbnail of a finished Download on the Device", async () => {
+    const h = await started(createHarness());
+    h.desktopHas("v1");
+
+    h.queue.request(summary("v1"));
+    await flush();
+    expect(h.storedThumbnails.has("v1")).toBe(false);
+    await h.transfers[0].finish();
+
+    expect(h.storedThumbnails.get("v1")).toBe("https://img/v1.jpg");
+  });
+
+  it("finishes the Download when its thumbnail can't be fetched", async () => {
+    const h = await started(createHarness());
+    h.desktopHas("v1");
+    h.thumbnailFails("v1");
+
+    h.queue.request(summary("v1"));
+    await flush();
+    await h.transfers[0].finish();
+
+    expect(h.offlineCopy.getUri("v1")).not.toBeNull();
+    expect(h.library.has("v1")).toBe(true);
+    expect(h.queue.getDownload("v1")).toBeNull();
+    expect(h.storedThumbnails.has("v1")).toBe(false);
   });
 
   it("waits for the desktop to fetch a Video it doesn't have, then transfers it", async () => {

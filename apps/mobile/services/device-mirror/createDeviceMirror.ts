@@ -29,6 +29,9 @@ export type DeviceMirrorPlatform = {
   requestDownload: (video: SetVideo) => void;
   cancelDownload: (videoId: string) => void;
   removeFromLibrary: (videoId: string) => void;
+  hasThumbnail: (videoId: string) => boolean;
+  /** Stores the Video's thumbnail on the Device, so it shows in Offline mode. */
+  storeThumbnail: (serverUrl: string, video: SetVideo) => Promise<void>;
   getWatchProgress: () => DeviceReport["watch"];
   loadMirroredIds: () => Promise<string[]>;
   saveMirroredIds: (videoIds: string[]) => Promise<void>;
@@ -99,6 +102,16 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
       offlineVideoIds: platform.getLibraryVideoIds(),
       watch: platform.getWatchProgress(),
     });
+
+    // Videos held from before thumbnails were stored with Offline copies;
+    // one at a time, so a large library doesn't flood the desktop.
+    const held = new Set(platform.getLibraryVideoIds());
+    for (const video of setVideos) {
+      if (!held.has(video.id) || platform.hasThumbnail(video.id)) continue;
+      await platform.storeThumbnail(serverUrl, video).catch((error) => {
+        console.warn("[DeviceMirror] Failed to store thumbnail", error);
+      });
+    }
   };
 
   /** Mirrors the On-device set now; a call during a sync waits for that sync. */

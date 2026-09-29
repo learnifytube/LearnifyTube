@@ -26,7 +26,7 @@ function getMimeTypeFromUrl(url: string): string {
   return "image/jpeg";
 }
 
-async function cacheThumbnailInternal(remoteUrl: string): Promise<string | null> {
+export async function fetchThumbnail(remoteUrl: string) {
   const response = await fetch(remoteUrl);
   if (!response.ok) {
     throw new Error(`Thumbnail request failed with HTTP ${response.status}`);
@@ -35,7 +35,12 @@ async function cacheThumbnailInternal(remoteUrl: string): Promise<string | null>
   const mimeType =
     response.headers.get("content-type")?.split(";")[0]?.trim() ||
     getMimeTypeFromUrl(remoteUrl);
-  const bytes = await response.arrayBuffer();
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  return { mimeType, bytes };
+}
+
+async function cacheThumbnailInternal(remoteUrl: string): Promise<string | null> {
+  const { mimeType, bytes } = await fetchThumbnail(remoteUrl);
   const base64 = Buffer.from(bytes).toString("base64");
 
   return `data:${mimeType};base64,${base64}`;
@@ -74,3 +79,4 @@ export async function cacheThumbnail(
   inflightThumbnailRequests.set(inflightKey, requestPromise);
   return requestPromise;
 }
+

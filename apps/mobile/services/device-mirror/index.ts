@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ON_DEVICE_SET_SYNC_PROTOCOL_VERSION } from "../../../shared/mobile-sync-contract";
 import { api } from "../api";
 import { downloadQueue } from "../download-queue";
+import { videoThumbnails } from "../video-thumbnails";
 import { getAppSurface } from "../../core/hooks/useAppSurface";
 import { useConnectionStore } from "../../stores/connection";
 import { useLibraryStore } from "../../stores/library";
@@ -71,6 +72,9 @@ const platform: DeviceMirrorPlatform = {
   cancelDownload: (videoId) => downloadQueue.cancel(videoId),
   removeFromLibrary: (videoId) =>
     useLibraryStore.getState().removeVideo(videoId),
+  hasThumbnail: (videoId) => videoThumbnails.getUri(videoId) !== null,
+  storeThumbnail: (serverUrl, video) =>
+    videoThumbnails.store(serverUrl, video.id, video.thumbnailUrl),
   getWatchProgress: () =>
     getWatchHistory(WATCH_REPORT_LIMIT).flatMap((item) =>
       item.lastWatchedAt

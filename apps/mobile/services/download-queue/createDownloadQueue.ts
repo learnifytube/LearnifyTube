@@ -67,6 +67,12 @@ export type DownloadQueuePlatform = {
     ) => Promise<{ description: string | null; transcripts: Transcript[] }>;
   };
   addToLibrary: (video: Video) => void;
+  /** Stores the Video's thumbnail on the Device, so it shows in Offline mode. */
+  storeThumbnail: (
+    serverUrl: string,
+    videoId: string,
+    thumbnailUrl: string | undefined,
+  ) => Promise<void>;
   loadQueue: () => Promise<StoredDownload[]>;
   saveQueue: (downloads: StoredDownload[]) => void;
 };
@@ -282,6 +288,12 @@ export function createDownloadQueue(platform: DownloadQueuePlatform) {
     });
     await platform.offlineCopy.adopt(videoId, tempUri);
     drop(videoId);
+    // The Offline copy plays without it; screens fall back to the desktop URL.
+    platform
+      .storeThumbnail(serverUrl, videoId, download.thumbnailUrl)
+      .catch((error) => {
+        console.warn("[DownloadQueue] Failed to store thumbnail", error);
+      });
   };
 
   const run = (

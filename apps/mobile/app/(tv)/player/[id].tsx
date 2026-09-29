@@ -14,7 +14,6 @@ import { useConnectionStore } from "../../../stores/connection";
 import { usePlaybackStore } from "../../../stores/playback";
 import { useTVHistoryStore } from "../../../stores/tvHistory";
 import { api } from "../../../services/api";
-import { downloadQueue } from "../../../services/download-queue";
 import { offlineCopy } from "../../../services/offline-copy";
 import { logger } from "../../../services/logger";
 import { tvDebugInfo } from "../../../services/tvDebug";
@@ -23,6 +22,13 @@ import {
   TVFocusPressable,
   type TVFocusPressableHandle,
 } from "../../../components/tv/TVFocusPressable";
+import {
+  formatPlaybackTime,
+  isSeekPending,
+  planSeek,
+  type PendingSeek,
+} from "../../../components/tv/playerSeek";
+import { colors, fontSize, fontWeight, radius, spacing } from "../../../theme";
 import type { ServerDownloadStatus } from "../../../types";
 
 type PrefetchState = "idle" | "loading" | "ready" | "failed";
@@ -37,6 +43,27 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+const MEDIA_KEYS = new Set(["playPause", "rewind", "fastForward"]);
+
+type Direction = "up" | "down" | "left" | "right";
+
+// Android's KeyEvent.ACTION_UP.
+const KEY_UP = 1;
+
+function getDirection(eventType: string) {
+  const normalized = eventType.toLowerCase();
+  for (const direction of ["up", "down", "left", "right"] as const) {
+    if (
+      normalized === direction ||
+      normalized === `arrow${direction}` ||
+      normalized.includes(`dpad_${direction}`)
+    ) {
+      return direction;
+    }
+  }
+  return null;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -147,44 +174,6 @@ async function ensureServerVideoReady(
   throw new Error("Server download timed out");
 }
 
-async function waitForLocalVideoReady(
-  videoId: string,
-  options?: {
-    signal?: AbortSignal;
-    timeoutMs?: number;
-    onProgress?: (progress: number | null) => void;
-  }
-): Promise<string> {
-  const signal = options?.signal;
-  const timeoutMs = options?.timeoutMs ?? SERVER_DOWNLOAD_TIMEOUT_MS;
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
-    throwIfAborted(signal);
-
-    const offlineUri = offlineCopy.getUri(videoId);
-    if (offlineUri) {
-      options?.onProgress?.(100);
-      return offlineUri;
-    }
-
-    const download = downloadQueue.getDownload(videoId);
-    if (download?.phase === "failed") {
-      throw new Error(download.error || "Download to TV failed");
-    }
-
-    if (download?.phase === "transferring") {
-      options?.onProgress?.(download.progress ?? null);
-    } else {
-      options?.onProgress?.(null);
-    }
-
-    await sleep(1000);
-  }
-
-  throw new Error("Download to TV timed out");
-}
-
 export default function TVPlayerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const libraryVideo = useLibraryStore((state) => state.videos.find((item) => item.id === id));
@@ -208,6 +197,15 @@ export default function TVPlayerScreen() {
   const [isRemoteNavVisible, setIsRemoteNavVisible] = useState(true);
   const [shouldPreferRemoteNavFocus, setShouldPreferRemoteNavFocus] = useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
+  const [stream, setStream] = useState<{
+    videoId: string;
+    url: string;
+  } | null>(null);
+  const [playback, setPlayback] = useState({ position: 0, duration: 0 });
+  const pendingSeekRef = useRef<PendingSeek | null>(null);
+  const isProgressFocusedRef = useRef(false);
+  // Set when a key press woke the overlay, so that press's click doesn't also act.
+  const suppressNextPressRef = useRef(false);
   const navigationLockVideoIdRef = useRef<string | null>(null);
   const prefetchedNextVideoIdRef = useRef<string | null>(null);
   const remoteNavTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -215,11 +213,13 @@ export default function TVPlayerScreen() {
   const prevNavRef = useRef<TVFocusPressableHandle | null>(null);
   const playPauseNavRef = useRef<TVFocusPressableHandle | null>(null);
   const nextNavRef = useRef<TVFocusPressableHandle | null>(null);
+  const progressNavRef = useRef<TVFocusPressableHandle | null>(null);
   const [navNodeHandles, setNavNodeHandles] = useState<{
     back?: number;
     prev?: number;
     playPause?: number;
     next?: number;
+    progress?: number;
   }>({});
 
   const clearRemoteNavTimeout = useCallback(() => {
@@ -253,6 +253,16 @@ export default function TVPlayerScreen() {
     scheduleRemoteNavAutoHide();
   }, [scheduleRemoteNavAutoHide]);
 
+  // Runs an overlay button's action, unless the press only woke the overlay.
+  const pressRemoteNav = (action: () => void) => {
+    if (!isRemoteNavVisible || suppressNextPressRef.current) {
+      suppressNextPressRef.current = false;
+      showRemoteNav(true);
+      return;
+    }
+    action();
+  };
+
   const playlistIndex = useMemo(() => {
     if (!id) return -1;
     return playlistVideos.findIndex((item) => item.id === id);
@@ -264,6 +274,8 @@ export default function TVPlayerScreen() {
   const effectiveServerUrl = streamServerUrl ?? serverUrl;
 
   const offlineUri = offlineCopy.useUri(id ?? "");
+  // Once a Video starts streaming it keeps its source, even if its Offline copy lands meanwhile.
+  const streamUrl = stream && stream.videoId === id ? stream.url : null;
 
   useEffect(() => {
     if (!id) {
@@ -289,6 +301,10 @@ export default function TVPlayerScreen() {
       setPrepareState("failed");
       setPrepareError("Video ID is missing");
       setPrepareProgress(null);
+      return;
+    }
+
+    if (streamUrl) {
       return;
     }
 
@@ -323,14 +339,9 @@ export default function TVPlayerScreen() {
 
     const prepare = async () => {
       try {
-        if (!video) {
-          throw new Error("Video metadata is unavailable");
-        }
-
-        tvDebugInfo("[TV Playback Debug] Falling back to desktop playback", {
+        tvDebugInfo("[TV Playback Debug] Streaming from the desktop", {
           videoId: id,
           serverUrl: effectiveServerUrl,
-          reason: "download-to-tv-required",
         });
         await ensureServerVideoReady(effectiveServerUrl, id, {
           signal: abortController.signal,
@@ -344,39 +355,13 @@ export default function TVPlayerScreen() {
           return;
         }
 
-        const existingDownload = downloadQueue.getDownload(id);
-        if (!offlineCopy.getUri(id)) {
-          tvDebugInfo("[TV Playback Debug] Queueing TV download", {
-            videoId: id,
-            title: video.title,
-            existingDownloadStatus: existingDownload?.phase ?? null,
-          });
-          downloadQueue.request({
-            id,
-            title: video.title,
-            channelTitle: video.channelTitle,
-            duration: video.duration,
-            thumbnailUrl: video.thumbnailUrl ?? undefined,
-          });
-        }
-
-        await waitForLocalVideoReady(id, {
-          signal: abortController.signal,
-          onProgress: (progress) => {
-            if (cancelled) return;
-            setPrepareProgress(progress);
-          },
+        setStream({
+          videoId: id,
+          url: api.getVideoFileUrl(effectiveServerUrl, id),
         });
-
-        if (!cancelled) {
-          tvDebugInfo("[TV Playback Debug] TV download ready", {
-            videoId: id,
-            offlineUri: offlineCopy.getUri(id),
-          });
-          setPrepareState("ready");
-          setPrepareError(null);
-          setPrepareProgress(100);
-        }
+        setPrepareState("ready");
+        setPrepareError(null);
+        setPrepareProgress(100);
       } catch (error) {
         if (cancelled || abortController.signal.aborted) {
           return;
@@ -404,17 +389,14 @@ export default function TVPlayerScreen() {
     id,
     offlineUri,
     prepareRetryVersion,
-    video,
+    streamUrl,
   ]);
 
-  const source = useMemo(() => {
-    if (!id) return "";
-    if (offlineUri) return offlineUri;
-    return "";
-  }, [effectiveServerUrl, id, offlineUri, prepareState]);
+  const source = id ? (streamUrl ?? offlineUri ?? "") : "";
 
   const player = useVideoPlayer(source, (instance) => {
     instance.loop = false;
+    instance.timeUpdateEventInterval = 1;
     instance.play();
   });
   useWatchProgressRecorder(player, video);
@@ -460,7 +442,12 @@ export default function TVPlayerScreen() {
   const hasNext = hasPlaylistContext && playlistIndex < playlistVideos.length - 1;
   const nextVideo = hasNext ? playlistVideos[playlistIndex + 1] : null;
   const nextOfflineUri = offlineCopy.useUri(nextVideo?.id ?? "");
-  const playbackModeLabel = offlineUri ? "Offline" : "Streaming";
+  const playbackModeLabel = streamUrl ? "Streaming" : "Offline";
+  const duration =
+    playback.duration > 0 ? playback.duration : (video?.duration ?? 0);
+  const position =
+    duration > 0 ? Math.min(playback.position, duration) : playback.position;
+  const progressPercent = duration > 0 ? (position / duration) * 100 : 0;
 
   useEffect(() => {
     setNavNodeHandles({
@@ -468,8 +455,11 @@ export default function TVPlayerScreen() {
       prev: prevNavRef.current ? findNodeHandle(prevNavRef.current) ?? undefined : undefined,
       playPause: playPauseNavRef.current ? findNodeHandle(playPauseNavRef.current) ?? undefined : undefined,
       next: nextNavRef.current ? findNodeHandle(nextNavRef.current) ?? undefined : undefined,
+      progress: progressNavRef.current
+        ? (findNodeHandle(progressNavRef.current) ?? undefined)
+        : undefined,
     });
-  }, [hasNext, hasPrevious, playlistIndex]);
+  }, [hasNext, hasPrevious, playlistIndex, source]);
 
   useEffect(() => {
     const sub = player.addListener("playingChange", (event) => {
@@ -477,6 +467,36 @@ export default function TVPlayerScreen() {
     });
     return () => sub.remove();
   }, [player]);
+
+  useEffect(() => {
+    pendingSeekRef.current = null;
+    setPlayback({ position: player.currentTime, duration: player.duration });
+    const timeSub = player.addListener("timeUpdate", (event) => {
+      // Until the player catches up, keep showing where the seek is heading.
+      if (isSeekPending(pendingSeekRef.current, Date.now())) return;
+      setPlayback({ position: event.currentTime, duration: player.duration });
+    });
+    const loadSub = player.addListener("sourceLoad", (event) => {
+      setPlayback((prev) => ({ ...prev, duration: event.duration }));
+    });
+    return () => {
+      timeSub.remove();
+      loadSub.remove();
+    };
+  }, [player]);
+
+  const seek = (direction: 1 | -1) => {
+    const next = planSeek({
+      currentTime: player.currentTime,
+      duration: player.duration,
+      pending: pendingSeekRef.current,
+      now: Date.now(),
+      direction,
+    });
+    pendingSeekRef.current = next;
+    player.currentTime = next.target;
+    setPlayback((prev) => ({ ...prev, position: next.target }));
+  };
 
   const togglePlayPause = useCallback(() => {
     if (player.playing) {
@@ -495,84 +515,63 @@ export default function TVPlayerScreen() {
         if (!eventType || eventType === "focus" || eventType === "blur") {
           return;
         }
-        const normalizedEventType = eventType.toLowerCase();
-        const isDirectionalKey =
-          normalizedEventType === "up" ||
-          normalizedEventType === "down" ||
-          normalizedEventType === "left" ||
-          normalizedEventType === "right" ||
-          normalizedEventType === "arrowup" ||
-          normalizedEventType === "arrowdown" ||
-          normalizedEventType === "arrowleft" ||
-          normalizedEventType === "arrowright" ||
-          normalizedEventType === "keycode_dpad_up" ||
-          normalizedEventType === "keycode_dpad_down" ||
-          normalizedEventType === "keycode_dpad_left" ||
-          normalizedEventType === "keycode_dpad_right" ||
-          normalizedEventType.includes("dpad_up") ||
-          normalizedEventType.includes("dpad_down") ||
-          normalizedEventType.includes("dpad_left") ||
-          normalizedEventType.includes("dpad_right");
-        // Some TV remotes only emit ACTION_UP for D-pad events.
-        // Let directional keys wake the overlay on either action.
-        if (
-          typeof event.eventKeyAction === "number" &&
-          event.eventKeyAction !== 0 &&
-          !isDirectionalKey
-        ) {
+        const direction = getDirection(eventType);
+        const isKeyDown = event.eventKeyAction !== KEY_UP;
+        const isMediaKey = MEDIA_KEYS.has(eventType);
+
+        // While the overlay is hidden, a d-pad press only shows it: it doesn't pause, skip or
+        // seek. Some TV remotes only emit ACTION_UP for the d-pad, so either action wakes it.
+        if (!isRemoteNavVisible && !isMediaKey) {
+          // Only Select clicks the focused button.
+          suppressNextPressRef.current = eventType === "select";
+          showRemoteNav(true);
           return;
         }
 
-        if (isDirectionalKey) {
-          if (!isRemoteNavVisible) {
-            showRemoteNav(true);
-            return;
-          }
-          // Explicit hide toggle when pressing DOWN while header is visible.
-          if (
-            normalizedEventType === "down" ||
-            normalizedEventType === "arrowdown" ||
-            normalizedEventType === "keycode_dpad_down" ||
-            normalizedEventType.includes("dpad_down")
-          ) {
-            clearRemoteNavTimeout();
-            setIsRemoteNavVisible(false);
-            return;
+        if (!isKeyDown) {
+          return;
+        }
+        suppressNextPressRef.current = false;
+
+        if (direction) {
+          if (isProgressFocusedRef.current) {
+            if (direction === "left" || direction === "right") {
+              seek(direction === "right" ? 1 : -1);
+              showRemoteNav(false);
+              return;
+            }
+            // Down from the progress row, the bottom of the overlay, hides it.
+            if (direction === "down") {
+              clearRemoteNavTimeout();
+              setIsRemoteNavVisible(false);
+              return;
+            }
           }
           showRemoteNav(false);
           return;
         }
 
-        if (eventType === "KEYCODE_MEDIA_PLAY_PAUSE") {
-          if (player.playing) {
-            player.pause();
-          } else {
-            player.play();
-          }
+        // Play/pause also reaches expo-video's media session, which toggles playback itself;
+        // toggling here too would undo it.
+        if (eventType === "playPause") {
           showRemoteNav(false);
           return;
         }
 
-        if (eventType === "KEYCODE_MEDIA_PLAY") {
-          player.play();
+        if (eventType === "rewind" || eventType === "fastForward") {
+          seek(eventType === "fastForward" ? 1 : -1);
           showRemoteNav(false);
           return;
         }
 
-        if (eventType === "KEYCODE_MEDIA_PAUSE") {
-          player.pause();
-          showRemoteNav(false);
-          return;
-        }
-
-        showRemoteNav(!isRemoteNavVisible);
+        showRemoteNav(false);
       }
     );
 
     return () => {
       subscription.remove();
     };
-  }, [clearRemoteNavTimeout, isRemoteNavVisible, player, showRemoteNav]);
+  }, [clearRemoteNavTimeout, isRemoteNavVisible, player, seek, showRemoteNav]);
 
   useEffect(() => {
     showRemoteNav(true);
@@ -673,10 +672,10 @@ export default function TVPlayerScreen() {
         <View style={styles.centered}>
           {prepareState === "preparing" ? (
             <>
-              <Text style={styles.errorText}>Preparing video for offline playback...</Text>
+              <Text style={styles.errorText}>Preparing video...</Text>
               <Text style={styles.channel}>
                 {prepareProgress !== null
-                  ? `Download progress ${Math.max(0, Math.round(prepareProgress))}%`
+                  ? `Desktop progress ${Math.max(0, Math.round(prepareProgress))}%`
                   : "Please wait"}
               </Text>
             </>
@@ -690,7 +689,7 @@ export default function TVPlayerScreen() {
                   style={styles.retryPrepareButton}
                   onPress={() => setPrepareRetryVersion((prev) => prev + 1)}
                 >
-                  <Text style={styles.retryPrepareButtonText}>Retry Download</Text>
+                  <Text style={styles.retryPrepareButtonText}>Retry</Text>
                 </TVFocusPressable>
               ) : null}
             </>
@@ -734,9 +733,9 @@ export default function TVPlayerScreen() {
             </Text>
             <Text style={styles.titleChipMeta} numberOfLines={1}>
               {nextVideo && prefetchState === "loading"
-                ? `Loading next: ${nextVideo.title}`
+                ? `${playbackModeLabel} · Loading next: ${nextVideo.title}`
                 : nextVideo
-                  ? `Up next: ${nextVideo.title}`
+                  ? `${playbackModeLabel} · Up next: ${nextVideo.title}`
                   : playbackModeLabel}
             </Text>
           </View>
@@ -745,16 +744,15 @@ export default function TVPlayerScreen() {
             <TVFocusPressable
               ref={backNavRef}
               style={styles.navFabButton}
-              onPress={() => {
-                if (!isRemoteNavVisible) {
-                  showRemoteNav(true);
-                  return;
-                }
-                showRemoteNav(false);
-                router.back();
-              }}
+              onPress={() =>
+                pressRemoteNav(() => {
+                  showRemoteNav(false);
+                  router.back();
+                })
+              }
               onFocus={handleRemoteNavFocus}
               onBlur={handleRemoteNavBlur}
+              nextFocusDown={navNodeHandles.progress}
               nextFocusRight={hasPrevious ? navNodeHandles.prev : navNodeHandles.playPause}
             >
               <Text style={styles.navFabText}>Back</Text>
@@ -763,16 +761,15 @@ export default function TVPlayerScreen() {
             <TVFocusPressable
               ref={prevNavRef}
               style={[styles.navFabButton, !hasPrevious && styles.navButtonDisabled]}
-              onPress={() => {
-                if (!isRemoteNavVisible) {
-                  showRemoteNav(true);
-                  return;
-                }
-                showRemoteNav(false);
-                goToIndex(playlistIndex - 1);
-              }}
+              onPress={() =>
+                pressRemoteNav(() => {
+                  showRemoteNav(false);
+                  goToIndex(playlistIndex - 1);
+                })
+              }
               onFocus={handleRemoteNavFocus}
               onBlur={handleRemoteNavBlur}
+              nextFocusDown={navNodeHandles.progress}
               disabled={!hasPrevious}
               nextFocusLeft={navNodeHandles.back}
               nextFocusRight={navNodeHandles.playPause}
@@ -783,15 +780,10 @@ export default function TVPlayerScreen() {
             <TVFocusPressable
               ref={playPauseNavRef}
               style={styles.navFabButton}
-              onPress={() => {
-                if (!isRemoteNavVisible) {
-                  showRemoteNav(true);
-                  return;
-                }
-                togglePlayPause();
-              }}
+              onPress={() => pressRemoteNav(togglePlayPause)}
               onFocus={handleRemoteNavFocus}
               onBlur={handleRemoteNavBlur}
+              nextFocusDown={navNodeHandles.progress}
               hasTVPreferredFocus={shouldPreferRemoteNavFocus}
               nextFocusLeft={hasPrevious ? navNodeHandles.prev : navNodeHandles.back}
               nextFocusRight={hasNext ? navNodeHandles.next : undefined}
@@ -802,16 +794,15 @@ export default function TVPlayerScreen() {
             <TVFocusPressable
               ref={nextNavRef}
               style={[styles.navFabButton, !hasNext && styles.navButtonDisabled]}
-              onPress={() => {
-                if (!isRemoteNavVisible) {
-                  showRemoteNav(true);
-                  return;
-                }
-                showRemoteNav(false);
-                goToIndex(playlistIndex + 1);
-              }}
+              onPress={() =>
+                pressRemoteNav(() => {
+                  showRemoteNav(false);
+                  goToIndex(playlistIndex + 1);
+                })
+              }
               onFocus={handleRemoteNavFocus}
               onBlur={handleRemoteNavBlur}
+              nextFocusDown={navNodeHandles.progress}
               disabled={!hasNext}
               nextFocusLeft={navNodeHandles.playPause}
             >
@@ -819,6 +810,37 @@ export default function TVPlayerScreen() {
             </TVFocusPressable>
           </View>
         </View>
+
+        <TVFocusPressable
+          ref={progressNavRef}
+          style={styles.progressRow}
+          focusedStyle={styles.progressRowFocused}
+          accessibilityLabel={`${formatPlaybackTime(position)} of ${formatPlaybackTime(duration)}`}
+          onPress={() => pressRemoteNav(togglePlayPause)}
+          onFocus={() => {
+            isProgressFocusedRef.current = true;
+            handleRemoteNavFocus();
+          }}
+          onBlur={() => {
+            isProgressFocusedRef.current = false;
+            handleRemoteNavBlur();
+          }}
+          nextFocusUp={navNodeHandles.playPause}
+          nextFocusLeft={navNodeHandles.progress}
+          nextFocusRight={navNodeHandles.progress}
+        >
+          <Text style={styles.progressTime}>
+            {formatPlaybackTime(position)}
+          </Text>
+          <View style={styles.progressTrack}>
+            <View
+              style={[styles.progressFill, { width: `${progressPercent}%` }]}
+            />
+          </View>
+          <Text style={styles.progressTime}>
+            {formatPlaybackTime(duration)}
+          </Text>
+        </TVFocusPressable>
       </SafeAreaView>
     </View>
   );
@@ -935,6 +957,40 @@ const styles = StyleSheet.create({
     color: "#fffef2",
     fontSize: 18,
     fontWeight: "900",
+  },
+  progressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  progressRowFocused: {
+    borderColor: colors.warning,
+    backgroundColor: colors.overlayLight,
+  },
+  progressTime: {
+    color: colors.foreground,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    fontVariant: ["tabular-nums"],
+    minWidth: 72,
+    textAlign: "center",
+  },
+  progressTrack: {
+    flex: 1,
+    height: 6,
+    borderRadius: radius.full,
+    backgroundColor: colors.muted,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: colors.primary,
   },
   centered: {
     flex: 1,

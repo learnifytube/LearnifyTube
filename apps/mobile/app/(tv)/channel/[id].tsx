@@ -174,11 +174,23 @@ function getOfflineChannelFallback(
     return !!getOfflineUri(video.id);
   });
 
+  // Offline, only what plays: playlists holding a Video, and the Videos held.
   return {
-    playlists: toOfflineChannelPlaylists(savedChannelPlaylists),
-    videos: savedChannel
-      ? toSavedPlaylistChannelVideos(savedChannel, getOfflineUri)
-      : toOfflineChannelVideos(localVideos, getOfflineUri),
+    playlists: toOfflineChannelPlaylists(
+      savedChannelPlaylists.filter((item) => item.downloadedCount > 0)
+    ),
+    videos: [
+      ...(savedChannel
+        ? toSavedPlaylistChannelVideos(savedChannel, getOfflineUri)
+        : []
+      ).filter((item) => item.downloadStatus === "completed"),
+      ...toOfflineChannelVideos(
+        localVideos.filter(
+          (video) => !savedChannel?.items.some((item) => item.videoId === video.id)
+        ),
+        getOfflineUri
+      ),
+    ],
     hasChannelSummary: !!savedChannelSummary,
   };
 }
@@ -257,7 +269,7 @@ export default function TVChannelDetailScreen() {
     const hasOfflineVideos = offlineFallback.videos.length > 0;
     const hasOfflineFallback = hasOfflinePlaylists || hasOfflineVideos;
     const offlineEmptyStateMessage = offlineFallback.hasChannelSummary
-      ? "Not connected to server. This channel detail has not been cached yet."
+      ? "Nothing from this channel is on this TV."
       : "No playlists or videos";
 
     if (!serverUrl) {
@@ -406,16 +418,15 @@ export default function TVChannelDetailScreen() {
       const savedPlaylist = getSavedPlaylistWithItems(cachedPlaylistId, {
         includeUnpinned: true,
       });
-      if (!savedPlaylist || savedPlaylist.items.length === 0) {
-        Alert.alert(
-          "Offline mode",
-          "This playlist is not cached yet. Reconnect to desktop to load it first."
-        );
-        return false;
-      }
+      const heldVideos = savedPlaylist
+        ? toSavedPlaylistChannelVideos(savedPlaylist, getOfflineUri).filter(
+            (item) => item.downloadStatus === "completed"
+          )
+        : [];
+      if (heldVideos.length === 0) return false;
 
       showPlaylistVideos(
-        toSavedPlaylistChannelVideos(savedPlaylist, getOfflineUri),
+        heldVideos,
         playlistId,
         playlistTitle,
         true
@@ -424,9 +435,8 @@ export default function TVChannelDetailScreen() {
         cachedPlaylistId,
         playlistId,
         playlistTitle,
-        cachedItemCount: savedPlaylist.items.length,
-        localPlayableCount: savedPlaylist.items.filter((item) => item.isDownloaded)
-          .length,
+        cachedItemCount: savedPlaylist?.items.length ?? 0,
+        localPlayableCount: heldVideos.length,
       });
       return true;
     },
@@ -469,6 +479,10 @@ export default function TVChannelDetailScreen() {
         if (openCachedPlaylist(cachedPlaylistId, playlistId, playlistTitle)) {
           return;
         }
+        Alert.alert(
+          "Not ready yet",
+          "The desktop couldn't open this playlist just now. Try again in a moment."
+        );
       } finally {
         setIsResolvingPlaylist(false);
       }

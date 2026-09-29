@@ -35,6 +35,8 @@ export type DeviceMirrorPlatform = {
   getWatchProgress: () => DeviceReport["watch"];
   loadMirroredIds: () => Promise<string[]>;
   saveMirroredIds: (videoIds: string[]) => Promise<void>;
+  /** Keeps the latest On-device set, which the TV shows as "On this TV" in Offline mode too. */
+  saveOnDeviceSet: (videos: SetVideo[]) => void;
 };
 
 const SYNC_INTERVAL_MS = 2 * 60_000;
@@ -74,6 +76,7 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
     if (!serverUrl || !platform.isLibraryLoaded()) return;
     const setVideos = await platform.desktop.getOnDeviceSet(serverUrl);
     if (!setVideos) return;
+    platform.saveOnDeviceSet(setVideos);
 
     const libraryIds = platform.getLibraryVideoIds();
     const queuedIds = platform.getQueuedVideoIds();

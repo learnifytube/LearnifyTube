@@ -84,6 +84,7 @@ function createHarness({
     reports: [] as unknown[],
     thumbnails: new Set<string>(),
     thumbnailFailures: new Set<string>(),
+    savedSet: null as string[] | null,
   };
   const platform: DeviceMirrorPlatform = {
     getServerUrl: () => state.serverUrl,
@@ -124,6 +125,9 @@ function createHarness({
     saveMirroredIds: async (ids) => {
       state.mirrored = ids;
     },
+    saveOnDeviceSet: (videos) => {
+      state.savedSet = videos.map((video) => video.id);
+    },
   };
   return { state, mirror: createDeviceMirror(platform) };
 }
@@ -142,6 +146,16 @@ describe("device mirror", () => {
     await mirror.syncNow();
 
     expect([...state.library]).toEqual(["a"]);
+  });
+
+  it("remembers the On-device set, so the TV can show it in Offline mode", async () => {
+    const { state, mirror } = createHarness({ set: ["a", "b"] });
+    await mirror.syncNow();
+    expect(state.savedSet).toEqual(["a", "b"]);
+
+    state.set = ["b"];
+    await mirror.syncNow();
+    expect(state.savedSet).toEqual(["b"]);
   });
 
   it("cancels a Download that left the set before it finished", async () => {

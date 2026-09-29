@@ -7,6 +7,7 @@ import { videoThumbnails } from "../video-thumbnails";
 import { getAppSurface } from "../../core/hooks/useAppSurface";
 import { useConnectionStore } from "../../stores/connection";
 import { useLibraryStore } from "../../stores/library";
+import { useOnDeviceSetStore } from "../../stores/onDeviceSet";
 import { getWatchHistory } from "../../db/repositories/watchHistory";
 import {
   createDeviceMirror,
@@ -93,6 +94,7 @@ const platform: DeviceMirrorPlatform = {
   },
   saveMirroredIds: (videoIds) =>
     AsyncStorage.setItem(MIRRORED_IDS_KEY, JSON.stringify(videoIds)),
+  saveOnDeviceSet: (videos) => useOnDeviceSetStore.setState({ videos }),
 };
 
 export const deviceMirror = createDeviceMirror(platform);

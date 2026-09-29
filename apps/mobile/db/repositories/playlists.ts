@@ -250,6 +250,16 @@ export function getSavedPlaylistWithItems(
   };
 }
 
+// Get all saved playlists with their items, in playlist order
+export function getAllSavedPlaylistsWithItems(
+  options?: SavedPlaylistQueryOptions
+) {
+  return getAllSavedPlaylists(options).map((playlist) => ({
+    ...playlist,
+    items: getPlaylistItemsInternal(playlist.id),
+  }));
+}
+
 // Get all saved playlists with item counts and download progress
 export function getAllSavedPlaylistsWithProgress(
   options?: SavedPlaylistQueryOptions

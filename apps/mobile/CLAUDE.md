@@ -23,6 +23,8 @@ Verify with `test`, `type-check`, `lint`, and `check:ui-boundaries`. Tests exerc
 - `app/(mobile)` — phone: tab navigator, player, sync, share (P2P), saved playlists.
 - `app/(tv)` — Android TV: d-pad navigation, player with overlay controls, channel browsing.
 
+On the TV, hardware Back goes through one handler that `app/(tv)/_layout.tsx` mounts (`components/tv/tvBack.ts`): it pops the stack, lands on the TV home when there's nothing to pop, and exits from the home screen. A screen takes Back first with `useTVBackInterceptor` (the home grid, a channel's open playlist). `app/+native-intent.tsx` sends `learnify://` deep links into the TV group on the TV surface. Keep `predictiveBackGestureEnabled` off in `app.json`: with it on, Android 13–15 finish the activity on Back without telling JS.
+
 The two route groups import and navigate only within themselves; `scripts/check-ui-boundaries.sh` enforces it. Put shared code in `components/`, `core/`, `services/`, `stores/`, or `db/`.
 
 ## Architecture

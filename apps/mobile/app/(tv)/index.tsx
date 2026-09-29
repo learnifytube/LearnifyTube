@@ -61,6 +61,7 @@ import { useLibraryCatalog } from "../../core/hooks/useLibraryCatalog";
 import { offlineCopy, type OfflineCopy } from "../../services/offline-copy";
 import { videoThumbnails } from "../../services/video-thumbnails";
 import { describeConnectionProblem } from "../../components/tv/connectionText";
+import { useTVBackInterceptor } from "../../components/tv/tvBack";
 import type {
   RemoteChannel,
   RemoteMyList,
@@ -197,6 +198,39 @@ export default function TVHomeScreen() {
     []
   );
   const cardRefs = useRef<Array<TVFocusPressableHandle | null>>([]);
+  // Back on the tabs exits the app; from anywhere else it goes up to the selected tab.
+  // hasTVPreferredFocus only moves focus when it turns true, so the selected tab's is
+  // released for one render first, then set.
+  const [tabFocus, setTabFocus] = useState<"initial" | "released" | "selected">(
+    "initial"
+  );
+  const isTabFocused = useRef(false);
+  const tabFocusHandlers = {
+    onFocus: () => {
+      setIsGridFocused(false);
+      isTabFocused.current = true;
+    },
+    onBlur: () => {
+      isTabFocused.current = false;
+    },
+  };
+
+  useTVBackInterceptor(() => {
+    if (isTabFocused.current) return false;
+    setTabFocus("released");
+    // A view focused by hasTVPreferredFocus fires no onFocus, so don't wait for one.
+    isTabFocused.current = true;
+    return true;
+  });
+
+  useEffect(() => {
+    if (tabFocus === "released") setTabFocus("selected");
+  }, [tabFocus]);
+
+  const hasTabPreferredFocus = (tab: TVBrowseMode) =>
+    tabFocus === "initial"
+      ? tab === "playlists" && !focusConnectButton
+      : tabFocus === "selected" && tab === mode;
 
   const gridColumns = useMemo(() => getTVGridColumns(windowWidth), [windowWidth]);
   const pageSize = useMemo(() => getTVGridPageSize(gridColumns), [gridColumns]);
@@ -913,29 +947,32 @@ export default function TVHomeScreen() {
           <TVFocusPressable
             style={[styles.modeTab, mode === "playlists" && styles.modeTabActive]}
             onPress={() => setMode("playlists")}
-            onFocus={() => setIsGridFocused(false)}
-            hasTVPreferredFocus={!focusConnectButton}
+            {...tabFocusHandlers}
+            hasTVPreferredFocus={hasTabPreferredFocus("playlists")}
           >
             <Text style={styles.modeTabText}>Playlists</Text>
           </TVFocusPressable>
           <TVFocusPressable
             style={[styles.modeTab, mode === "mylists" && styles.modeTabActive]}
             onPress={() => setMode("mylists")}
-            onFocus={() => setIsGridFocused(false)}
+            {...tabFocusHandlers}
+            hasTVPreferredFocus={hasTabPreferredFocus("mylists")}
           >
             <Text style={styles.modeTabText}>My Lists</Text>
           </TVFocusPressable>
           <TVFocusPressable
             style={[styles.modeTab, mode === "channels" && styles.modeTabActive]}
             onPress={() => setMode("channels")}
-            onFocus={() => setIsGridFocused(false)}
+            {...tabFocusHandlers}
+            hasTVPreferredFocus={hasTabPreferredFocus("channels")}
           >
             <Text style={styles.modeTabText}>Channels</Text>
           </TVFocusPressable>
           <TVFocusPressable
             style={[styles.modeTab, mode === "history" && styles.modeTabActive]}
             onPress={() => setMode("history")}
-            onFocus={() => setIsGridFocused(false)}
+            {...tabFocusHandlers}
+            hasTVPreferredFocus={hasTabPreferredFocus("history")}
           >
             <Text style={styles.modeTabText}>History</Text>
           </TVFocusPressable>
@@ -1031,6 +1068,7 @@ export default function TVHomeScreen() {
                 hasTVPreferredFocus={index === focusedGridIndex}
                 onFocus={() => {
                   setIsGridFocused(true);
+                  isTabFocused.current = false;
                   setFocusedGridIndex(index);
                 }}
                 onPress={() => handleCardPress(item)}

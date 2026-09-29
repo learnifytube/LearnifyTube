@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  BackHandler,
   DeviceEventEmitter,
   FlatList,
   StyleSheet,
@@ -51,6 +50,7 @@ import {
 import { useLibraryCatalog } from "../../../core/hooks/useLibraryCatalog";
 import { offlineCopy, type OfflineCopy } from "../../../services/offline-copy";
 import { videoThumbnails } from "../../../services/video-thumbnails";
+import { useTVBackInterceptor } from "../../../components/tv/tvBack";
 import type { RemotePlaylist, RemoteVideoWithStatus, Video } from "../../../types";
 
 type DetailMode = "playlists" | "videos";
@@ -546,30 +546,23 @@ export default function TVChannelDetailScreen() {
     ]
   );
 
-  const handleBack = useCallback(() => {
-    if (detailMode === "videos" && activePlaylist) {
-      setDetailMode("playlists");
-      setActivePlaylist(null);
-      setPageOffset(0);
-      setFocusedGridIndex(0);
-      setIsGridFocused(true);
-      setIsResolvingPlaylist(false);
-      return true;
-    }
+  const closePlaylist = useCallback(() => {
+    if (detailMode !== "videos" || !activePlaylist) return false;
 
-    router.back();
+    setDetailMode("playlists");
+    setActivePlaylist(null);
+    setPageOffset(0);
+    setFocusedGridIndex(0);
+    setIsGridFocused(true);
+    setIsResolvingPlaylist(false);
     return true;
   }, [activePlaylist, detailMode]);
 
-  useEffect(() => {
-    const subscription = BackHandler.addEventListener(
-      "hardwareBackPress",
-      handleBack
-    );
-    return () => {
-      subscription.remove();
-    };
-  }, [handleBack]);
+  const handleBack = useCallback(() => {
+    if (!closePlaylist()) router.back();
+  }, [closePlaylist]);
+
+  useTVBackInterceptor(closePlaylist);
 
   const cards = useMemo<BaseGridCard[]>(() => {
     const thumbnailServerUrl = isUsingOfflineFallback ? null : serverUrl;

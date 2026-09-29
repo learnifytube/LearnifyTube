@@ -1,7 +1,10 @@
 import { Stack } from "expo-router";
 import { colors } from "../../theme";
+import { useTVBackNavigation } from "../../components/tv/tvBack";
 
 export default function TVLayout() {
+  useTVBackNavigation();
+
   return (
     <Stack
       screenOptions={{

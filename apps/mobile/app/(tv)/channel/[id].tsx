@@ -52,6 +52,7 @@ import { videoThumbnails } from "../../../services/video-thumbnails";
 import { useTVBackInterceptor } from "../../../components/tv/tvBack";
 import { useTVMessage } from "../../../components/tv/TVMessage";
 import {
+  channelNotFound,
   collectionNotReady,
   describeDesktopRequestFailure,
   notOnThisTV,
@@ -253,11 +254,7 @@ export default function TVChannelDetailScreen() {
 
   const loadChannelData = useCallback(async () => {
     if (!channelId && !channelTitle) {
-      setError({
-        title: "Channel not found",
-        text: "Go back and pick another channel.",
-        canRetry: false,
-      });
+      setError(channelNotFound);
       setIsLoading(false);
       return;
     }
@@ -510,7 +507,10 @@ export default function TVChannelDetailScreen() {
       const canStream = !!serverUrl && !isUsingOfflineFallback;
 
       if (!canStream && !getOfflineUri(videoId)) {
-        showTVMessage(notOnThisTV);
+        // Connected but showing what the TV holds means the desktop didn't answer.
+        showTVMessage(
+          serverUrl ? describeDesktopRequestFailure(null) : notOnThisTV
+        );
         return;
       }
 

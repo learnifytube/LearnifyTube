@@ -36,8 +36,9 @@ import {
   DesktopFetchFailedError,
   DesktopStillFetchingError,
   describeVideoFailure,
-  desktopGettingVideo,
+  desktopGettingVideoTitle,
   notOnThisTV,
+  videoNotFound,
   type TVMessageContent,
 } from "../../../components/tv/tvMessages";
 import { colors, fontSize, fontWeight, radius, spacing } from "../../../theme";
@@ -313,11 +314,7 @@ export default function TVPlayerScreen() {
   useEffect(() => {
     if (!id) {
       setPrepareState("failed");
-      setPrepareError({
-        title: "Video not found",
-        text: "Go back and pick another Video.",
-        canRetry: false,
-      });
+      setPrepareError(videoNotFound);
       setPrepareProgress(null);
       return;
     }
@@ -686,7 +683,7 @@ export default function TVPlayerScreen() {
       prepareState === "failed" ? (prepareError ?? notOnThisTV) : null;
     const canRetry = !!failure?.canRetry && !!id && !!effectiveServerUrl;
     const message = failure ?? {
-      title: desktopGettingVideo,
+      title: desktopGettingVideoTitle,
       text:
         prepareProgress !== null
           ? `${Math.max(0, Math.round(prepareProgress))}% done`

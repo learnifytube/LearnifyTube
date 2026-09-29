@@ -24,7 +24,7 @@ export class DesktopStillFetchingError extends Error {
   }
 }
 
-export const desktopGettingVideo = "The desktop is getting this Video";
+export const desktopGettingVideoTitle = "The desktop is getting this Video";
 
 const signInPattern = /sign.?in|not a bot|cookie|log.?in/i;
 
@@ -35,9 +35,7 @@ const pairingRequired: TVMessageContent = {
 };
 
 /** Why a request to the desktop failed, without exception names or timeouts. */
-export function describeDesktopRequestFailure(
-  error: unknown,
-): TVMessageContent {
+export function describeDesktopRequestFailure(error: unknown) {
   if (error instanceof Error && error.name === "PairingRequiredError") {
     return pairingRequired;
   }
@@ -49,10 +47,10 @@ export function describeDesktopRequestFailure(
 }
 
 /** Why a Video couldn't start playing. Desktop-side problems say to fix them there. */
-export function describeVideoFailure(error: unknown): TVMessageContent {
+export function describeVideoFailure(error: unknown) {
   if (error instanceof DesktopStillFetchingError) {
     return {
-      title: desktopGettingVideo,
+      title: desktopGettingVideoTitle,
       text: "It's taking a while. Press Retry to keep waiting.",
       canRetry: true,
     };
@@ -83,6 +81,18 @@ export const notOnThisTV: TVMessageContent = {
 export const collectionNotReady: TVMessageContent = {
   title: "Not ready yet",
   text: "The desktop couldn't open this list just now. Try again in a moment.",
+  canRetry: false,
+};
+
+export const videoNotFound: TVMessageContent = {
+  title: "Video not found",
+  text: "Go back and pick another Video.",
+  canRetry: false,
+};
+
+export const channelNotFound: TVMessageContent = {
+  title: "Channel not found",
+  text: "Go back and pick another channel.",
   canRetry: false,
 };
 

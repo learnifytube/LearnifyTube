@@ -174,9 +174,10 @@ export default function TVHomeScreen() {
 
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
-  const [playlists, setPlaylists] = useState<RemotePlaylist[]>([]);
-  const [myLists, setMyLists] = useState<RemoteMyList[]>([]);
-  const [channels, setChannels] = useState<RemoteChannel[]>([]);
+  // Start from the cached catalog, so connecting doesn't blank the grid while it reloads.
+  const [playlists, setPlaylists] = useState<RemotePlaylist[]>(getCachedPlaylists);
+  const [myLists, setMyLists] = useState<RemoteMyList[]>(getCachedMyLists);
+  const [channels, setChannels] = useState<RemoteChannel[]>(getCachedChannels);
   const [offlineSavedPlaylists, setOfflineSavedPlaylists] = useState<
     OfflineSavedPlaylist[]
   >(() => getAllSavedPlaylistsWithProgress({ includeUnpinned: true }));
@@ -478,8 +479,16 @@ export default function TVHomeScreen() {
         // The desktop may still be fetching this collection; the connection stays as it is.
         refreshOfflineCatalog();
 
-        const cachedPlaylistId = buildCachedPlaylistId(kind, id);
-        if (playSavedPlaylistFromCache(cachedPlaylistId)) {
+        // Fall back to what the TV holds from this list; the cache's own messages assume
+        // Offline mode, so they aren't shown here.
+        const cachedPlaylist = getSavedPlaylistWithItems(
+          buildCachedPlaylistId(kind, id),
+          { includeUnpinned: true }
+        );
+        if (
+          cachedPlaylist?.items.some((item) => getOfflineUri(item.videoId) !== null) &&
+          playSavedPlaylistFromCache(cachedPlaylist.id)
+        ) {
           return;
         }
 

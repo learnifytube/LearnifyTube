@@ -300,9 +300,9 @@ export function createDesktopConnection(platform: DesktopConnectionPlatform) {
       apply(answer);
       return;
     }
-    // The desktop may have moved: look everywhere once before settling into retries.
+    // A busy desktop can miss one check, and a moved one answers elsewhere: look
+    // everywhere once, still connected, before settling into Offline mode.
     failures = 0;
-    setState({ status: "offline", url: null });
     await attempt(false);
   };
 

@@ -3,7 +3,7 @@ import type { DesktopConnectionState } from "../../services/desktop-connection";
 /** Why the TV isn't connected, in the viewer's words. */
 export function describeConnectionProblem(connection: DesktopConnectionState) {
   if (connection.status === "pairingRequired") {
-    return "The desktop didn't accept the pairing code. Enter the code shown in desktop Settings → Sync.";
+    return "The desktop needs its pairing code. Enter the code shown in desktop Settings → Sync.";
   }
   if (connection.status === "incompatible") {
     return connection.incompatibility === "mobile_update_required"

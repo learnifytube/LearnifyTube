@@ -100,11 +100,14 @@ function createHarness({
     desktopAt: (url: string, answer: DesktopAnswer) =>
       desktops.set(url, answer),
     desktopGone: (url: string) => desktops.delete(url),
-    /** The desktop at url answers only when the returned function is called. */
+    /** The desktop at url answers its next check only when the returned function is called. */
     desktopSlowAt: (url: string) => {
+      const usual = desktops.get(url);
       let answer: (value: DesktopAnswer) => void = () => {};
       desktops.set(url, new Promise((resolve) => (answer = resolve)));
       return async (value: DesktopAnswer) => {
+        if (usual) desktops.set(url, usual);
+        else desktops.delete(url);
         answer(value);
         await flush();
       };
@@ -297,6 +300,22 @@ describe("Desktop connection", () => {
       status: "offline",
       url: null,
     });
+  });
+
+  it("stays connected when a busy desktop misses one health check", async () => {
+    const h = createHarness({ savedUrl: SAVED });
+    h.desktopAt(SAVED, ok());
+    await h.start();
+    const statuses: string[] = [];
+    h.connection.subscribe(() => statuses.push(h.status()));
+
+    const answer = h.desktopSlowAt(SAVED);
+    await h.advance(15_000);
+    await answer({ kind: "unreachable" });
+    await h.advance(1);
+
+    expect(h.status()).toBe("connected");
+    expect(statuses).not.toContain("offline");
   });
 
   it("stays connected between health checks whatever other requests do", async () => {

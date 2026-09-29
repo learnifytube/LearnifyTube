@@ -109,8 +109,13 @@ export function startDesktopConnection() {
   let unsubscribe = () => {};
   let cancelled = false;
 
+  let loggedStatus: string | null = null;
   const publish = () => {
-    const { url } = desktopConnection.getState();
+    const { url, status } = desktopConnection.getState();
+    if (status !== loggedStatus) {
+      loggedStatus = status;
+      logger.info("[DesktopConnection] Status", { status, url });
+    }
     if (useConnectionStore.getState().serverUrl !== url) {
       useConnectionStore.setState({ serverUrl: url });
     }

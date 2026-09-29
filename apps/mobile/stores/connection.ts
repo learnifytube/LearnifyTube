@@ -62,7 +62,8 @@ export const useConnectionStore = create<ConnectionStore>()(
       // On the TV, a desktop from the last session isn't connected until the Desktop connection
       // checks it; before savedUrl existed, serverUrl was the only saved address.
       merge: (persisted, current) => {
-        const saved = persisted as Partial<ConnectionStore>;
+        // Nothing is persisted on a fresh install.
+        const saved = (persisted ?? {}) as Partial<ConnectionStore>;
         if (!isTV) return { ...current, ...saved };
         return {
           ...current,

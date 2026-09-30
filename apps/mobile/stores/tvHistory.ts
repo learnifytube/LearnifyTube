@@ -11,9 +11,10 @@ export interface TVRecentPlaylist {
   videos: StreamingVideo[];
   lastIndex: number;
   lastVideoId: string | null;
-  serverUrl: string | null;
   updatedAt: number;
 }
+
+type LegacyRecentPlaylist = TVRecentPlaylist & { serverUrl?: string | null };
 
 interface TVHistoryStore {
   recentPlaylists: TVRecentPlaylist[];
@@ -22,7 +23,6 @@ interface TVHistoryStore {
     title: string;
     videos: StreamingVideo[];
     startIndex: number;
-    serverUrl?: string | null;
   }) => void;
   updateRecentPlaylistProgress: (params: {
     playlistId: string;
@@ -61,7 +61,6 @@ export const useTVHistoryStore = create<TVHistoryStore>()(
         title,
         videos,
         startIndex,
-        serverUrl,
       }) => {
         if (!playlistId || videos.length === 0) return;
 
@@ -72,7 +71,6 @@ export const useTVHistoryStore = create<TVHistoryStore>()(
           videos: videos.map(toHistoryVideo),
           lastIndex: safeIndex,
           lastVideoId: videos[safeIndex]?.id ?? null,
-          serverUrl: serverUrl ?? null,
           updatedAt: Date.now(),
         };
 
@@ -115,15 +113,17 @@ export const useTVHistoryStore = create<TVHistoryStore>()(
     {
       name: "learnify-tv-recent-playlists-v1",
       storage: createJSONStorage(() => AsyncStorage),
-      // v0 persisted each Video's file location; drop it.
-      version: 1,
+      // v0 persisted each Video's file location and v1 the desktop's address; drop both.
+      version: 2,
       migrate: (persisted) => {
         const state = persisted as Pick<TVHistoryStore, "recentPlaylists">;
         return {
-          recentPlaylists: (state?.recentPlaylists ?? []).map((item) => ({
-            ...item,
-            videos: (item.videos ?? []).map(toHistoryVideo),
-          })),
+          recentPlaylists: (state?.recentPlaylists ?? []).map(
+            ({ serverUrl: _serverUrl, ...item }: LegacyRecentPlaylist) => ({
+              ...item,
+              videos: (item.videos ?? []).map(toHistoryVideo),
+            })
+          ),
         };
       },
     }

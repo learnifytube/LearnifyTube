@@ -26,6 +26,10 @@ _Avoid_: server download
 Playing a Video straight from the desktop when the Device has no Offline copy. A Stream that has started keeps playing from the desktop even if the Offline copy arrives meanwhile; if the desktop drops out, the player carries on from the Offline copy when there is one.
 _Avoid_: remote playback, desktop playback
 
+**Play queue**:
+The Videos the player moves through after the user presses play on a collection, channel or History entry, with the one playing now. It knows no desktop and no file: each Video's Offline copy or Stream is chosen when that Video starts. On the TV, starting a Play queue also puts it in History.
+_Avoid_: playlist (for this), streaming queue
+
 **On-device set**:
 The Videos the desktop wants this device to hold (see the desktop glossary). The device Downloads what is missing and removes Offline copies that left the set. Videos the user pulled on the device itself are not part of it and are left alone.
 _Avoid_: synced videos

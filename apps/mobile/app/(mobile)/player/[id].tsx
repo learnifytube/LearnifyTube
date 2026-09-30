@@ -149,8 +149,6 @@ export default function PlayerScreen() {
   const hasNextVideo = usePlaybackStore((s) => s.hasNext());
   const hasPreviousVideo = usePlaybackStore((s) => s.hasPrevious());
   const setCurrentIndex = usePlaybackStore((s) => s.setCurrentIndex);
-  const streamServerUrl = usePlaybackStore((s) => s.streamServerUrl);
-  const getStreamUrl = usePlaybackStore((s) => s.getStreamUrl);
 
   // Get video from playlist if streaming, otherwise from library
   const playlistVideo = playlistVideos.find((v) => v.id === id);
@@ -191,14 +189,11 @@ export default function PlayerScreen() {
     [libraryVideo?.description, dbVideo?.description]
   );
 
-  // Play the Offline copy when there is one, otherwise stream
+  // Play the Offline copy when there is one, otherwise stream from the desktop
+  // the phone is connected to now.
   const offlineUri = offlineCopy.useUri(id ?? "");
-  const directStreamUrl =
-    !offlineUri && serverUrl && id ? api.getVideoFileUrl(serverUrl, id) : null;
   const videoSourceUrl =
-    offlineUri ??
-    (streamServerUrl && id ? getStreamUrl(id) : null) ??
-    directStreamUrl;
+    offlineUri ?? (serverUrl && id ? api.getVideoFileUrl(serverUrl, id) : null);
 
   useEffect(() => {
     watchAccumulatorRef.current = 0;
@@ -235,18 +230,12 @@ export default function PlayerScreen() {
     }
   }, [id, playlistId, playlistVideos, currentIndex, setCurrentIndex]);
 
-  // Prefer the stream server when present, otherwise use the paired desktop server.
-  const effectiveServerUrl = useMemo(
-    () => streamServerUrl || serverUrl || null,
-    [streamServerUrl, serverUrl]
-  );
-
   useEffect(() => {
-    if (!id || localDescription || !effectiveServerUrl) return;
+    if (!id || localDescription || !serverUrl) return;
 
     let cancelled = false;
     api
-      .getVideoMeta(effectiveServerUrl, id)
+      .getVideoMeta(serverUrl, id)
       .then((meta) => {
         if (cancelled) return;
         const normalizedDescription = normalizeDescription(meta.description);
@@ -271,7 +260,7 @@ export default function PlayerScreen() {
     };
   }, [
     id,
-    effectiveServerUrl,
+    serverUrl,
     localDescription,
     video?.channelTitle,
     video?.duration,
@@ -288,12 +277,9 @@ export default function PlayerScreen() {
       return;
     }
 
-    const url = effectiveServerUrl;
+    const url = serverUrl;
     if (!url) {
-      console.log("[Player] No server URL available for transcript fetch", {
-        streamServerUrl,
-        serverUrl,
-      });
+      console.log("[Player] No server URL available for transcript fetch");
       setIsLoadingTranscript(false);
       return;
     }
@@ -326,17 +312,11 @@ export default function PlayerScreen() {
       .finally(() => {
         setIsLoadingTranscript(false);
       });
-  }, [
-    effectiveServerUrl,
-    id,
-    localTranscript,
-    serverUrl,
-    streamServerUrl,
-  ]);
+  }, [serverUrl, id, localTranscript]);
 
   // Handle downloading transcript from desktop
   const handleDownloadTranscript = useCallback(async () => {
-    const url = streamServerUrl || serverUrl;
+    const url = serverUrl;
     if (!id) return;
     if (!url) {
       Alert.alert(
@@ -392,12 +372,12 @@ export default function PlayerScreen() {
     } finally {
       setIsDownloadingTranscript(false);
     }
-  }, [id, streamServerUrl, serverUrl]);
+  }, [id, serverUrl]);
 
   // Handle word tap for definition lookup
   const handleWordPress = useCallback(
     async (word: string, segmentTimestamp: number) => {
-      const url = effectiveServerUrl;
+      const url = serverUrl;
       if (!id) return;
 
       // Clean the word
@@ -445,12 +425,12 @@ export default function PlayerScreen() {
         setIsTranslating(false);
       }
     },
-    [effectiveServerUrl, id]
+    [serverUrl, id]
   );
 
   // Handle saving a word
   const handleSaveWord = useCallback(async () => {
-    const url = effectiveServerUrl;
+    const url = serverUrl;
     if (!wordTranslation?.translationId || isSavingWord || !selectedWord) return;
 
     setIsSavingWord(true);
@@ -489,7 +469,7 @@ export default function PlayerScreen() {
     } finally {
       setIsSavingWord(false);
     }
-  }, [effectiveServerUrl, wordTranslation, isSavingWord, selectedWord]);
+  }, [serverUrl, wordTranslation, isSavingWord, selectedWord]);
 
   const closeWordModal = useCallback(() => {
     setSelectedWord(null);
@@ -891,7 +871,7 @@ export default function PlayerScreen() {
         </Text>
         <View style={styles.channelRow}>
           <Text style={styles.channel}>{video.channelTitle}</Text>
-          {!offlineUri && effectiveServerUrl && (
+          {!offlineUri && serverUrl && (
             <View style={styles.streamingBadge}>
               <Text style={styles.streamingBadgeText}>Streaming</Text>
             </View>

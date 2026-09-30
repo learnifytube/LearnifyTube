@@ -39,7 +39,6 @@ const historyEntry = (
   videos: videoIds.map((id) => video(id)),
   lastIndex: lastVideoId ? videoIds.indexOf(lastVideoId) : 0,
   lastVideoId,
-  serverUrl: SERVER,
   updatedAt: 0,
 });
 
@@ -167,7 +166,6 @@ describe("buildTVCatalog", () => {
       title: "Collection playlist_held",
       videos: [video("a"), video("c")],
       startIndex: 0,
-      serverUrl: null,
     });
   });
 
@@ -251,7 +249,6 @@ describe("buildTVCatalog", () => {
           kind: "play",
           videos: [video("a"), video("b")],
           startIndex: 1,
-          serverUrl: null,
         }),
       }),
     ]);

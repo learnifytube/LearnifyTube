@@ -49,7 +49,6 @@ export type TVCardAction =
       title: string;
       videos: StreamingVideo[];
       startIndex: number;
-      serverUrl: string | null;
     }
   | {
       kind: "remote";
@@ -112,7 +111,6 @@ export function playHeldCollection(
     title: collection.title,
     videos,
     startIndex: 0,
-    serverUrl: null,
   };
 }
 
@@ -163,7 +161,6 @@ export function buildTVCatalog(input: TVCatalogInput) {
           title: "On this TV",
           videos,
           startIndex: 0,
-          serverUrl: desktop?.url ?? null,
         },
       },
     ];
@@ -200,7 +197,6 @@ export function buildTVCatalog(input: TVCatalogInput) {
           title: entry.title,
           videos,
           startIndex,
-          serverUrl: desktop?.url ?? null,
         },
       },
     ];

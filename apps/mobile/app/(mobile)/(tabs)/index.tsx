@@ -12,8 +12,8 @@ import { Link, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { downloadQueue } from "../../../services/download-queue";
 import { useConnectionStore } from "../../../stores/connection";
+import { playQueue } from "../../../services/play-queue";
 import { useSyncStore } from "../../../stores/sync";
-import { usePlaybackStore } from "../../../stores/playback";
 import {
   savePlaylist,
   isPlaylistSaved,
@@ -55,8 +55,6 @@ export default function HomeScreen() {
     selectedChannel ? "channel" : null,
     selectedChannel?.channelId ?? null,
   );
-
-  const startPlaylist = usePlaybackStore((s) => s.startPlaylist);
 
   // Set of video IDs already synced to mobile
   const getOfflineUri = offlineCopy.useLookup();
@@ -197,17 +195,16 @@ export default function HomeScreen() {
         return;
       }
 
-      startPlaylist(
-        contextId,
-        contextTitle,
-        videosToPlay,
-        startIndex >= 0 ? startIndex : 0,
-        serverUrl ?? undefined,
-      );
+      playQueue.start({
+        id: contextId,
+        title: contextTitle,
+        videos: videosToPlay,
+        startIndex,
+      });
 
       router.push(`/player/${video.id}`);
     },
-    [serverUrl, selectedChannel, channelVideos, startPlaylist, router],
+    [serverUrl, selectedChannel, channelVideos, router],
   );
 
   const handlePlayAll = useCallback(() => {
@@ -240,15 +237,14 @@ export default function HomeScreen() {
       thumbnailUrl: v.thumbnailUrl ?? undefined,
     }));
 
-    startPlaylist(
-      contextId,
-      contextTitle,
-      videosToPlay,
-      0,
-      serverUrl ?? undefined,
-    );
+    playQueue.start({
+      id: contextId,
+      title: contextTitle,
+      videos: videosToPlay,
+      startIndex: 0,
+    });
     router.push(`/player/${videosToPlay[0].id}`);
-  }, [serverUrl, selectedChannel, channelVideos, startPlaylist]);
+  }, [serverUrl, selectedChannel, channelVideos]);
 
   const handleSyncVideo = useCallback(
     (video: RemoteVideoWithStatus) => {

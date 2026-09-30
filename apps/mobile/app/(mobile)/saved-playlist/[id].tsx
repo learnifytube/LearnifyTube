@@ -16,10 +16,8 @@ import type { SavedPlaylistWithItems } from "../../../db/repositories/playlists"
 import { downloadQueue } from "../../../services/download-queue";
 import { offlineCopy } from "../../../services/offline-copy";
 import { useConnectionStore } from "../../../stores/connection";
-import {
-  usePlaybackStore,
-  type StreamingVideo,
-} from "../../../stores/playback";
+import { playQueue } from "../../../services/play-queue";
+import type { StreamingVideo } from "../../../stores/playback";
 
 type SavedPlaylistItem = SavedPlaylistWithItems["items"][number];
 type CardPendingState =
@@ -35,7 +33,6 @@ export default function SavedPlaylistScreen() {
   const serverUrl = useConnectionStore((state) => state.serverUrl);
   const getOfflineUri = offlineCopy.useLookup();
   const downloads = downloadQueue.useQueue();
-  const startPlaylist = usePlaybackStore((state) => state.startPlaylist);
 
   const [playlist, setPlaylist] = useState<SavedPlaylistWithItems | null>(null);
   const [loading, setLoading] = useState(true);
@@ -100,16 +97,15 @@ export default function SavedPlaylistScreen() {
         return;
       }
 
-      startPlaylist(
-        `saved-${playlist.id}`,
-        playlist.title,
-        playableVideos,
+      playQueue.start({
+        id: `saved-${playlist.id}`,
+        title: playlist.title,
+        videos: playableVideos,
         startIndex,
-        serverUrl ?? undefined,
-      );
+      });
       router.push(`/player/${item.videoId}`);
     },
-    [playlist, getOfflineUri, serverUrl, startPlaylist, router],
+    [playlist, getOfflineUri, serverUrl, router],
   );
 
   const handleVideoPress = useCallback(

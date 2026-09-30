@@ -13,10 +13,11 @@ import {
 import { RefreshCw, Settings } from "lucide-react-native";
 import { router, type Href } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { usePlaybackStore, type StreamingVideo } from "../../stores/playback";
+import type { StreamingVideo } from "../../stores/playback";
 import { useTVHistoryStore } from "../../stores/tvHistory";
 import { useOnDeviceSetStore } from "../../stores/onDeviceSet";
 import { api } from "../../services/api";
+import { playQueue } from "../../services/play-queue";
 import {
   desktopConnection,
   type DesktopConnectionState,
@@ -169,11 +170,7 @@ export default function TVHomeScreen() {
   const connection = desktopConnection.useConnection();
   const serverUrl = connection.status === "connected" ? connection.url : null;
   const onDeviceSet = useOnDeviceSetStore((state) => state.videos);
-  const startPlaylist = usePlaybackStore((state) => state.startPlaylist);
   const recentPlaylists = useTVHistoryStore((state) => state.recentPlaylists);
-  const upsertRecentPlaylist = useTVHistoryStore(
-    (state) => state.upsertRecentPlaylist,
-  );
 
   const [mode, setMode] = useState<TVBrowseMode>("playlists");
   const {
@@ -370,21 +367,13 @@ export default function TVHomeScreen() {
   const catalog = useMemo(() => buildTVCatalog(catalogInput), [catalogInput]);
 
   const play = (action: Extract<TVCardAction, { kind: "play" }>) => {
-    upsertRecentPlaylist({
-      playlistId: action.playlistId,
+    const first = playQueue.start({
+      id: action.playlistId,
       title: action.title,
       videos: action.videos,
       startIndex: action.startIndex,
-      serverUrl: action.serverUrl,
     });
-    startPlaylist(
-      action.playlistId,
-      action.title,
-      action.videos,
-      action.startIndex,
-      action.serverUrl ?? undefined,
-    );
-    router.push(`/(tv)/player/${action.videos[action.startIndex].id}` as Href);
+    if (first) router.push(`/(tv)/player/${first.id}` as Href);
   };
 
   const playRemoteCollection = async (
@@ -425,7 +414,6 @@ export default function TVHomeScreen() {
       refreshCachedCollections();
 
       const streamingVideos = toStreamingVideos(normalizedVideos, serverUrl);
-      if (streamingVideos.length === 0) return;
 
       play({
         kind: "play",
@@ -433,7 +421,6 @@ export default function TVHomeScreen() {
         title,
         videos: streamingVideos,
         startIndex: 0,
-        serverUrl,
       });
     } catch {
       // The desktop may still be fetching this collection; the connection stays as it is.

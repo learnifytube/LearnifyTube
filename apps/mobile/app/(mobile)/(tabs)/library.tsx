@@ -16,8 +16,8 @@ import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { downloadQueue } from "../../../services/download-queue";
 import { useConnectionStore } from "../../../stores/connection";
+import { playQueue } from "../../../services/play-queue";
 import { useSyncStore } from "../../../stores/sync";
-import { usePlaybackStore } from "../../../stores/playback";
 import { savePlaylist, isPlaylistSaved } from "../../../db/repositories/playlists";
 import {
   useBrowseCatalog,
@@ -50,7 +50,6 @@ const LIBRARY_TABS: { key: LibraryTab; label: string }[] = [
 export default function LibraryScreen() {
   const router = useRouter();
   const serverUrl = useConnectionStore((s) => s.serverUrl);
-  const startPlaylist = usePlaybackStore((s) => s.startPlaylist);
   const { playlists, myLists } = useBrowseCatalog();
 
   const [libraryTab, setLibraryTab] = useState<LibraryTab>("mylists");
@@ -259,13 +258,12 @@ export default function LibraryScreen() {
         return;
       }
 
-      startPlaylist(
-        contextId,
-        contextTitle,
-        videosToPlay,
-        startIndex >= 0 ? startIndex : 0,
-        serverUrl ?? undefined
-      );
+      playQueue.start({
+        id: contextId,
+        title: contextTitle,
+        videos: videosToPlay,
+        startIndex,
+      });
       router.push(`/player/${video.id}`);
     },
     [
@@ -274,7 +272,6 @@ export default function LibraryScreen() {
       selectedMyList,
       playlistVideos,
       myListVideos,
-      startPlaylist,
       router,
     ]
   );

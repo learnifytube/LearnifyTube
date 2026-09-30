@@ -19,7 +19,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLibraryStore } from "../../../stores/library";
 import { downloadQueue } from "../../../services/download-queue";
 import { useConnectionStore } from "../../../stores/connection";
-import { usePlaybackStore, type StreamingVideo } from "../../../stores/playback";
+import { playQueue } from "../../../services/play-queue";
+import type { StreamingVideo } from "../../../stores/playback";
 import { VideoCard } from "../../../components/VideoCard";
 import {
   getAllSavedPlaylistsWithProgress,
@@ -136,7 +137,6 @@ export function SavedTabContent() {
   const videos = useLibraryStore((state) => state.videos);
   const downloads = downloadQueue.useQueue();
   const serverUrl = useConnectionStore((state) => state.serverUrl);
-  const startPlaylist = usePlaybackStore((state) => state.startPlaylist);
 
   const [savedPlaylists, setSavedPlaylists] = useState<SavedPlaylistInfo[]>([]);
   const [watchHistoryLookup, setWatchHistoryLookup] =
@@ -246,13 +246,12 @@ export function SavedTabContent() {
       const startSeconds =
         safeStartIndex === startIndex ? resumeInfo?.startSeconds ?? 0 : 0;
 
-      startPlaylist(
-        `saved-${fullPlaylist.id}`,
-        fullPlaylist.title,
-        playableVideos,
-        safeStartIndex,
-        serverUrl ?? undefined
-      );
+      playQueue.start({
+        id: `saved-${fullPlaylist.id}`,
+        title: fullPlaylist.title,
+        videos: playableVideos,
+        startIndex: safeStartIndex,
+      });
 
       const route =
         startSeconds > 0
@@ -260,7 +259,7 @@ export function SavedTabContent() {
           : (`/player/${selectedVideo.id}` as Href);
       router.push(route);
     },
-    [getOfflineUri, playlistResumeById, router, serverUrl, startPlaylist]
+    [getOfflineUri, playlistResumeById, router, serverUrl]
   );
 
   const renderPlaylistCard = (playlist: SavedPlaylistInfo, index: number) => {

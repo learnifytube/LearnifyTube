@@ -11,8 +11,8 @@ import {
 import { useRouter } from "expo-router";
 import { useSyncStore } from "../../stores/sync";
 import { useConnectionStore } from "../../stores/connection";
+import { playQueue } from "../../services/play-queue";
 import { downloadQueue } from "../../services/download-queue";
-import { usePlaybackStore } from "../../stores/playback";
 import { savePlaylist, isPlaylistSaved } from "../../db/repositories/playlists";
 import {
   useBrowseCatalog,
@@ -42,7 +42,6 @@ import { offlineCopy } from "../../services/offline-copy";
 export default function SyncScreen() {
   const router = useRouter();
   const serverUrl = useConnectionStore((s) => s.serverUrl);
-  const startPlaylist = usePlaybackStore((s) => s.startPlaylist);
   const { channels, playlists, myLists } = useBrowseCatalog();
 
   const {
@@ -322,13 +321,12 @@ export default function SyncScreen() {
         return;
       }
 
-      startPlaylist(
-        contextId,
-        contextTitle,
-        videosToPlay,
-        startIndex >= 0 ? startIndex : 0,
-        serverUrl ?? undefined,
-      );
+      playQueue.start({
+        id: contextId,
+        title: contextTitle,
+        videos: videosToPlay,
+        startIndex,
+      });
 
       router.push(`/player/${video.id}`);
     },
@@ -340,7 +338,6 @@ export default function SyncScreen() {
       channelVideos,
       playlistVideos,
       myListVideos,
-      startPlaylist,
       router,
     ],
   );

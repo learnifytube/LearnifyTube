@@ -12,9 +12,9 @@ import {
 import { router, useLocalSearchParams, type Href } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useConnectionStore } from "../../../stores/connection";
-import { usePlaybackStore, type StreamingVideo } from "../../../stores/playback";
-import { useTVHistoryStore } from "../../../stores/tvHistory";
+import type { StreamingVideo } from "../../../stores/playback";
 import { api } from "../../../services/api";
+import { playQueue } from "../../../services/play-queue";
 import {
   cacheRemoteCollectionVideos,
   cacheRemotePlaylists,
@@ -208,10 +208,6 @@ export default function TVChannelDetailScreen() {
   const channelId = Array.isArray(id) ? id[0] : id;
   const channelTitle = (Array.isArray(title) ? title[0] : title) ?? channelId ?? "";
   const serverUrl = useConnectionStore((state) => state.serverUrl);
-  const startPlaylist = usePlaybackStore((state) => state.startPlaylist);
-  const upsertRecentPlaylist = useTVHistoryStore(
-    (state) => state.upsertRecentPlaylist
-  );
   const { videos, offlineVideos, getOfflineUri } = useLibraryCatalog();
   const getStoredThumbnail = videoThumbnails.useLookup();
 
@@ -534,20 +530,12 @@ export default function TVChannelDetailScreen() {
         ? `playlist-${activePlaylist.id}`
         : `channel-${channelId ?? channelTitle}`;
       const playbackTitle = activePlaylist?.title ?? channelTitle ?? "Channel";
-      upsertRecentPlaylist({
-        playlistId: playbackPlaylistId,
+      playQueue.start({
+        id: playbackPlaylistId,
         title: playbackTitle,
         videos: playableVideos,
         startIndex,
-        serverUrl: canStream ? serverUrl : null,
       });
-      startPlaylist(
-        playbackPlaylistId,
-        playbackTitle,
-        playableVideos,
-        startIndex,
-        canStream ? serverUrl : undefined
-      );
       router.push(`/(tv)/player/${videoId}` as Href);
     },
     [
@@ -559,8 +547,6 @@ export default function TVChannelDetailScreen() {
       isUsingOfflineFallback,
       serverUrl,
       showTVMessage,
-      startPlaylist,
-      upsertRecentPlaylist,
     ]
   );
 

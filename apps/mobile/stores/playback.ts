@@ -1,6 +1,4 @@
 import { create } from "zustand";
-import { api } from "../services/api";
-import type { Video } from "../types";
 
 // A Video in the play queue. It carries no file location: the player asks the
 // Offline copy module when each Video starts and streams when there is none.
@@ -12,6 +10,8 @@ export interface StreamingVideo {
   thumbnailUrl?: string;
 }
 
+// The play queue's state. Start a queue through services/play-queue. It holds
+// no desktop address: players resolve the source when each Video starts.
 interface PlaybackStore {
   // Current playlist context
   playlistId: string | null;
@@ -19,15 +19,12 @@ interface PlaybackStore {
   playlistVideos: StreamingVideo[];
   currentIndex: number;
 
-  streamServerUrl: string | null;
-
   // Actions
   startPlaylist: (
     playlistId: string,
     title: string,
     videos: StreamingVideo[],
-    startIndex?: number,
-    serverUrl?: string
+    startIndex?: number
   ) => void;
   playNext: () => StreamingVideo | null;
   playPrevious: () => StreamingVideo | null;
@@ -36,7 +33,6 @@ interface PlaybackStore {
   hasPrevious: () => boolean;
   getCurrentVideo: () => StreamingVideo | null;
   setCurrentIndex: (index: number) => void;
-  getStreamUrl: (videoId: string) => string | null;
 }
 
 export const usePlaybackStore = create<PlaybackStore>()((set, get) => ({
@@ -44,15 +40,13 @@ export const usePlaybackStore = create<PlaybackStore>()((set, get) => ({
   playlistTitle: null,
   playlistVideos: [],
   currentIndex: 0,
-  streamServerUrl: null,
 
-  startPlaylist: (playlistId, title, videos, startIndex = 0, serverUrl) => {
+  startPlaylist: (playlistId, title, videos, startIndex = 0) => {
     set({
       playlistId,
       playlistTitle: title,
       playlistVideos: videos,
       currentIndex: startIndex,
-      streamServerUrl: serverUrl ?? null,
     });
   },
 
@@ -82,7 +76,6 @@ export const usePlaybackStore = create<PlaybackStore>()((set, get) => ({
       playlistTitle: null,
       playlistVideos: [],
       currentIndex: 0,
-      streamServerUrl: null,
     });
   },
 
@@ -108,9 +101,4 @@ export const usePlaybackStore = create<PlaybackStore>()((set, get) => ({
     }
   },
 
-  getStreamUrl: (videoId) => {
-    const { streamServerUrl } = get();
-    if (!streamServerUrl) return null;
-    return api.getVideoFileUrl(streamServerUrl, videoId);
-  },
 }));

@@ -7,19 +7,16 @@ import {
   findNodeHandle,
 } from "react-native";
 import { useLocalSearchParams, router, type Href } from "expo-router";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { useVideoPlayer, VideoView, type VideoPlayer } from "expo-video";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLibraryStore } from "../../../stores/library";
-import { useConnectionStore } from "../../../stores/connection";
 import { usePlaybackStore } from "../../../stores/playback";
 import { useTVHistoryStore } from "../../../stores/tvHistory";
 import { useTVNoticeStore } from "../../../stores/tvNotice";
-import { api } from "../../../services/api";
-import { desktopFetch } from "../../../services/desktop-fetch";
-import { desktopConnection } from "../../../services/desktop-connection";
-import { offlineCopy } from "../../../services/offline-copy";
-import { logger } from "../../../services/logger";
-import { tvDebugInfo } from "../../../services/tvDebug";
+import {
+  playbackSource,
+  type PlaybackFailure,
+} from "../../../services/playback-source";
 import { useWatchProgressRecorder } from "../../../hooks/useWatchProgressRecorder";
 import {
   TVFocusPressable,
@@ -35,7 +32,6 @@ import {
   TVMessageButton,
   TVMessageCard,
 } from "../../../components/tv/TVMessage";
-import { planDesktopLoss } from "../../../components/tv/desktopLoss";
 import {
   describeVideoFailure,
   desktopGettingVideoTitle,
@@ -43,12 +39,8 @@ import {
   desktopGoneNothingLeft,
   notOnThisTV,
   videoNotFound,
-  type TVMessageContent,
 } from "../../../components/tv/tvMessages";
 import { colors, fontSize, fontWeight, radius, spacing } from "../../../theme";
-
-type PrefetchState = "idle" | "loading" | "ready" | "failed";
-type SourcePrepareState = "idle" | "preparing" | "ready" | "failed";
 
 const REMOTE_NAV_TIMEOUT_MS = 4500;
 const REMOTE_NAV_AUTO_HIDE_MS = 5000;
@@ -74,58 +66,41 @@ function getDirection(eventType: string) {
   return null;
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
+function describeFailure(failure: PlaybackFailure) {
+  if (failure.kind === "videoNotFound") return videoNotFound;
+  if (failure.kind === "notOnThisTV") return notOnThisTV;
+  return describeVideoFailure(failure.error);
 }
 
 export default function TVPlayerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const libraryVideo = useLibraryStore((state) => state.videos.find((item) => item.id === id));
-  const serverUrl = useConnectionStore((state) => state.serverUrl);
-  const connectionStatus = desktopConnection.useConnection().status;
+  const libraryVideo = useLibraryStore((state) =>
+    state.videos.find((item) => item.id === id),
+  );
   const showNotice = useTVNoticeStore((state) => state.show);
 
   const playlistId = usePlaybackStore((state) => state.playlistId);
   const playlistVideos = usePlaybackStore((state) => state.playlistVideos);
   const currentIndex = usePlaybackStore((state) => state.currentIndex);
   const setCurrentIndex = usePlaybackStore((state) => state.setCurrentIndex);
-  const streamServerUrl = usePlaybackStore((state) => state.streamServerUrl);
   const updateRecentPlaylistProgress = useTVHistoryStore(
-    (state) => state.updateRecentPlaylistProgress
+    (state) => state.updateRecentPlaylistProgress,
   );
 
-  const [prefetchState, setPrefetchState] = useState<PrefetchState>("idle");
-  const [prepareState, setPrepareState] = useState<SourcePrepareState>("idle");
-  const [prepareError, setPrepareError] = useState<TVMessageContent | null>(
-    null
-  );
-  const [prepareProgress, setPrepareProgress] = useState<number | null>(null);
-  const [prepareRetryVersion, setPrepareRetryVersion] = useState(0);
   const [isVideoViewReady, setIsVideoViewReady] = useState(false);
   const [isRemoteNavVisible, setIsRemoteNavVisible] = useState(true);
-  const [shouldPreferRemoteNavFocus, setShouldPreferRemoteNavFocus] = useState(true);
+  const [shouldPreferRemoteNavFocus, setShouldPreferRemoteNavFocus] =
+    useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [stream, setStream] = useState<{
-    videoId: string;
-    url: string;
-  } | null>(null);
   const [playback, setPlayback] = useState({ position: 0, duration: 0 });
   const pendingSeekRef = useRef<PendingSeek | null>(null);
-  // Where the Offline copy picks up after the desktop drops out mid-stream.
-  const resumeAtRef = useRef<{ videoId: string; position: number } | null>(
-    null,
-  );
-  // Only a desktop that was here can drop out; a player opened in Offline mode fails as usual.
-  const hadDesktopRef = useRef(false);
   const isProgressFocusedRef = useRef(false);
   // Set when a key press woke the overlay, so that press's click doesn't also act.
   const suppressNextPressRef = useRef(false);
   const navigationLockVideoIdRef = useRef<string | null>(null);
-  const prefetchedNextVideoIdRef = useRef<string | null>(null);
-  const remoteNavTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remoteNavTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const backNavRef = useRef<TVFocusPressableHandle | null>(null);
   const prevNavRef = useRef<TVFocusPressableHandle | null>(null);
   const playPauseNavRef = useRef<TVFocusPressableHandle | null>(null);
@@ -153,13 +128,16 @@ export default function TVPlayerScreen() {
     }, REMOTE_NAV_AUTO_HIDE_MS);
   }, [clearRemoteNavTimeout]);
 
-  const showRemoteNav = useCallback((preferRemoteNavFocus = false) => {
-    setIsRemoteNavVisible(true);
-    if (preferRemoteNavFocus) {
-      setShouldPreferRemoteNavFocus(true);
-    }
-    scheduleRemoteNavAutoHide();
-  }, [scheduleRemoteNavAutoHide]);
+  const showRemoteNav = useCallback(
+    (preferRemoteNavFocus = false) => {
+      setIsRemoteNavVisible(true);
+      if (preferRemoteNavFocus) {
+        setShouldPreferRemoteNavFocus(true);
+      }
+      scheduleRemoteNavAutoHide();
+    },
+    [scheduleRemoteNavAutoHide],
+  );
 
   const handleRemoteNavFocus = useCallback(() => {
     setShouldPreferRemoteNavFocus(false);
@@ -185,142 +163,37 @@ export default function TVPlayerScreen() {
     return playlistVideos.findIndex((item) => item.id === id);
   }, [id, playlistVideos]);
 
-  const playlistVideo = playlistIndex >= 0 ? playlistVideos[playlistIndex] : undefined;
+  const playlistVideo =
+    playlistIndex >= 0 ? playlistVideos[playlistIndex] : undefined;
   const video = playlistVideo ?? libraryVideo;
 
-  const effectiveServerUrl = streamServerUrl ?? serverUrl;
+  // The player, once it exists, for resuming the Offline copy where a Stream left off.
+  const playerRef = useRef<VideoPlayer | null>(null);
+  const {
+    source: playbackState,
+    upNext,
+    retry,
+  } = playbackSource.useSource({
+    videoId: id ?? "",
+    queue: playlistVideos,
+    index: playlistIndex,
+    getPosition: () => playerRef.current?.currentTime ?? 0,
+  });
 
-  const offlineUri = offlineCopy.useUri(id ?? "");
-  // Once a Video starts streaming it keeps its source, even if its Offline copy lands meanwhile.
-  const streamUrl = stream && stream.videoId === id ? stream.url : null;
-
-  useEffect(() => {
-    if (!id) {
-      return;
-    }
-
-    tvDebugInfo("[TV Playback Debug] Source resolution", {
-      videoId: id,
-      hasOfflineUri: !!offlineUri,
-      offlineUri,
-      hasEffectiveServerUrl: !!effectiveServerUrl,
-      effectiveServerUrl,
-      sourceKind: offlineUri
-        ? "local-file"
-        : effectiveServerUrl
-          ? "desktop-playback"
-          : "unavailable",
-    });
-  }, [effectiveServerUrl, id, offlineUri]);
-
-  useEffect(() => {
-    if (!id) {
-      setPrepareState("failed");
-      setPrepareError(videoNotFound);
-      setPrepareProgress(null);
-      return;
-    }
-
-    if (streamUrl) {
-      return;
-    }
-
-    if (offlineUri) {
-      tvDebugInfo("[TV Playback Debug] Using local file", {
-        videoId: id,
-        offlineUri,
-      });
-      setPrepareState("ready");
-      setPrepareError(null);
-      setPrepareProgress(100);
-      return;
-    }
-
-    if (!effectiveServerUrl) {
-      logger.warn("[TV Playback Debug] Offline playback unavailable", {
-        videoId: id,
-        reason: "no-local-file-and-no-server",
-      });
-      setPrepareState("failed");
-      setPrepareError(notOnThisTV);
-      setPrepareProgress(null);
-      return;
-    }
-
-    let cancelled = false;
-    const abortController = new AbortController();
-
-    setPrepareState("preparing");
-    setPrepareError(null);
-    setPrepareProgress(null);
-
-    const prepare = async () => {
-      try {
-        tvDebugInfo("[TV Playback Debug] Streaming from the desktop", {
-          videoId: id,
-          serverUrl: effectiveServerUrl,
-        });
-        await desktopFetch.waitUntilFetched(effectiveServerUrl, id, {
-          signal: abortController.signal,
-          onProgress: (progress) => {
-            if (cancelled) return;
-            setPrepareProgress(progress);
-          },
-        });
-
-        if (cancelled || abortController.signal.aborted) {
-          return;
-        }
-
-        setStream({
-          videoId: id,
-          url: api.getVideoFileUrl(effectiveServerUrl, id),
-        });
-        setPrepareState("ready");
-        setPrepareError(null);
-        setPrepareProgress(100);
-      } catch (error) {
-        if (cancelled || abortController.signal.aborted) {
-          return;
-        }
-
-        logger.warn("[TV Playback Debug] Desktop playback preparation failed", {
-          videoId: id,
-          serverUrl: effectiveServerUrl,
-          error: getErrorMessage(error),
-        });
-        setPrepareState("failed");
-        setPrepareError(describeVideoFailure(error));
-        setPrepareProgress(null);
-      }
-    };
-
-    void prepare();
-
-    return () => {
-      cancelled = true;
-      abortController.abort();
-    };
-  }, [
-    effectiveServerUrl,
-    id,
-    offlineUri,
-    prepareRetryVersion,
-    streamUrl,
-  ]);
-
-  const source = id ? (streamUrl ?? offlineUri ?? "") : "";
+  const source =
+    playbackState.kind === "offline" || playbackState.kind === "stream"
+      ? playbackState.uri
+      : "";
+  const resumeAt =
+    playbackState.kind === "offline" ? playbackState.resumeAt : null;
 
   const player = useVideoPlayer(source, (instance) => {
     instance.loop = false;
     instance.timeUpdateEventInterval = 1;
-    const resumeAt = resumeAtRef.current;
-    if (resumeAt && resumeAt.videoId === id) {
-      instance.currentTime = resumeAt.position;
-      resumeAtRef.current = null;
-    }
+    if (resumeAt !== null) instance.currentTime = resumeAt;
     instance.play();
   });
+  playerRef.current = player;
   useWatchProgressRecorder(player, video);
 
   useEffect(() => {
@@ -352,19 +225,15 @@ export default function TVPlayerScreen() {
       currentIndex: playlistIndex,
       currentVideoId: playlistVideos[playlistIndex]?.id ?? null,
     });
-  }, [
-    playlistId,
-    playlistIndex,
-    playlistVideos,
-    updateRecentPlaylistProgress,
-  ]);
+  }, [playlistId, playlistIndex, playlistVideos, updateRecentPlaylistProgress]);
 
   const hasPlaylistContext = playlistIndex >= 0;
   const hasPrevious = hasPlaylistContext && playlistIndex > 0;
-  const hasNext = hasPlaylistContext && playlistIndex < playlistVideos.length - 1;
+  const hasNext =
+    hasPlaylistContext && playlistIndex < playlistVideos.length - 1;
   const nextVideo = hasNext ? playlistVideos[playlistIndex + 1] : null;
-  const nextOfflineUri = offlineCopy.useUri(nextVideo?.id ?? "");
-  const playbackModeLabel = streamUrl ? "Streaming" : "Offline";
+  const playbackModeLabel =
+    playbackState.kind === "stream" ? "Streaming" : "Offline";
   const duration =
     playback.duration > 0 ? playback.duration : (video?.duration ?? 0);
   const position =
@@ -373,10 +242,18 @@ export default function TVPlayerScreen() {
 
   useEffect(() => {
     setNavNodeHandles({
-      back: backNavRef.current ? findNodeHandle(backNavRef.current) ?? undefined : undefined,
-      prev: prevNavRef.current ? findNodeHandle(prevNavRef.current) ?? undefined : undefined,
-      playPause: playPauseNavRef.current ? findNodeHandle(playPauseNavRef.current) ?? undefined : undefined,
-      next: nextNavRef.current ? findNodeHandle(nextNavRef.current) ?? undefined : undefined,
+      back: backNavRef.current
+        ? (findNodeHandle(backNavRef.current) ?? undefined)
+        : undefined,
+      prev: prevNavRef.current
+        ? (findNodeHandle(prevNavRef.current) ?? undefined)
+        : undefined,
+      playPause: playPauseNavRef.current
+        ? (findNodeHandle(playPauseNavRef.current) ?? undefined)
+        : undefined,
+      next: nextNavRef.current
+        ? (findNodeHandle(nextNavRef.current) ?? undefined)
+        : undefined,
       progress: progressNavRef.current
         ? (findNodeHandle(progressNavRef.current) ?? undefined)
         : undefined,
@@ -487,7 +364,7 @@ export default function TVPlayerScreen() {
         }
 
         showRemoteNav(false);
-      }
+      },
     );
 
     return () => {
@@ -510,58 +387,30 @@ export default function TVPlayerScreen() {
       setCurrentIndex(targetIndex);
       router.replace(`/(tv)/player/${target.id}` as Href);
     },
-    [id, playlistVideos, setCurrentIndex]
+    [id, playlistVideos, setCurrentIndex],
   );
 
-  const dependsOnDesktop = !!streamUrl || prepareState === "preparing";
+  const lostNextIndex =
+    playbackState.kind === "desktopLost" ? playbackState.nextIndex : undefined;
 
-  // The desktop dropped out while this Video depends on it: carry on from the TV.
+  // The desktop dropped out and the TV doesn't hold this Video: carry on from the TV.
   useEffect(() => {
-    if (connectionStatus === "connected") {
-      hadDesktopRef.current = true;
-      return;
-    }
     if (
+      lostNextIndex === undefined ||
       !id ||
-      !dependsOnDesktop ||
-      !hadDesktopRef.current ||
       navigationLockVideoIdRef.current === id
     ) {
       return;
     }
-    const plan = planDesktopLoss({
-      videoId: id,
-      queue: playlistVideos,
-      index: playlistIndex,
-      hasOfflineCopy: (videoId) => !!offlineCopy.getUri(videoId),
-    });
-    logger.info("[TV Player] Desktop dropped out mid-video", {
-      videoId: id,
-      plan: plan.kind,
-    });
-    if (plan.kind === "offlineCopy") {
-      resumeAtRef.current = { videoId: id, position: player.currentTime };
-      setStream(null);
-      return;
-    }
-    if (plan.kind === "next") {
+    if (lostNextIndex !== null) {
       showNotice(desktopGoneNextVideo);
-      goToIndex(plan.index);
+      goToIndex(lostNextIndex);
       return;
     }
     navigationLockVideoIdRef.current = id;
     showNotice(desktopGoneNothingLeft);
     router.back();
-  }, [
-    connectionStatus,
-    dependsOnDesktop,
-    goToIndex,
-    id,
-    player,
-    playlistIndex,
-    playlistVideos,
-    showNotice,
-  ]);
+  }, [goToIndex, id, lostNextIndex, showNotice]);
 
   useEffect(() => {
     if (!player) return;
@@ -580,70 +429,22 @@ export default function TVPlayerScreen() {
     };
   }, [player, hasNext, goToIndex, playlistIndex]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const abortController = new AbortController();
-
-    const warmNextVideo = async () => {
-      if (!nextVideo) {
-        prefetchedNextVideoIdRef.current = null;
-        setPrefetchState("idle");
-        return;
-      }
-
-      if (nextOfflineUri) {
-        prefetchedNextVideoIdRef.current = nextVideo.id;
-        setPrefetchState("ready");
-        return;
-      }
-
-      if (!effectiveServerUrl) {
-        setPrefetchState("idle");
-        return;
-      }
-
-      if (prefetchedNextVideoIdRef.current === nextVideo.id) {
-        setPrefetchState("ready");
-        return;
-      }
-
-      setPrefetchState("loading");
-
-      try {
-        await desktopFetch.waitUntilFetched(effectiveServerUrl, nextVideo.id, {
-          signal: abortController.signal,
-        });
-
-        if (!cancelled) {
-          prefetchedNextVideoIdRef.current = nextVideo.id;
-          setPrefetchState("ready");
-        }
-      } catch (error) {
-        if (!cancelled && !abortController.signal.aborted) {
-          console.log("[TV Player] Next video prefetch failed:", error);
-          prefetchedNextVideoIdRef.current = null;
-          setPrefetchState("failed");
-        }
-      }
-    };
-
-    void warmNextVideo();
-
-    return () => {
-      cancelled = true;
-      abortController.abort();
-    };
-  }, [effectiveServerUrl, nextOfflineUri, nextVideo?.id]);
-
   if (!id || !source) {
     const failure =
-      prepareState === "failed" ? (prepareError ?? notOnThisTV) : null;
-    const canRetry = !!failure?.canRetry && !!id && !!effectiveServerUrl;
+      playbackState.kind === "failed"
+        ? describeFailure(playbackState.failure)
+        : null;
+    const canRetry =
+      !!failure?.canRetry &&
+      playbackState.kind === "failed" &&
+      playbackState.canRetry;
+    const progress =
+      playbackState.kind === "preparing" ? playbackState.progress : null;
     const message = failure ?? {
       title: desktopGettingVideoTitle,
       text:
-        prepareProgress !== null
-          ? `${Math.max(0, Math.round(prepareProgress))}% done`
+        progress !== null
+          ? `${Math.max(0, Math.round(progress))}% done`
           : "Please wait",
     };
 
@@ -654,7 +455,7 @@ export default function TVPlayerScreen() {
             {canRetry ? (
               <TVMessageButton
                 label="Retry"
-                onPress={() => setPrepareRetryVersion((prev) => prev + 1)}
+                onPress={retry}
                 hasTVPreferredFocus
               />
             ) : null}
@@ -702,7 +503,7 @@ export default function TVPlayerScreen() {
               {video?.title ?? "Now Playing"}
             </Text>
             <Text style={styles.titleChipMeta} numberOfLines={1}>
-              {nextVideo && prefetchState === "loading"
+              {nextVideo && upNext === "loading"
                 ? `${playbackModeLabel} · Loading next: ${nextVideo.title}`
                 : nextVideo
                   ? `${playbackModeLabel} · Up next: ${nextVideo.title}`
@@ -723,14 +524,19 @@ export default function TVPlayerScreen() {
               onFocus={handleRemoteNavFocus}
               onBlur={handleRemoteNavBlur}
               nextFocusDown={navNodeHandles.progress}
-              nextFocusRight={hasPrevious ? navNodeHandles.prev : navNodeHandles.playPause}
+              nextFocusRight={
+                hasPrevious ? navNodeHandles.prev : navNodeHandles.playPause
+              }
             >
               <Text style={styles.navFabText}>Back</Text>
             </TVFocusPressable>
 
             <TVFocusPressable
               ref={prevNavRef}
-              style={[styles.navFabButton, !hasPrevious && styles.navButtonDisabled]}
+              style={[
+                styles.navFabButton,
+                !hasPrevious && styles.navButtonDisabled,
+              ]}
               onPress={() =>
                 pressRemoteNav(() => {
                   showRemoteNav(false);
@@ -755,15 +561,22 @@ export default function TVPlayerScreen() {
               onBlur={handleRemoteNavBlur}
               nextFocusDown={navNodeHandles.progress}
               hasTVPreferredFocus={shouldPreferRemoteNavFocus}
-              nextFocusLeft={hasPrevious ? navNodeHandles.prev : navNodeHandles.back}
+              nextFocusLeft={
+                hasPrevious ? navNodeHandles.prev : navNodeHandles.back
+              }
               nextFocusRight={hasNext ? navNodeHandles.next : undefined}
             >
-              <Text style={styles.navFabText}>{isPlaying ? "Pause" : "Play"}</Text>
+              <Text style={styles.navFabText}>
+                {isPlaying ? "Pause" : "Play"}
+              </Text>
             </TVFocusPressable>
 
             <TVFocusPressable
               ref={nextNavRef}
-              style={[styles.navFabButton, !hasNext && styles.navButtonDisabled]}
+              style={[
+                styles.navFabButton,
+                !hasNext && styles.navButtonDisabled,
+              ]}
               onPress={() =>
                 pressRemoteNav(() => {
                   showRemoteNav(false);

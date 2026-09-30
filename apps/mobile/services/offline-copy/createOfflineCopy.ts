@@ -307,6 +307,8 @@ export function createOfflineCopy(platform: OfflineCopyPlatform) {
       useSyncExternalStore(subscribe, () => getUri(videoId)),
     /** A `getUri` for screens that check many Videos; re-renders when any Offline copy appears or disappears. */
     useLookup: () => useSyncExternalStore(subscribe, () => lookup),
+    /** Calls the listener whenever any Offline copy appears or disappears. */
+    subscribe,
     /** Moves a finished temp file into the current Storage location, replacing any existing copy. */
     adopt,
     /** Deletes a Video's Offline copy wherever it is stored, and its record. */

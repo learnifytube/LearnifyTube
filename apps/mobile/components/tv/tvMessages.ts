@@ -1,4 +1,8 @@
 import type { UpdateMessage, UpdateQuestion } from "../../services/app-update";
+import {
+  DesktopFetchFailedError,
+  DesktopStillFetchingError,
+} from "../../services/desktop-fetch/createDesktopFetch";
 import { pairingRequiredText } from "./connectionText";
 
 /** A message on the TV: a title and a short text, readable from the couch. */
@@ -8,22 +12,6 @@ export type TVMessageContent = {
   /** Whether trying again could help, so the screen offers a Retry. */
   canRetry: boolean;
 };
-
-/** The desktop tried to fetch the Video from YouTube and failed. */
-export class DesktopFetchFailedError extends Error {
-  constructor(readonly desktopError: string | null) {
-    super(desktopError ?? "The desktop couldn't fetch the Video");
-    this.name = "DesktopFetchFailedError";
-  }
-}
-
-/** The desktop is still fetching the Video after the TV stopped waiting. */
-export class DesktopStillFetchingError extends Error {
-  constructor() {
-    super("The desktop is still fetching the Video");
-    this.name = "DesktopStillFetchingError";
-  }
-}
 
 /** What a TV message says, without the actions a screen adds. */
 export type TVMessageText = Pick<TVMessageContent, "title" | "text">;

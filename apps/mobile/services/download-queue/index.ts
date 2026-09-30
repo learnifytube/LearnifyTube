@@ -2,6 +2,7 @@ import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystemLegacy from "expo-file-system/legacy";
 import { api } from "../api";
+import { desktopFetch } from "../desktop-fetch";
 import { offlineCopy } from "../offline-copy";
 import { videoThumbnails } from "../video-thumbnails";
 import { useConnectionStore } from "../../stores/connection";
@@ -32,21 +33,8 @@ const platform: DownloadQueuePlatform = {
       unsubscribeConnection();
     };
   },
+  desktopFetch,
   desktop: {
-    requestVideo: async (serverUrl, videoId) => {
-      const response = await api.requestServerDownload(serverUrl, { videoId });
-      if (!response.success && !response.status) {
-        throw new Error(response.message || "The desktop refused the Download");
-      }
-      return response.status === "completed" ? "ready" : "fetching";
-    },
-    getFetchStatus: async (serverUrl, videoId) => {
-      const status = await api.getServerDownloadStatus(serverUrl, videoId);
-      if (status.status === "completed") return { state: "ready" };
-      if (status.status === "failed")
-        return { state: "failed", error: status.error };
-      return { state: "fetching", progress: status.progress };
-    },
     transfer: async (serverUrl, videoId, destUri, onProgress, signal) => {
       const transfer = FileSystemLegacy.createDownloadResumable(
         api.getVideoFileUrl(serverUrl, videoId),

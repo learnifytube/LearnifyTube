@@ -1,6 +1,8 @@
 import {
   DesktopFetchFailedError,
   DesktopStillFetchingError,
+} from "../../services/desktop-fetch/createDesktopFetch";
+import {
   describeDesktopRequestFailure,
   describeUpdateMessage,
   describeUpdateQuestion,

@@ -1,4 +1,6 @@
 import { act, renderHook } from "@testing-library/react-native";
+import { createDesktopFetch } from "../desktop-fetch/createDesktopFetch";
+import { createFakeDesktopFetchPlatform } from "../desktop-fetch/fakeDesktopFetchPlatform";
 import { createOfflineCopy } from "../offline-copy/createOfflineCopy";
 import { createFakeOfflineCopyPlatform } from "../offline-copy/fakeOfflineCopyPlatform";
 import type { Video } from "../../types";
@@ -39,9 +41,7 @@ function createHarness({ saved = [] as StoredDownload[] } = {}) {
     serverUrl: SERVER as string | null,
     foreground: true,
   };
-  const desktopFiles = new Set<string>();
-  const desktopFailures = new Map<string, string>();
-  const statusRequests: string[] = [];
+  const desktop = createFakeDesktopFetchPlatform();
   const transfers: Transfer[] = [];
   const library = new Map<string, Video>();
   const storedThumbnails = new Map<string, string | undefined>();
@@ -56,16 +56,8 @@ function createHarness({ saved = [] as StoredDownload[] } = {}) {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    desktopFetch: createDesktopFetch(desktop.platform),
     desktop: {
-      requestVideo: async (_serverUrl, videoId) =>
-        desktopFiles.has(videoId) ? "ready" : "fetching",
-      getFetchStatus: async (_serverUrl, videoId) => {
-        statusRequests.push(videoId);
-        const error = desktopFailures.get(videoId);
-        if (error) return { state: "failed", error };
-        if (desktopFiles.has(videoId)) return { state: "ready" };
-        return { state: "fetching", progress: 40 };
-      },
       transfer: (_serverUrl, videoId, destUri, onProgress, signal) =>
         new Promise((resolve, reject) => {
           const transfer: Transfer = {
@@ -86,7 +78,7 @@ function createHarness({ saved = [] as StoredDownload[] } = {}) {
             },
             missing: () => {
               transfer.settled = true;
-              desktopFiles.delete(videoId);
+              desktop.forgets(videoId);
               resolve("missing");
             },
           };
@@ -128,10 +120,11 @@ function createHarness({ saved = [] as StoredDownload[] } = {}) {
     storedThumbnails,
     thumbnailFails: (id: string) => thumbnailFailures.add(id),
     transfers,
-    statusRequests,
+    desktop,
+    statusRequests: desktop.statusRequests,
     persisted: () => persisted,
-    desktopHas: (...ids: string[]) => ids.forEach((id) => desktopFiles.add(id)),
-    desktopFails: (id: string, error: string) => desktopFailures.set(id, error),
+    desktopHas: desktop.has,
+    desktopFails: desktop.fails,
     activeTransfers: () => transfers.filter((t) => !t.aborted && !t.settled),
     setConditions: (next: Partial<typeof conditions>) => {
       Object.assign(conditions, next);
@@ -326,8 +319,7 @@ describe("Download queue", () => {
   it("fails when the desktop can't be asked for the Video", async () => {
     const h = createHarness();
     h.queue.start();
-    const requestVideo = jest.fn().mockRejectedValue(new Error("HTTP 500"));
-    Object.assign(h.platform.desktop, { requestVideo });
+    h.desktop.refuses("v1", new Error("HTTP 500"));
 
     h.queue.request(summary("v1"));
     await flush();
@@ -336,7 +328,7 @@ describe("Download queue", () => {
       phase: "failed",
       error: "HTTP 500",
     });
-    expect(requestVideo).toHaveBeenCalledTimes(1);
+    expect(h.desktop.requests).toEqual(["v1"]);
   });
 
   it("holds Downloads while the desktop is disconnected or the app is in the background", async () => {
@@ -355,6 +347,24 @@ describe("Download queue", () => {
     expect(h.transfers).toHaveLength(0);
 
     h.setConditions({ foreground: true });
+    await flush();
+    expect(h.activeTransfers()).toHaveLength(1);
+  });
+
+  it("stops asking the desktop while it is disconnected and asks again once it is back", async () => {
+    const h = await started(createHarness());
+    h.queue.request(summary("v1"));
+    await jest.advanceTimersByTimeAsync(2000);
+
+    h.setConditions({ serverUrl: null });
+    await flush();
+    const polls = h.statusRequests.length;
+    await jest.advanceTimersByTimeAsync(20_000);
+    expect(h.statusRequests).toHaveLength(polls);
+    expect(h.queue.getDownload("v1")?.phase).toBe("waiting-for-desktop");
+
+    h.desktopHas("v1");
+    h.setConditions({ serverUrl: SERVER });
     await flush();
     expect(h.activeTransfers()).toHaveLength(1);
   });

@@ -15,6 +15,7 @@ import { usePlaybackStore } from "../../../stores/playback";
 import { useTVHistoryStore } from "../../../stores/tvHistory";
 import { useTVNoticeStore } from "../../../stores/tvNotice";
 import { api } from "../../../services/api";
+import { desktopFetch } from "../../../services/desktop-fetch";
 import { desktopConnection } from "../../../services/desktop-connection";
 import { offlineCopy } from "../../../services/offline-copy";
 import { logger } from "../../../services/logger";
@@ -36,8 +37,6 @@ import {
 } from "../../../components/tv/TVMessage";
 import { planDesktopLoss } from "../../../components/tv/desktopLoss";
 import {
-  DesktopFetchFailedError,
-  DesktopStillFetchingError,
   describeVideoFailure,
   desktopGettingVideoTitle,
   desktopGoneNextVideo,
@@ -47,21 +46,12 @@ import {
   type TVMessageContent,
 } from "../../../components/tv/tvMessages";
 import { colors, fontSize, fontWeight, radius, spacing } from "../../../theme";
-import type { ServerDownloadStatus } from "../../../types";
 
 type PrefetchState = "idle" | "loading" | "ready" | "failed";
 type SourcePrepareState = "idle" | "preparing" | "ready" | "failed";
 
-const SERVER_DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1000;
-const SERVER_DOWNLOAD_POLL_MS = 2000;
 const REMOTE_NAV_TIMEOUT_MS = 4500;
 const REMOTE_NAV_AUTO_HIDE_MS = 5000;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
 
 const MEDIA_KEYS = new Set(["playPause", "rewind", "fastForward"]);
 
@@ -89,107 +79,6 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
-}
-
-function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) {
-    const abortError = new Error("aborted");
-    abortError.name = "AbortError";
-    throw abortError;
-  }
-}
-
-async function probeVideoFileAvailability(
-  serverUrl: string,
-  videoId: string,
-  signal?: AbortSignal
-): Promise<boolean> {
-  const fileUrl = api.getVideoFileUrl(serverUrl, videoId);
-
-  try {
-    const head = await fetch(fileUrl, {
-      method: "HEAD",
-      signal,
-    });
-    if (head.ok) {
-      return true;
-    }
-  } catch {
-    // Continue to range probe
-  }
-
-  try {
-    const probe = await fetch(fileUrl, {
-      signal,
-      headers: {
-        Range: "bytes=0-2048",
-      },
-    });
-
-    if (!probe.ok) {
-      return false;
-    }
-
-    await probe.arrayBuffer();
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function ensureServerVideoReady(
-  serverUrl: string,
-  videoId: string,
-  options?: {
-    signal?: AbortSignal;
-    timeoutMs?: number;
-    onStatus?: (status: ServerDownloadStatus) => void;
-  }
-): Promise<void> {
-  const signal = options?.signal;
-  const timeoutMs = options?.timeoutMs ?? SERVER_DOWNLOAD_TIMEOUT_MS;
-  const onStatus = options?.onStatus;
-
-  throwIfAborted(signal);
-
-  const alreadyReady = await probeVideoFileAvailability(serverUrl, videoId, signal);
-  if (alreadyReady) {
-    onStatus?.({
-      videoId,
-      status: "completed",
-      progress: 100,
-      error: null,
-    });
-    return;
-  }
-
-  const response = await api.requestServerDownload(serverUrl, { videoId });
-  if (!response.success && !response.status) {
-    throw new DesktopFetchFailedError(response.message || null);
-  }
-
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    throwIfAborted(signal);
-
-    const status = await api.getServerDownloadStatus(serverUrl, videoId);
-    onStatus?.(status);
-
-    if (status.status === "failed") {
-      throw new DesktopFetchFailedError(status.error);
-    }
-
-    if (status.status === "completed") {
-      const ready = await probeVideoFileAvailability(serverUrl, videoId, signal);
-      if (ready) {
-        return;
-      }
-    }
-
-    await sleep(SERVER_DOWNLOAD_POLL_MS);
-  }
-
-  throw new DesktopStillFetchingError();
 }
 
 export default function TVPlayerScreen() {
@@ -371,11 +260,11 @@ export default function TVPlayerScreen() {
           videoId: id,
           serverUrl: effectiveServerUrl,
         });
-        await ensureServerVideoReady(effectiveServerUrl, id, {
+        await desktopFetch.waitUntilFetched(effectiveServerUrl, id, {
           signal: abortController.signal,
-          onStatus: (status) => {
+          onProgress: (progress) => {
             if (cancelled) return;
-            setPrepareProgress(status.progress ?? null);
+            setPrepareProgress(progress);
           },
         });
 
@@ -721,7 +610,7 @@ export default function TVPlayerScreen() {
       setPrefetchState("loading");
 
       try {
-        await ensureServerVideoReady(effectiveServerUrl, nextVideo.id, {
+        await desktopFetch.waitUntilFetched(effectiveServerUrl, nextVideo.id, {
           signal: abortController.signal,
         });
 

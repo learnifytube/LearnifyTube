@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import type { DesktopFetch } from "../desktop-fetch/createDesktopFetch";
 import type { OfflineCopy } from "../offline-copy/createOfflineCopy";
 import type { Transcript, Video } from "../../types";
 
@@ -32,27 +33,14 @@ export type StoredDownload = Omit<Download, "phase" | "progress"> & {
   status: string;
 };
 
-export type DesktopFetchStatus =
-  | { state: "ready" }
-  | { state: "fetching"; progress?: number | null }
-  | { state: "failed"; error?: string | null };
-
 export type DownloadQueuePlatform = {
   offlineCopy: OfflineCopy;
   getServerUrl: () => string | null;
   isForeground: () => boolean;
   /** Called when the desktop connection or the app's foreground state changes. */
   onConditionsChange: (listener: () => void) => () => void;
+  desktopFetch: DesktopFetch;
   desktop: {
-    /** Asks the desktop to have the Video's file; "ready" when it already does. */
-    requestVideo: (
-      serverUrl: string,
-      videoId: string,
-    ) => Promise<"ready" | "fetching">;
-    getFetchStatus: (
-      serverUrl: string,
-      videoId: string,
-    ) => Promise<DesktopFetchStatus>;
     /** Writes the Video's file to destUri; "missing" when the desktop lost it and is fetching it again. */
     transfer: (
       serverUrl: string,
@@ -78,8 +66,6 @@ export type DownloadQueuePlatform = {
 };
 
 const MAX_TRANSFERS = 2;
-const DESKTOP_POLL_MS = 2000;
-const DESKTOP_TIMEOUT_MS = 10 * 60_000;
 const RETRY_DELAYS_MS = [1000, 3000, 10_000];
 const PROGRESS_INTERVAL_MS = 250;
 
@@ -112,14 +98,13 @@ const toStored = ({
   status: phase,
 });
 
-const sleep = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));
-
 export function createDownloadQueue(platform: DownloadQueuePlatform) {
   let downloads: Download[] = [];
   const listeners = new Set<() => void>();
   // Downloads with work in flight: a desktop wait or a transfer.
   const running = new Map<string, AbortController>();
+  // Downloads whose running work is a desktop wait, stopped when the queue can't run.
+  const desktopWaits = new Set<string>();
   const retries = new Map<string, { count: number; at: number }>();
 
   const notify = () => {
@@ -149,16 +134,25 @@ export function createDownloadQueue(platform: DownloadQueuePlatform) {
   const canRun = () =>
     platform.getServerUrl() !== null && platform.isForeground();
 
+  // Returns without a phase change when the app leaves the foreground or the
+  // desktop disconnects; the Download waits again once it can run.
   const waitForDesktop = async (
     download: Download,
     serverUrl: string,
     signal: AbortSignal,
   ) => {
+    const { videoId } = download;
+    desktopWaits.add(videoId);
     try {
-      await waitForDesktopOnce(download, serverUrl, signal);
+      await platform.desktopFetch.waitUntilFetched(serverUrl, videoId, {
+        signal,
+        onProgress: (progress) => update(videoId, { progress }),
+      });
+      if (signal.aborted) return;
+      update(videoId, { phase: "queued", progress: null });
     } catch (error) {
       if (signal.aborted) return;
-      update(download.videoId, {
+      update(videoId, {
         phase: "failed",
         progress: null,
         error:
@@ -166,47 +160,8 @@ export function createDownloadQueue(platform: DownloadQueuePlatform) {
             ? error.message
             : "The desktop couldn't fetch this Video",
       });
-    }
-  };
-
-  // Returns without a phase change when the app leaves the foreground or the
-  // desktop disconnects; the Download waits again once it can run.
-  const waitForDesktopOnce = async (
-    download: Download,
-    serverUrl: string,
-    signal: AbortSignal,
-  ) => {
-    const { videoId } = download;
-    let answer: DesktopFetchStatus =
-      (await platform.desktop.requestVideo(serverUrl, videoId)) === "ready"
-        ? { state: "ready" }
-        : { state: "fetching" };
-    const startedAt = Date.now();
-    while (answer.state === "fetching") {
-      if (Date.now() - startedAt >= DESKTOP_TIMEOUT_MS) {
-        update(videoId, {
-          phase: "failed",
-          progress: null,
-          error: "The desktop took too long to fetch this Video",
-        });
-        return;
-      }
-      await sleep(DESKTOP_POLL_MS);
-      if (signal.aborted || !canRun()) return;
-      answer = await platform.desktop.getFetchStatus(serverUrl, videoId);
-      if (answer.state === "fetching") {
-        update(videoId, { progress: answer.progress ?? null });
-      }
-    }
-    if (signal.aborted) return;
-    if (answer.state === "ready") {
-      update(videoId, { phase: "queued", progress: null });
-    } else {
-      update(videoId, {
-        phase: "failed",
-        progress: null,
-        error: answer.error || "The desktop couldn't fetch this Video",
-      });
+    } finally {
+      desktopWaits.delete(videoId);
     }
   };
 
@@ -341,8 +296,15 @@ export function createDownloadQueue(platform: DownloadQueuePlatform) {
     }
   }
 
+  const onConditionsChange = () => {
+    if (!canRun()) {
+      for (const videoId of desktopWaits) running.get(videoId)?.abort();
+    }
+    pump();
+  };
+
   const start = () => {
-    const unsubscribe = platform.onConditionsChange(pump);
+    const unsubscribe = platform.onConditionsChange(onConditionsChange);
     platform
       .loadQueue()
       .then((stored) => {

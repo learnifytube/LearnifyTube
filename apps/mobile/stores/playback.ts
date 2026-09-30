@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { api } from "../services/api";
 import type { Video } from "../types";
 
 // A Video in the play queue. It carries no file location: the player asks the
@@ -110,6 +111,6 @@ export const usePlaybackStore = create<PlaybackStore>()((set, get) => ({
   getStreamUrl: (videoId) => {
     const { streamServerUrl } = get();
     if (!streamServerUrl) return null;
-    return `${streamServerUrl}/api/video/${videoId}/file`;
+    return api.getVideoFileUrl(streamServerUrl, videoId);
   },
 }));

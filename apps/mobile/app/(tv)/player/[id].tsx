@@ -40,31 +40,13 @@ import {
   notOnThisTV,
   videoNotFound,
 } from "../../../components/tv/tvMessages";
+import {
+  decideRemoteKey,
+  type RemoteKeyEvent,
+} from "../../../components/tv/remoteKeys";
 import { colors, fontSize, fontWeight, radius, spacing } from "../../../theme";
 
-const REMOTE_NAV_TIMEOUT_MS = 4500;
 const REMOTE_NAV_AUTO_HIDE_MS = 5000;
-
-const MEDIA_KEYS = new Set(["playPause", "rewind", "fastForward"]);
-
-type Direction = "up" | "down" | "left" | "right";
-
-// Android's KeyEvent.ACTION_UP.
-const KEY_UP = 1;
-
-function getDirection(eventType: string) {
-  const normalized = eventType.toLowerCase();
-  for (const direction of ["up", "down", "left", "right"] as const) {
-    if (
-      normalized === direction ||
-      normalized === `arrow${direction}` ||
-      normalized.includes(`dpad_${direction}`)
-    ) {
-      return direction;
-    }
-  }
-  return null;
-}
 
 function describeFailure(failure: PlaybackFailure) {
   if (failure.kind === "videoNotFound") return videoNotFound;
@@ -309,61 +291,24 @@ export default function TVPlayerScreen() {
   useEffect(() => {
     const subscription = DeviceEventEmitter.addListener(
       "onHWKeyEvent",
-      (event: { eventType?: string; eventKeyAction?: number }) => {
-        const eventType = event?.eventType;
-        if (!eventType || eventType === "focus" || eventType === "blur") {
-          return;
-        }
-        const direction = getDirection(eventType);
-        const isKeyDown = event.eventKeyAction !== KEY_UP;
-        const isMediaKey = MEDIA_KEYS.has(eventType);
+      (event: RemoteKeyEvent) => {
+        const command = decideRemoteKey(event, {
+          overlayVisible: isRemoteNavVisible,
+          progressFocused: isProgressFocusedRef.current,
+        });
+        if (command.kind === "ignore") return;
 
-        // While the overlay is hidden, a d-pad press only shows it: it doesn't pause, skip or
-        // seek. Some TV remotes only emit ACTION_UP for the d-pad, so either action wakes it.
-        if (!isRemoteNavVisible && !isMediaKey) {
-          // Only Select clicks the focused button.
-          suppressNextPressRef.current = eventType === "select";
+        suppressNextPressRef.current =
+          command.kind === "wake" && command.suppressPress;
+        if (command.kind === "wake") {
           showRemoteNav(true);
-          return;
-        }
-
-        if (!isKeyDown) {
-          return;
-        }
-        suppressNextPressRef.current = false;
-
-        if (direction) {
-          if (isProgressFocusedRef.current) {
-            if (direction === "left" || direction === "right") {
-              seek(direction === "right" ? 1 : -1);
-              showRemoteNav(false);
-              return;
-            }
-            // Down from the progress row, the bottom of the overlay, hides it.
-            if (direction === "down") {
-              clearRemoteNavTimeout();
-              setIsRemoteNavVisible(false);
-              return;
-            }
-          }
+        } else if (command.kind === "hide") {
+          clearRemoteNavTimeout();
+          setIsRemoteNavVisible(false);
+        } else {
+          if (command.kind === "seek") seek(command.direction);
           showRemoteNav(false);
-          return;
         }
-
-        // Play/pause also reaches expo-video's media session, which toggles playback itself;
-        // toggling here too would undo it.
-        if (eventType === "playPause") {
-          showRemoteNav(false);
-          return;
-        }
-
-        if (eventType === "rewind" || eventType === "fastForward") {
-          seek(eventType === "fastForward" ? 1 : -1);
-          showRemoteNav(false);
-          return;
-        }
-
-        showRemoteNav(false);
       },
     );
 

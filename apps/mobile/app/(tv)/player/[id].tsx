@@ -13,7 +13,9 @@ import { useLibraryStore } from "../../../stores/library";
 import { useConnectionStore } from "../../../stores/connection";
 import { usePlaybackStore } from "../../../stores/playback";
 import { useTVHistoryStore } from "../../../stores/tvHistory";
+import { useTVNoticeStore } from "../../../stores/tvNotice";
 import { api } from "../../../services/api";
+import { desktopConnection } from "../../../services/desktop-connection";
 import { offlineCopy } from "../../../services/offline-copy";
 import { logger } from "../../../services/logger";
 import { tvDebugInfo } from "../../../services/tvDebug";
@@ -32,11 +34,14 @@ import {
   TVMessageButton,
   TVMessageCard,
 } from "../../../components/tv/TVMessage";
+import { planDesktopLoss } from "../../../components/tv/desktopLoss";
 import {
   DesktopFetchFailedError,
   DesktopStillFetchingError,
   describeVideoFailure,
   desktopGettingVideoTitle,
+  desktopGoneNextVideo,
+  desktopGoneNothingLeft,
   notOnThisTV,
   videoNotFound,
   type TVMessageContent,
@@ -191,6 +196,8 @@ export default function TVPlayerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const libraryVideo = useLibraryStore((state) => state.videos.find((item) => item.id === id));
   const serverUrl = useConnectionStore((state) => state.serverUrl);
+  const connectionStatus = desktopConnection.useConnection().status;
+  const showNotice = useTVNoticeStore((state) => state.show);
 
   const playlistId = usePlaybackStore((state) => state.playlistId);
   const playlistVideos = usePlaybackStore((state) => state.playlistVideos);
@@ -218,6 +225,12 @@ export default function TVPlayerScreen() {
   } | null>(null);
   const [playback, setPlayback] = useState({ position: 0, duration: 0 });
   const pendingSeekRef = useRef<PendingSeek | null>(null);
+  // Where the Offline copy picks up after the desktop drops out mid-stream.
+  const resumeAtRef = useRef<{ videoId: string; position: number } | null>(
+    null,
+  );
+  // Only a desktop that was here can drop out; a player opened in Offline mode fails as usual.
+  const hadDesktopRef = useRef(false);
   const isProgressFocusedRef = useRef(false);
   // Set when a key press woke the overlay, so that press's click doesn't also act.
   const suppressNextPressRef = useRef(false);
@@ -412,6 +425,11 @@ export default function TVPlayerScreen() {
   const player = useVideoPlayer(source, (instance) => {
     instance.loop = false;
     instance.timeUpdateEventInterval = 1;
+    const resumeAt = resumeAtRef.current;
+    if (resumeAt && resumeAt.videoId === id) {
+      instance.currentTime = resumeAt.position;
+      resumeAtRef.current = null;
+    }
     instance.play();
   });
   useWatchProgressRecorder(player, video);
@@ -605,6 +623,56 @@ export default function TVPlayerScreen() {
     },
     [id, playlistVideos, setCurrentIndex]
   );
+
+  const dependsOnDesktop = !!streamUrl || prepareState === "preparing";
+
+  // The desktop dropped out while this Video depends on it: carry on from the TV.
+  useEffect(() => {
+    if (connectionStatus === "connected") {
+      hadDesktopRef.current = true;
+      return;
+    }
+    if (
+      !id ||
+      !dependsOnDesktop ||
+      !hadDesktopRef.current ||
+      navigationLockVideoIdRef.current === id
+    ) {
+      return;
+    }
+    const plan = planDesktopLoss({
+      videoId: id,
+      queue: playlistVideos,
+      index: playlistIndex,
+      hasOfflineCopy: (videoId) => !!offlineCopy.getUri(videoId),
+    });
+    logger.info("[TV Player] Desktop dropped out mid-video", {
+      videoId: id,
+      plan: plan.kind,
+    });
+    if (plan.kind === "offlineCopy") {
+      resumeAtRef.current = { videoId: id, position: player.currentTime };
+      setStream(null);
+      return;
+    }
+    if (plan.kind === "next") {
+      showNotice(desktopGoneNextVideo);
+      goToIndex(plan.index);
+      return;
+    }
+    navigationLockVideoIdRef.current = id;
+    showNotice(desktopGoneNothingLeft);
+    router.back();
+  }, [
+    connectionStatus,
+    dependsOnDesktop,
+    goToIndex,
+    id,
+    player,
+    playlistIndex,
+    playlistVideos,
+    showNotice,
+  ]);
 
   useEffect(() => {
     if (!player) return;

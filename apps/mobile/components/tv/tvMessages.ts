@@ -101,3 +101,15 @@ export const storageFolderFailed: TVMessageContent = {
   text: "Pick another folder, or keep Videos on the TV.",
   canRetry: false,
 };
+
+export const desktopGoneNextVideo: TVMessageContent = {
+  title: "The desktop went away",
+  text: "That Video isn't on this TV, so here's the next one that is.",
+  canRetry: false,
+};
+
+export const desktopGoneNothingLeft: TVMessageContent = {
+  title: "The desktop went away",
+  text: "Nothing else here is on this TV.",
+  canRetry: false,
+};

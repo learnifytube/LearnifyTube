@@ -1,30 +1,34 @@
 import { Stack } from "expo-router";
 import { colors } from "../../theme";
 import { useTVBackNavigation } from "../../components/tv/tvBack";
+import { TVNoticeHost } from "../../components/tv/TVNotice";
 
 export default function TVLayout() {
   useTVBackNavigation();
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        contentStyle: {
-          backgroundColor: colors.background,
-        },
-      }}
-    >
-      <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="player/[id]"
-        options={{
+    <>
+      <Stack
+        screenOptions={{
           headerShown: false,
-          presentation: "fullScreenModal",
+          contentStyle: {
+            backgroundColor: colors.background,
+          },
         }}
-      />
-      <Stack.Screen name="settings" options={{ headerShown: false }} />
-      <Stack.Screen name="connect" options={{ headerShown: false }} />
-      <Stack.Screen name="channel/[id]" options={{ headerShown: false }} />
-    </Stack>
+      >
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="player/[id]"
+          options={{
+            headerShown: false,
+            presentation: "fullScreenModal",
+          }}
+        />
+        <Stack.Screen name="settings" options={{ headerShown: false }} />
+        <Stack.Screen name="connect" options={{ headerShown: false }} />
+        <Stack.Screen name="channel/[id]" options={{ headerShown: false }} />
+      </Stack>
+      <TVNoticeHost />
+    </>
   );
 }

@@ -16,6 +16,7 @@ npm run check:ui-boundaries
 if [[ "${SMOKE_TV_PLAYER:-}" != "1" ]]; then
   echo "[smoke-tv] Ready to run on device: EXPO_PUBLIC_APP_SURFACE=tv npm start"
   echo "[smoke-tv] With a Video playing in the TV player, SMOKE_TV_PLAYER=1 runs the remote walkthrough."
+  echo "[smoke-tv] Add SMOKE_TV_DESKTOP_DROP=1 while streaming to check the player carries on when the desktop stops."
   exit 0
 fi
 
@@ -76,5 +77,17 @@ step "play/pause" "PLAYING"
 key KEYCODE_MEDIA_PLAY_PAUSE
 sleep 1.5
 position
+
+if [[ "${SMOKE_TV_DESKTOP_DROP:-}" == "1" ]]; then
+  # Start this run streaming from the desktop; this step waits while you stop it.
+  step "stop the desktop now" "within ~20 s: held Video carries on at the same position with the header saying Offline; otherwise a 'The desktop went away' notice and the next held Video, or back to where playback started"
+  position
+  read -r -p "[smoke-tv] Press Enter once the desktop is stopped... "
+  sleep 20
+  key KEYCODE_DPAD_UP
+  sleep 1
+  shot 05-desktop-dropped
+  position
+fi
 
 echo "[smoke-tv] Screenshots in $shots"

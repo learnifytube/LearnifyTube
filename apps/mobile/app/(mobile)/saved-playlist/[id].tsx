@@ -1,10 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState } from "react";
-import { useLocalSearchParams,
-  useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   View,
   Text,
@@ -18,11 +13,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { VideoGridCard } from "../../../components/VideoGridCard";
 import { getSavedPlaylistWithItems } from "../../../db/repositories/playlists";
 import type { SavedPlaylistWithItems } from "../../../db/repositories/playlists";
-import { api } from "../../../services/api";
 import { downloadQueue } from "../../../services/download-queue";
 import { offlineCopy } from "../../../services/offline-copy";
 import { useConnectionStore } from "../../../stores/connection";
-import { usePlaybackStore, type StreamingVideo } from "../../../stores/playback";
+import {
+  usePlaybackStore,
+  type StreamingVideo,
+} from "../../../stores/playback";
 
 type SavedPlaylistItem = SavedPlaylistWithItems["items"][number];
 type CardPendingState =
@@ -31,8 +28,6 @@ type CardPendingState =
   | { type: "downloading"; progress: number }
   | { type: "queued" }
   | { type: "failed"; error?: string };
-
-const PREPARE_CANCELLED_MESSAGE = "Download cancelled";
 
 export default function SavedPlaylistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -44,14 +39,13 @@ export default function SavedPlaylistScreen() {
 
   const [playlist, setPlaylist] = useState<SavedPlaylistWithItems | null>(null);
   const [loading, setLoading] = useState(true);
-  const [preparingVideoIds, setPreparingVideoIds] = useState<Set<string>>(new Set());
-
-  const isMountedRef = useRef(true);
-  const cancelledVideoIdsRef = useRef<Set<string>>(new Set());
+  // Waits for a Video's Download to finish so it plays; aborted on cancel or leaving.
+  const waitsRef = useRef<Map<string, AbortController>>(new Map());
 
   useEffect(() => {
+    const waits = waitsRef.current;
     return () => {
-      isMountedRef.current = false;
+      for (const wait of waits.values()) wait.abort();
     };
   }, []);
 
@@ -69,79 +63,6 @@ export default function SavedPlaylistScreen() {
     setLoading(false);
   }, [playlistParamId]);
 
-  const setPreparingVideo = useCallback((videoId: string, isPreparing: boolean) => {
-    setPreparingVideoIds((prev) => {
-      const next = new Set(prev);
-      if (isPreparing) {
-        next.add(videoId);
-      } else {
-        next.delete(videoId);
-      }
-      return next;
-    });
-  }, []);
-
-  const sleep = useCallback(
-    (ms: number) =>
-      new Promise<void>((resolve) => {
-        setTimeout(resolve, ms);
-      }),
-    []
-  );
-
-  const waitForServerDownload = useCallback(
-    async (videoId: string, shouldAbort: () => boolean) => {
-      if (!serverUrl) throw new Error("Not connected to server");
-      const timeoutMs = 10 * 60 * 1000;
-      const intervalMs = 2000;
-      const start = Date.now();
-
-      while (Date.now() - start < timeoutMs) {
-        if (shouldAbort()) throw new Error(PREPARE_CANCELLED_MESSAGE);
-
-        const status = await api.getServerDownloadStatus(serverUrl, videoId);
-        if (status.status === "completed") return;
-        if (status.status === "failed") {
-          throw new Error(status.error || "Server download failed");
-        }
-
-        await sleep(intervalMs);
-      }
-
-      throw new Error("Server download timed out");
-    },
-    [serverUrl, sleep]
-  );
-
-  const waitForLocalVideo = useCallback(
-    async (videoId: string, shouldAbort: () => boolean) => {
-      const timeoutMs = 10 * 60 * 1000;
-      const intervalMs = 1000;
-      const start = Date.now();
-      let wasQueued = false;
-
-      while (Date.now() - start < timeoutMs) {
-        if (offlineCopy.getUri(videoId) !== null) return;
-        if (shouldAbort()) throw new Error(PREPARE_CANCELLED_MESSAGE);
-
-        const item = downloadQueue.getDownload(videoId);
-        if (item) {
-          wasQueued = true;
-          if (item.phase === "failed") {
-            throw new Error(item.error || "Mobile download failed");
-          }
-        } else if (wasQueued) {
-          throw new Error(PREPARE_CANCELLED_MESSAGE);
-        }
-
-        await sleep(intervalMs);
-      }
-
-      throw new Error("Sync to mobile timed out");
-    },
-    [sleep]
-  );
-
   const playSavedPlaylistVideo = useCallback(
     (item: SavedPlaylistItem) => {
       if (!playlist) return;
@@ -149,28 +70,32 @@ export default function SavedPlaylistScreen() {
       if (!serverUrl && getOfflineUri(item.videoId) === null) {
         Alert.alert(
           "Offline mode",
-          "Reconnect to desktop to stream or sync this video."
+          "Reconnect to desktop to stream or sync this video.",
         );
         return;
       }
 
-      const allPlaylistVideos: StreamingVideo[] = playlist.items.map((videoItem) => ({
-        id: videoItem.videoId,
-        title: videoItem.title,
-        channelTitle: videoItem.channelTitle,
-        duration: videoItem.duration,
-        thumbnailUrl: videoItem.thumbnailUrl ?? undefined,
-      }));
+      const allPlaylistVideos: StreamingVideo[] = playlist.items.map(
+        (videoItem) => ({
+          id: videoItem.videoId,
+          title: videoItem.title,
+          channelTitle: videoItem.channelTitle,
+          duration: videoItem.duration,
+          thumbnailUrl: videoItem.thumbnailUrl ?? undefined,
+        }),
+      );
 
       const playableVideos = serverUrl
         ? allPlaylistVideos
         : allPlaylistVideos.filter((video) => getOfflineUri(video.id) !== null);
 
-      const startIndex = playableVideos.findIndex((video) => video.id === item.videoId);
+      const startIndex = playableVideos.findIndex(
+        (video) => video.id === item.videoId,
+      );
       if (startIndex < 0) {
         Alert.alert(
           "Offline mode",
-          "This video is not downloaded on mobile yet."
+          "This video is not downloaded on mobile yet.",
         );
         return;
       }
@@ -180,11 +105,11 @@ export default function SavedPlaylistScreen() {
         playlist.title,
         playableVideos,
         startIndex,
-        serverUrl ?? undefined
+        serverUrl ?? undefined,
       );
       router.push(`/player/${item.videoId}`);
     },
-    [playlist, getOfflineUri, serverUrl, startPlaylist, router]
+    [playlist, getOfflineUri, serverUrl, startPlaylist, router],
   );
 
   const handleVideoPress = useCallback(
@@ -199,7 +124,7 @@ export default function SavedPlaylistScreen() {
       if (!serverUrl) {
         Alert.alert(
           "Offline mode",
-          "Reconnect to desktop to stream or sync this video."
+          "Reconnect to desktop to stream or sync this video.",
         );
         return;
       }
@@ -209,89 +134,54 @@ export default function SavedPlaylistScreen() {
         return;
       }
 
-      if (preparingVideoIds.has(item.videoId)) return;
+      if (waitsRef.current.has(item.videoId)) return;
+      const wait = new AbortController();
+      waitsRef.current.set(item.videoId, wait);
 
-      cancelledVideoIdsRef.current.delete(item.videoId);
-      setPreparingVideo(item.videoId, true);
-
-      const shouldAbort = () =>
-        !isMountedRef.current || cancelledVideoIdsRef.current.has(item.videoId);
+      downloadQueue.request({
+        id: item.videoId,
+        title: item.title,
+        channelTitle: item.channelTitle,
+        duration: item.duration,
+        thumbnailUrl: item.thumbnailUrl ?? undefined,
+      });
 
       try {
-        const response = await api.requestServerDownload(serverUrl, { videoId: item.videoId });
-        if (!response.success && !response.status) {
-          throw new Error(response.message || "Server refused download request");
-        }
-
-        await waitForServerDownload(item.videoId, shouldAbort);
-
-        if (offlineCopy.getUri(item.videoId) === null) {
-          downloadQueue.request({
-            id: item.videoId,
-            title: item.title,
-            channelTitle: item.channelTitle,
-            duration: item.duration,
-            thumbnailUrl: item.thumbnailUrl ?? undefined,
-          });
-
-          await waitForLocalVideo(item.videoId, shouldAbort);
-        }
-
-        if (!shouldAbort()) {
-          playSavedPlaylistVideo(item);
-        }
+        await downloadQueue.waitUntilReady(item.videoId, wait.signal);
+        playSavedPlaylistVideo(item);
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Failed to prepare video";
-        if (message === PREPARE_CANCELLED_MESSAGE) {
-          return;
-        }
-        if (isMountedRef.current) {
-          Alert.alert("Unable to play video", message);
-        }
+        if (wait.signal.aborted) return;
+        Alert.alert(
+          "Unable to play video",
+          error instanceof Error ? error.message : "Failed to prepare video",
+        );
       } finally {
-        cancelledVideoIdsRef.current.delete(item.videoId);
-        if (isMountedRef.current) {
-          setPreparingVideo(item.videoId, false);
-        }
+        waitsRef.current.delete(item.videoId);
       }
     },
-    [
-      getOfflineUri,
-      playSavedPlaylistVideo,
-      preparingVideoIds,
-      serverUrl,
-      setPreparingVideo,
-      waitForLocalVideo,
-      waitForServerDownload,
-    ]
+    [getOfflineUri, playSavedPlaylistVideo, serverUrl],
   );
 
-  const handleCancelVideo = useCallback(
-    (videoId: string) => {
-      cancelledVideoIdsRef.current.add(videoId);
-      setPreparingVideo(videoId, false);
-      downloadQueue.cancel(videoId);
-    },
-    [setPreparingVideo]
-  );
+  const handleCancelVideo = useCallback((videoId: string) => {
+    waitsRef.current.get(videoId)?.abort();
+    downloadQueue.cancel(videoId);
+  }, []);
 
   const getPendingState = useCallback(
     (videoId: string): CardPendingState => {
-      if (preparingVideoIds.has(videoId)) {
-        return { type: "preparing", label: "Preparing..." };
-      }
-
       const item = downloads.find((download) => download.videoId === videoId);
       if (!item) return { type: "none" };
 
+      if (item.phase === "waiting-for-desktop") {
+        return { type: "preparing", label: "Preparing..." };
+      }
       if (item.phase === "transferring") {
         return { type: "downloading", progress: item.progress ?? 0 };
       }
       if (item.phase === "failed") return { type: "failed", error: item.error };
       return { type: "queued" };
     },
-    [downloads, preparingVideoIds]
+    [downloads],
   );
 
   if (loading) {
@@ -309,10 +199,7 @@ export default function SavedPlaylistScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
           <Text style={styles.errorText}>Playlist not found</Text>
-          <Pressable
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
+          <Pressable style={styles.backButton} onPress={() => router.back()}>
             <Text style={styles.backButtonText}>Go Back</Text>
           </Pressable>
         </View>
@@ -321,10 +208,11 @@ export default function SavedPlaylistScreen() {
   }
 
   const downloadedCount = playlist.items.filter(
-    (item) => getOfflineUri(item.videoId) !== null
+    (item) => getOfflineUri(item.videoId) !== null,
   ).length;
   const totalCount = playlist.items.length;
-  const downloadPercent = totalCount > 0 ? (downloadedCount / totalCount) * 100 : 0;
+  const downloadPercent =
+    totalCount > 0 ? (downloadedCount / totalCount) * 100 : 0;
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
@@ -348,10 +236,7 @@ export default function SavedPlaylistScreen() {
       <View style={styles.progressContainer}>
         <View style={styles.progressBar}>
           <View
-            style={[
-              styles.progressFill,
-              { width: `${downloadPercent}%` },
-            ]}
+            style={[styles.progressFill, { width: `${downloadPercent}%` }]}
           />
         </View>
       </View>

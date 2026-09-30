@@ -1,7 +1,4 @@
-import {
-  useEffect,
-  useCallback,
-  useState } from "react";
+import { useEffect, useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -17,7 +14,10 @@ import { downloadQueue } from "../../../services/download-queue";
 import { useConnectionStore } from "../../../stores/connection";
 import { useSyncStore } from "../../../stores/sync";
 import { usePlaybackStore } from "../../../stores/playback";
-import { savePlaylist, isPlaylistSaved } from "../../../db/repositories/playlists";
+import {
+  savePlaylist,
+  isPlaylistSaved,
+} from "../../../db/repositories/playlists";
 import {
   useBrowseCatalog,
   useBrowseCollectionVideos,
@@ -53,7 +53,7 @@ export default function HomeScreen() {
   } = useSyncStore();
   const channelVideos = useBrowseCollectionVideos(
     selectedChannel ? "channel" : null,
-    selectedChannel?.channelId ?? null
+    selectedChannel?.channelId ?? null,
   );
 
   const startPlaylist = usePlaybackStore((s) => s.startPlaylist);
@@ -62,7 +62,9 @@ export default function HomeScreen() {
   const getOfflineUri = offlineCopy.useLookup();
   const hasOfflineCopy = (videoId: string) => getOfflineUri(videoId) !== null;
 
-  const [pendingVideoIds, setPendingVideoIds] = useState<Set<string>>(new Set());
+  const [pendingVideoIds, setPendingVideoIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [, bumpSavedPlaylistVersion] = useState(0);
 
   const setPending = useCallback((videoId: string, isPending: boolean) => {
@@ -96,7 +98,7 @@ export default function HomeScreen() {
   const showOfflineAlert = useCallback(() => {
     Alert.alert(
       "Offline mode",
-      "Reconnect to your desktop app to refresh or sync new videos."
+      "Reconnect to your desktop app to refresh or sync new videos.",
     );
   }, []);
 
@@ -110,7 +112,10 @@ export default function HomeScreen() {
 
   const handleChannelPress = useCallback(
     (channel: RemoteChannel) => {
-      if (hasCachedCollectionVideos("channel", channel.channelId) || !serverUrl) {
+      if (
+        hasCachedCollectionVideos("channel", channel.channelId) ||
+        !serverUrl
+      ) {
         selectChannel(channel);
         return;
       }
@@ -120,7 +125,7 @@ export default function HomeScreen() {
         return;
       }
     },
-    [serverUrl, fetchChannelVideos, selectChannel]
+    [serverUrl, fetchChannelVideos, selectChannel],
   );
 
   const handleBackPress = useCallback(() => {
@@ -129,51 +134,6 @@ export default function HomeScreen() {
     }
   }, [selectedChannel, selectChannel]);
 
-  const sleep = useCallback(
-    (ms: number) =>
-      new Promise<void>((resolve) => {
-        setTimeout(resolve, ms);
-      }),
-    []
-  );
-
-  const waitForServerDownload = useCallback(
-    async (videoId: string) => {
-      if (!serverUrl) throw new Error("Not connected to server");
-      const timeoutMs = 10 * 60 * 1000;
-      const intervalMs = 2000;
-      const start = Date.now();
-
-      while (Date.now() - start < timeoutMs) {
-        const status = await api.getServerDownloadStatus(serverUrl, videoId);
-        if (status.status === "completed") return;
-        if (status.status === "failed") {
-          throw new Error(status.error || "Server download failed");
-        }
-        await sleep(intervalMs);
-      }
-
-      throw new Error("Server download timed out");
-    },
-    [serverUrl, sleep]
-  );
-
-  const waitForLocalVideo = useCallback(
-    async (videoId: string) => {
-      const timeoutMs = 10 * 60 * 1000;
-      const intervalMs = 1000;
-      const start = Date.now();
-
-      while (Date.now() - start < timeoutMs) {
-        if (offlineCopy.getUri(videoId) !== null) return;
-        await sleep(intervalMs);
-      }
-
-      throw new Error("Sync to mobile timed out");
-    },
-    [sleep]
-  );
-
   // Play a single video (streaming or local)
   const handlePlayVideo = useCallback(
     (video: RemoteVideoWithStatus) => {
@@ -181,7 +141,7 @@ export default function HomeScreen() {
       if (!serverUrl && !offlineUri) {
         Alert.alert(
           "Offline mode",
-          "This video is not downloaded on mobile yet."
+          "This video is not downloaded on mobile yet.",
         );
         return;
       }
@@ -214,28 +174,26 @@ export default function HomeScreen() {
           channelTitle: v.channelTitle,
           duration: v.duration,
           thumbnailUrl: v.thumbnailUrl ?? undefined,
-        })
+        }),
       );
       const playablePlaylistVideos = serverUrl
         ? playlistStreamingVideos
         : playlistStreamingVideos.filter(
-            (v) => offlineCopy.getUri(v.id) !== null
+            (v) => offlineCopy.getUri(v.id) !== null,
           );
 
       // Find index of current video
       const startIndex = playablePlaylistVideos.findIndex(
-        (v) => v.id === video.id
+        (v) => v.id === video.id,
       );
-      const fallbackVideos =
-        serverUrl || offlineUri ? [streamingVideo] : [];
+      const fallbackVideos = serverUrl || offlineUri ? [streamingVideo] : [];
       const videosToPlay =
-        playablePlaylistVideos.length > 0 ? playablePlaylistVideos : fallbackVideos;
+        playablePlaylistVideos.length > 0
+          ? playablePlaylistVideos
+          : fallbackVideos;
 
       if (videosToPlay.length === 0) {
-        Alert.alert(
-          "Offline mode",
-          "No playable video source is available."
-        );
+        Alert.alert("Offline mode", "No playable video source is available.");
         return;
       }
 
@@ -244,12 +202,12 @@ export default function HomeScreen() {
         contextTitle,
         videosToPlay,
         startIndex >= 0 ? startIndex : 0,
-        serverUrl ?? undefined
+        serverUrl ?? undefined,
       );
 
       router.push(`/player/${video.id}`);
     },
-    [serverUrl, selectedChannel, channelVideos, startPlaylist, router]
+    [serverUrl, selectedChannel, channelVideos, startPlaylist, router],
   );
 
   const handlePlayAll = useCallback(() => {
@@ -268,7 +226,7 @@ export default function HomeScreen() {
     if (playableVideos.length === 0) {
       Alert.alert(
         "Offline mode",
-        "No downloaded videos are available to play."
+        "No downloaded videos are available to play.",
       );
       return;
     }
@@ -287,15 +245,10 @@ export default function HomeScreen() {
       contextTitle,
       videosToPlay,
       0,
-      serverUrl ?? undefined
+      serverUrl ?? undefined,
     );
     router.push(`/player/${videosToPlay[0].id}`);
-  }, [
-    serverUrl,
-    selectedChannel,
-    channelVideos,
-    startPlaylist,
-  ]);
+  }, [serverUrl, selectedChannel, channelVideos, startPlaylist]);
 
   const handleSyncVideo = useCallback(
     (video: RemoteVideoWithStatus) => {
@@ -303,7 +256,7 @@ export default function HomeScreen() {
 
       downloadQueue.request(video);
     },
-    [serverUrl]
+    [serverUrl],
   );
 
   const handleSyncSelected = useCallback(() => {
@@ -318,12 +271,7 @@ export default function HomeScreen() {
       }
     }
     clearVideoSelection();
-  }, [
-    channelVideos,
-    selectedVideoIds,
-    hasOfflineCopy,
-    clearVideoSelection,
-  ]);
+  }, [channelVideos, selectedVideoIds, hasOfflineCopy, clearVideoSelection]);
 
   // Not connected and no cache - show connect prompt
   if (!isConnected && !hasCachedData) {
@@ -362,13 +310,13 @@ export default function HomeScreen() {
 
     // Videos available on server (downloaded on desktop)
     const availableVideos = currentVideos.filter(
-      (v) => v.downloadStatus === "completed"
+      (v) => v.downloadStatus === "completed",
     );
     const syncableCount = serverUrl
       ? availableVideos.filter((v) => !hasOfflineCopy(v.id)).length
       : 0;
     const savedCount = availableVideos.filter((v) =>
-      hasOfflineCopy(v.id)
+      hasOfflineCopy(v.id),
     ).length;
     const totalAvailable = availableVideos.length;
     const isFullySaved = savedCount === totalAvailable && totalAvailable > 0;
@@ -378,8 +326,8 @@ export default function HomeScreen() {
         ? isPlaylistSaved(saveTarget.playlistId)
         : isFullySaved;
 
-    const localPlayableCount = currentVideos.filter(
-      (v) => hasOfflineCopy(v.id)
+    const localPlayableCount = currentVideos.filter((v) =>
+      hasOfflineCopy(v.id),
     ).length;
     const playableCount = serverUrl ? totalAvailable : localPlayableCount;
 
@@ -406,12 +354,15 @@ export default function HomeScreen() {
           saveTarget.playlistType,
           saveTarget.sourceId,
           saveTarget.thumbnailUrl,
-          videoInfos
+          videoInfos,
         );
         bumpSavedPlaylistVersion((value) => value + 1);
       } catch (error) {
         console.log("[Home] Failed to save playlist:", error);
-        Alert.alert("Save failed", "Could not save playlist. Please try again.");
+        Alert.alert(
+          "Save failed",
+          "Could not save playlist. Please try again.",
+        );
         return;
       }
 
@@ -431,10 +382,7 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.container} edges={["top"]}>
         {/* Header with back button */}
         <View style={styles.videoHeader}>
-          <Pressable
-            style={styles.backButton}
-            onPress={handleBackPress}
-          >
+          <Pressable style={styles.backButton} onPress={handleBackPress}>
             <ArrowLeft size={18} color={colors.foreground} />
           </Pressable>
           <View style={styles.headerTitleContainer}>
@@ -489,7 +437,9 @@ export default function HomeScreen() {
               <Pressable
                 style={styles.toolbarButton}
                 onPress={
-                  selectedVideoIds.size > 0 ? clearVideoSelection : selectAllVideos
+                  selectedVideoIds.size > 0
+                    ? clearVideoSelection
+                    : selectAllVideos
                 }
               >
                 <Text style={styles.toolbarButtonText}>
@@ -511,11 +461,12 @@ export default function HomeScreen() {
               </Pressable>
             )}
             {playableCount > 0 && selectedVideoIds.size === 0 && (
-              <Pressable
-                style={styles.playAllButton}
-                onPress={handlePlayAll}
-              >
-                <Play size={14} color={colors.foreground} fill={colors.foreground} />
+              <Pressable style={styles.playAllButton} onPress={handlePlayAll}>
+                <Play
+                  size={14}
+                  color={colors.foreground}
+                  fill={colors.foreground}
+                />
                 <Text style={styles.playAllButtonText}>
                   Play All ({playableCount})
                 </Text>

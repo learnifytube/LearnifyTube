@@ -1,7 +1,4 @@
-import {
-  useEffect,
-  useCallback,
-  useState } from "react";
+import { useEffect, useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -78,22 +75,24 @@ export default function SyncScreen() {
   } = useSyncStore();
   const channelVideos = useBrowseCollectionVideos(
     selectedChannel ? "channel" : null,
-    selectedChannel?.channelId ?? null
+    selectedChannel?.channelId ?? null,
   );
   const playlistVideos = useBrowseCollectionVideos(
     selectedPlaylist ? "playlist" : null,
-    selectedPlaylist?.playlistId ?? null
+    selectedPlaylist?.playlistId ?? null,
   );
   const myListVideos = useBrowseCollectionVideos(
     selectedMyList ? "mylist" : null,
-    selectedMyList?.id ?? null
+    selectedMyList?.id ?? null,
   );
 
   // Set of video IDs already synced to mobile
   const getOfflineUri = offlineCopy.useLookup();
   const hasOfflineCopy = (videoId: string) => getOfflineUri(videoId) !== null;
 
-  const [pendingVideoIds, setPendingVideoIds] = useState<Set<string>>(new Set());
+  const [pendingVideoIds, setPendingVideoIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [, bumpSavedPlaylistVersion] = useState(0);
 
   const setPending = useCallback((videoId: string, isPending: boolean) => {
@@ -119,13 +118,7 @@ export default function SyncScreen() {
     } else if (activeTab === "mylists") {
       fetchMyLists(serverUrl);
     }
-  }, [
-    activeTab,
-    serverUrl,
-    fetchChannels,
-    fetchPlaylists,
-    fetchMyLists,
-  ]);
+  }, [activeTab, serverUrl, fetchChannels, fetchPlaylists, fetchMyLists]);
 
   useEffect(() => {
     if (!serverUrl) {
@@ -135,14 +128,12 @@ export default function SyncScreen() {
   }, [serverUrl, clearVideoSelection]);
 
   const hasCachedData =
-    channels.length > 0 ||
-    playlists.length > 0 ||
-    myLists.length > 0;
+    channels.length > 0 || playlists.length > 0 || myLists.length > 0;
 
   const showOfflineAlert = useCallback(() => {
     Alert.alert(
       "Offline mode",
-      "Reconnect to your desktop app to refresh or sync new videos."
+      "Reconnect to your desktop app to refresh or sync new videos.",
     );
   }, []);
 
@@ -174,7 +165,7 @@ export default function SyncScreen() {
     (channel: RemoteChannel) => {
       const hasCachedVideos = hasCachedCollectionVideos(
         "channel",
-        channel.channelId
+        channel.channelId,
       );
       if (!serverUrl) {
         selectChannel(channel);
@@ -194,14 +185,14 @@ export default function SyncScreen() {
         return;
       }
     },
-    [serverUrl, fetchChannelVideos, selectChannel]
+    [serverUrl, fetchChannelVideos, selectChannel],
   );
 
   const handlePlaylistPress = useCallback(
     (playlist: RemotePlaylist) => {
       const hasCachedVideos = hasCachedCollectionVideos(
         "playlist",
-        playlist.playlistId
+        playlist.playlistId,
       );
       if (!serverUrl) {
         selectPlaylist(playlist);
@@ -221,7 +212,7 @@ export default function SyncScreen() {
         return;
       }
     },
-    [serverUrl, fetchPlaylistVideos, selectPlaylist]
+    [serverUrl, fetchPlaylistVideos, selectPlaylist],
   );
 
   const handleMyListPress = useCallback(
@@ -245,7 +236,7 @@ export default function SyncScreen() {
         return;
       }
     },
-    [serverUrl, fetchMyListVideos, selectMyList]
+    [serverUrl, fetchMyListVideos, selectMyList],
   );
 
   const handleBackPress = useCallback(() => {
@@ -265,58 +256,13 @@ export default function SyncScreen() {
     selectMyList,
   ]);
 
-  const sleep = useCallback(
-    (ms: number) =>
-      new Promise<void>((resolve) => {
-        setTimeout(resolve, ms);
-      }),
-    []
-  );
-
-  const waitForServerDownload = useCallback(
-    async (videoId: string) => {
-      if (!serverUrl) throw new Error("Not connected to server");
-      const timeoutMs = 10 * 60 * 1000;
-      const intervalMs = 2000;
-      const start = Date.now();
-
-      while (Date.now() - start < timeoutMs) {
-        const status = await api.getServerDownloadStatus(serverUrl, videoId);
-        if (status.status === "completed") return;
-        if (status.status === "failed") {
-          throw new Error(status.error || "Server download failed");
-        }
-        await sleep(intervalMs);
-      }
-
-      throw new Error("Server download timed out");
-    },
-    [serverUrl, sleep]
-  );
-
-  const waitForLocalVideo = useCallback(
-    async (videoId: string) => {
-      const timeoutMs = 10 * 60 * 1000;
-      const intervalMs = 1000;
-      const start = Date.now();
-
-      while (Date.now() - start < timeoutMs) {
-        if (offlineCopy.getUri(videoId) !== null) return;
-        await sleep(intervalMs);
-      }
-
-      throw new Error("Sync to mobile timed out");
-    },
-    [sleep]
-  );
-
   const handlePlayVideo = useCallback(
     (video: RemoteVideoWithStatus) => {
       const offlineUri = offlineCopy.getUri(video.id);
       if (!serverUrl && !offlineUri) {
         Alert.alert(
           "Offline mode",
-          "This video is not downloaded on mobile yet."
+          "This video is not downloaded on mobile yet.",
         );
         return;
       }
@@ -354,27 +300,25 @@ export default function SyncScreen() {
           channelTitle: v.channelTitle,
           duration: v.duration,
           thumbnailUrl: v.thumbnailUrl ?? undefined,
-        })
+        }),
       );
       const playablePlaylistVideos = serverUrl
         ? playlistStreamingVideos
         : playlistStreamingVideos.filter(
-            (v) => offlineCopy.getUri(v.id) !== null
+            (v) => offlineCopy.getUri(v.id) !== null,
           );
 
       const startIndex = playablePlaylistVideos.findIndex(
-        (v) => v.id === video.id
+        (v) => v.id === video.id,
       );
-      const fallbackVideos =
-        serverUrl || offlineUri ? [streamingVideo] : [];
+      const fallbackVideos = serverUrl || offlineUri ? [streamingVideo] : [];
       const videosToPlay =
-        playablePlaylistVideos.length > 0 ? playablePlaylistVideos : fallbackVideos;
+        playablePlaylistVideos.length > 0
+          ? playablePlaylistVideos
+          : fallbackVideos;
 
       if (videosToPlay.length === 0) {
-        Alert.alert(
-          "Offline mode",
-          "No playable video source is available."
-        );
+        Alert.alert("Offline mode", "No playable video source is available.");
         return;
       }
 
@@ -383,7 +327,7 @@ export default function SyncScreen() {
         contextTitle,
         videosToPlay,
         startIndex >= 0 ? startIndex : 0,
-        serverUrl ?? undefined
+        serverUrl ?? undefined,
       );
 
       router.push(`/player/${video.id}`);
@@ -398,7 +342,7 @@ export default function SyncScreen() {
       myListVideos,
       startPlaylist,
       router,
-    ]
+    ],
   );
 
   const handleSyncVideo = useCallback(
@@ -407,7 +351,7 @@ export default function SyncScreen() {
 
       downloadQueue.request(video);
     },
-    [serverUrl]
+    [serverUrl],
   );
 
   const handleSyncSelected = useCallback(() => {
@@ -507,7 +451,7 @@ export default function SyncScreen() {
 
     // Videos available on server (downloaded on desktop)
     const availableVideos = currentVideos.filter(
-      (v) => v.downloadStatus === "completed"
+      (v) => v.downloadStatus === "completed",
     );
     // Videos not yet synced to mobile
     const syncableCount = serverUrl
@@ -515,7 +459,7 @@ export default function SyncScreen() {
       : 0;
     // Videos already saved locally
     const savedCount = availableVideos.filter((v) =>
-      hasOfflineCopy(v.id)
+      hasOfflineCopy(v.id),
     ).length;
     const totalAvailable = availableVideos.length;
     const isFullySaved = savedCount === totalAvailable && totalAvailable > 0;
@@ -548,12 +492,15 @@ export default function SyncScreen() {
           saveTarget.playlistType,
           saveTarget.sourceId,
           saveTarget.thumbnailUrl,
-          videoInfos
+          videoInfos,
         );
         bumpSavedPlaylistVersion((value) => value + 1);
       } catch (error) {
         console.log("[Sync] Failed to save playlist:", error);
-        Alert.alert("Save failed", "Could not save playlist. Please try again.");
+        Alert.alert(
+          "Save failed",
+          "Could not save playlist. Please try again.",
+        );
         return;
       }
 
@@ -627,7 +574,9 @@ export default function SyncScreen() {
             <Pressable
               style={styles.toolbarButton}
               onPress={
-                selectedVideoIds.size > 0 ? clearVideoSelection : selectAllVideos
+                selectedVideoIds.size > 0
+                  ? clearVideoSelection
+                  : selectAllVideos
               }
             >
               <Text style={styles.toolbarButtonText}>
@@ -637,7 +586,10 @@ export default function SyncScreen() {
               </Text>
             </Pressable>
             {selectedVideoIds.size > 0 && (
-              <Pressable style={styles.syncAllButton} onPress={handleSyncSelected}>
+              <Pressable
+                style={styles.syncAllButton}
+                onPress={handleSyncSelected}
+              >
                 <Text style={styles.syncAllButtonText}>
                   Sync {selectedVideoIds.size} video
                   {selectedVideoIds.size !== 1 ? "s" : ""}
@@ -687,8 +639,8 @@ export default function SyncScreen() {
                 }
                 onSyncPress={
                   serverUrl &&
-                    item.downloadStatus === "completed" &&
-                    !hasOfflineCopy(item.id)
+                  item.downloadStatus === "completed" &&
+                  !hasOfflineCopy(item.id)
                     ? () => handleSyncVideo(item)
                     : undefined
                 }

@@ -15,8 +15,16 @@ The place the user chose for new Offline copies: internal app storage, a folder 
 _Avoid_: storage folder, video directory
 
 **Download**:
-The act of fetching a Video's Offline copy from the desktop app, including waiting for the desktop to fetch the Video from YouTube first. A Download produces an Offline copy; it is not the copy itself, and it ends when the copy exists. Receiving a Video from a nearby device is not a Download.
+The act of fetching a Video's Offline copy from the desktop app, starting with a Desktop fetch when the desktop doesn't have the Video yet. A Download produces an Offline copy; it is not the copy itself, and it ends when the copy exists. Receiving a Video from a nearby device is not a Download.
 _Avoid_: sync (for a single Video)
+
+**Desktop fetch**:
+The desktop getting a Video from YouTube so it can serve it. It is part of a Download and comes before a Stream. It is done only when the desktop serves the file: the desktop's records can call a Video fetched after its file is gone.
+_Avoid_: server download
+
+**Stream**:
+Playing a Video straight from the desktop when the Device has no Offline copy. A Stream that has started keeps playing from the desktop even if the Offline copy arrives meanwhile; if the desktop drops out, the player carries on from the Offline copy when there is one.
+_Avoid_: remote playback, desktop playback
 
 **On-device set**:
 The Videos the desktop wants this device to hold (see the desktop glossary). The device Downloads what is missing and removes Offline copies that left the set. Videos the user pulled on the device itself are not part of it and are left alone.

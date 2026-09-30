@@ -2,9 +2,16 @@ import { Stack } from "expo-router";
 import { colors } from "../../theme";
 import { useTVBackNavigation } from "../../components/tv/tvBack";
 import { TVNoticeHost } from "../../components/tv/TVNotice";
+import {
+  toTVUpdateMessenger,
+  useTVMessage,
+} from "../../components/tv/TVMessage";
+import { useSelfUpdateCheck } from "../../hooks/useSelfUpdateCheck";
 
 export default function TVLayout() {
   useTVBackNavigation();
+  const updateMessage = useTVMessage();
+  useSelfUpdateCheck(toTVUpdateMessenger(updateMessage));
 
   return (
     <>
@@ -29,6 +36,7 @@ export default function TVLayout() {
         <Stack.Screen name="channel/[id]" options={{ headerShown: false }} />
       </Stack>
       <TVNoticeHost />
+      {updateMessage.element}
     </>
   );
 }

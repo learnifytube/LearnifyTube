@@ -1,3 +1,4 @@
+import type { UpdateMessage, UpdateQuestion } from "../../services/app-update";
 import { pairingRequiredText } from "./connectionText";
 
 /** A message on the TV: a title and a short text, readable from the couch. */
@@ -23,6 +24,15 @@ export class DesktopStillFetchingError extends Error {
     this.name = "DesktopStillFetchingError";
   }
 }
+
+/** What a TV message says, without the actions a screen adds. */
+export type TVMessageText = Pick<TVMessageContent, "title" | "text">;
+
+/** A yes/no on the TV: the message plus its two answers. */
+export type TVQuestionContent = TVMessageText & {
+  confirmLabel: string;
+  cancelLabel: string;
+};
 
 export const desktopGettingVideoTitle = "The desktop is getting this Video";
 
@@ -113,3 +123,62 @@ export const desktopGoneNothingLeft: TVMessageContent = {
   text: "Nothing else here is on this TV.",
   canRetry: false,
 };
+
+const updatesUnavailable: TVMessageText = {
+  title: "Updates aren't available",
+  text: "This copy of LearnifyTube can't update itself.",
+};
+
+const updateMessages: Record<UpdateMessage["kind"], TVMessageText> = {
+  unavailable: updatesUnavailable,
+  notConfigured: updatesUnavailable,
+  checkFailed: {
+    title: "Couldn't check for updates",
+    text: "Make sure the TV is online, then try again.",
+  },
+  cannotCompare: {
+    title: "Couldn't check for updates",
+    text: "Couldn't tell whether there's a newer version. Try again later.",
+  },
+  upToDate: {
+    title: "You're up to date",
+    text: "This TV has the latest version of LearnifyTube.",
+  },
+  downloading: {
+    title: "Getting the update",
+    text: "Keep LearnifyTube open. The installer opens when it's ready.",
+  },
+  installerOpened: {
+    title: "Almost done",
+    text: "Choose Install on the next screen to finish the update.",
+  },
+  failed: {
+    title: "Couldn't install the update",
+    text: "Try again from Settings in a moment.",
+  },
+};
+
+/** What the update check tells the viewer, without error text or setup details. */
+export function describeUpdateMessage(message: UpdateMessage) {
+  return updateMessages[message.kind];
+}
+
+/** What the update check asks the viewer. */
+export function describeUpdateQuestion(question: UpdateQuestion) {
+  if (question.kind === "installBlocked") {
+    return {
+      title: "Couldn't start the update",
+      text: "If it keeps happening, open Settings and turn on Install unknown apps for LearnifyTube.",
+      confirmLabel: "Open Settings",
+      cancelLabel: "Close",
+    } satisfies TVQuestionContent;
+  }
+  return {
+    title: "A new version is ready",
+    text: question.versionLabel
+      ? `Install LearnifyTube ${question.versionLabel} now?`
+      : "Install the new version of LearnifyTube now?",
+    confirmLabel: "Install",
+    cancelLabel: "Later",
+  } satisfies TVQuestionContent;
+}

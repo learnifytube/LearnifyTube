@@ -50,7 +50,8 @@ function PresencePublisher() {
   return null;
 }
 
-function SelfUpdateChecker() {
+// The TV checks from its own layout, with TV messages.
+function PhoneSelfUpdateChecker() {
   useSelfUpdateCheck();
   return null;
 }
@@ -142,7 +143,7 @@ export default function RootLayout() {
         <OfflineCopyScanner />
         <NavigationLogger />
         <PresencePublisher />
-        <SelfUpdateChecker />
+        {getAppSurface() === "tv" ? null : <PhoneSelfUpdateChecker />}
         <OrientationController />
         <StatusBar style="light" />
         <Stack

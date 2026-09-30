@@ -52,6 +52,32 @@ interface VersionComparisonResult {
   summaryLines: string[];
 }
 
+/** Something the update check tells the user; the surface picks the wording. */
+export type UpdateMessage =
+  | { kind: "unavailable"; reason: string }
+  | { kind: "notConfigured" }
+  | { kind: "checkFailed"; error: unknown }
+  | { kind: "cannotCompare" }
+  | { kind: "upToDate" }
+  | { kind: "downloading" }
+  | { kind: "installerOpened" }
+  | { kind: "failed"; error: unknown };
+
+/** A yes/no the update check asks the user. */
+export type UpdateQuestion =
+  | {
+      kind: "updateAvailable";
+      versionLabel?: string;
+      summaryLines: string[];
+      releaseNotes?: string;
+    }
+  | { kind: "installBlocked" };
+
+export interface UpdateMessenger {
+  show: (message: UpdateMessage) => void;
+  ask: (question: UpdateQuestion) => Promise<boolean>;
+}
+
 export interface AndroidApkUpdateAvailability {
   configured: boolean;
   hasUpdate: boolean;
@@ -197,7 +223,7 @@ const getAndroidApkUpdateUnsupportedReason = (): string | null => {
 const canUseAndroidApkUpdates = (): boolean =>
   getAndroidApkUpdateUnsupportedReason() === null;
 
-const promptForAction = (
+const askWithAlert = (
   title: string,
   message: string,
   primaryButtonText: string,
@@ -232,6 +258,71 @@ const promptForAction = (
       }
     );
   });
+
+/** The phone's update prompts: system alerts. */
+export const alertUpdateMessenger: UpdateMessenger = {
+  show: (message) => {
+    switch (message.kind) {
+      case "unavailable":
+        Alert.alert("Updates unavailable", message.reason);
+        return;
+      case "notConfigured":
+        Alert.alert(
+          "Updates not configured",
+          "Set expo.extra.apkUpdate.manifestUrl or expo.extra.apkUpdate.githubRepo in app.json."
+        );
+        return;
+      case "checkFailed":
+        Alert.alert("Update check failed", getSafeErrorMessage(message.error));
+        return;
+      case "cannotCompare":
+        Alert.alert(
+          "Unable to compare versions",
+          "Remote release is missing comparable version metadata."
+        );
+        return;
+      case "upToDate":
+        Alert.alert("You are up to date", "This build is already the latest.");
+        return;
+      case "downloading":
+        Alert.alert(
+          "Downloading update",
+          "The APK is downloading now. Keep the app open until the installer appears."
+        );
+        return;
+      case "installerOpened":
+        Alert.alert(
+          "Installer opened",
+          "Tap Install in the Android installer to complete the update."
+        );
+        return;
+      case "failed":
+        Alert.alert("Update failed", getSafeErrorMessage(message.error));
+        return;
+    }
+  },
+  ask: (question) => {
+    if (question.kind === "installBlocked") {
+      return askWithAlert(
+        "Update failed to start",
+        "Enable 'Install unknown apps' for LearnifyTube, then retry update.",
+        "Open Settings",
+        "Close"
+      );
+    }
+    const messageParts = [...question.summaryLines];
+    if (question.releaseNotes) {
+      messageParts.push("", question.releaseNotes);
+    }
+    return askWithAlert(
+      question.versionLabel
+        ? `Update ${question.versionLabel} available`
+        : "Update available",
+      messageParts.join("\n"),
+      "Download"
+    );
+  },
+};
 
 const fetchWithTimeout = async (
   url: string,
@@ -546,15 +637,9 @@ const launchPackageInstaller = async (apkUri: string): Promise<void> => {
   });
 };
 
-const getUpdateTitle = (manifest: ApkUpdateManifest): string => {
-  if (manifest.versionName && manifest.versionName.trim().length > 0) {
-    return `Update ${manifest.versionName} available`;
-  }
-  if (manifest.versionCode) {
-    return `Update build ${manifest.versionCode} available`;
-  }
-  return "Update available";
-};
+const getVersionLabel = (manifest: ApkUpdateManifest) =>
+  manifest.versionName?.trim() ||
+  (manifest.versionCode ? `build ${manifest.versionCode}` : undefined);
 
 export const shouldCheckForUpdatesOnLaunch = (): boolean => {
   if (!canUseAndroidApkUpdates()) {
@@ -603,25 +688,23 @@ export const getAndroidApkUpdateAvailability =
       return { configured: true, hasUpdate: false };
     }
 
-    const latestVersionLabel =
-      manifest.versionName ??
-      (manifest.versionCode ? `build ${manifest.versionCode}` : undefined);
-
     return {
       configured: true,
       hasUpdate: comparison.isNewer,
-      latestVersionLabel,
+      latestVersionLabel: getVersionLabel(manifest),
       summaryLines: comparison.summaryLines,
     };
   };
 
-export const checkForAndroidApkUpdate = async (
-  options?: { manual?: boolean }
-): Promise<void> => {
+export const checkForAndroidApkUpdate = async (options?: {
+  manual?: boolean;
+  messenger?: UpdateMessenger;
+}) => {
+  const messenger = options?.messenger ?? alertUpdateMessenger;
   const unsupportedReason = getAndroidApkUpdateUnsupportedReason();
   if (unsupportedReason) {
     if (options?.manual) {
-      Alert.alert("Updates unavailable", unsupportedReason);
+      messenger.show({ kind: "unavailable", reason: unsupportedReason });
     }
     logger.debug("APK update check skipped.", { reason: unsupportedReason });
     return;
@@ -633,10 +716,7 @@ export const checkForAndroidApkUpdate = async (
 
   if (!hasManifestUrl && !hasGithubRepo) {
     if (options?.manual) {
-      Alert.alert(
-        "Updates not configured",
-        "Set expo.extra.apkUpdate.manifestUrl or expo.extra.apkUpdate.githubRepo in app.json."
-      );
+      messenger.show({ kind: "notConfigured" });
     }
     logger.debug("APK update check skipped: no update source is configured.");
     return;
@@ -657,7 +737,7 @@ export const checkForAndroidApkUpdate = async (
       githubRepo: config.githubRepo,
     });
     if (options?.manual) {
-      Alert.alert("Update check failed", getSafeErrorMessage(error));
+      messenger.show({ kind: "checkFailed", error });
     }
     return;
   }
@@ -676,70 +756,51 @@ export const checkForAndroidApkUpdate = async (
       remoteVersionName: manifest.versionName,
     });
     if (options?.manual) {
-      Alert.alert(
-        "Unable to compare versions",
-        "Remote release is missing comparable version metadata."
-      );
+      messenger.show({ kind: "cannotCompare" });
     }
     return;
   }
 
   if (!comparison.isNewer) {
     if (options?.manual) {
-      Alert.alert("You are up to date", "This build is already the latest.");
+      messenger.show({ kind: "upToDate" });
     }
     return;
   }
 
-  const updateMessageParts = [...comparison.summaryLines];
-
-  if (manifest.releaseNotes) {
-    updateMessageParts.push("", manifest.releaseNotes);
-  }
-
-  const shouldDownload = await promptForAction(
-    getUpdateTitle(manifest),
-    updateMessageParts.join("\n"),
-    "Download"
-  );
+  const shouldDownload = await messenger.ask({
+    kind: "updateAvailable",
+    versionLabel: getVersionLabel(manifest),
+    summaryLines: comparison.summaryLines,
+    releaseNotes: manifest.releaseNotes,
+  });
 
   if (!shouldDownload) {
     return;
   }
 
   try {
-    Alert.alert(
-      "Downloading update",
-      "The APK is downloading now. Keep the app open until the installer appears."
-    );
+    messenger.show({ kind: "downloading" });
     const apkUri = await downloadUpdateApk(manifest.apkUrl);
     await launchPackageInstaller(apkUri);
-    Alert.alert(
-      "Installer opened",
-      "Tap Install in the Android installer to complete the update."
-    );
+    messenger.show({ kind: "installerOpened" });
   } catch (error) {
     logger.error("APK update install flow failed.", error, {
       targetVersionCode: manifest.versionCode,
       apkUrl: manifest.apkUrl,
     });
 
-    const openSettings = await promptForAction(
-      "Update failed to start",
-      "Enable 'Install unknown apps' for LearnifyTube, then retry update.",
-      "Open Settings",
-      "Close"
-    );
+    const openSettings = await messenger.ask({ kind: "installBlocked" });
 
     if (openSettings) {
       try {
         await openUnknownSourcesSettings();
       } catch (settingsError) {
-        Alert.alert("Update failed", getSafeErrorMessage(settingsError));
+        messenger.show({ kind: "failed", error: settingsError });
       }
       return;
     }
 
-    Alert.alert("Update failed", getSafeErrorMessage(error));
+    messenger.show({ kind: "failed", error });
   }
 };

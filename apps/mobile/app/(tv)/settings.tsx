@@ -30,7 +30,10 @@ import {
   describeConnectionStatus,
 } from "../../components/tv/connectionText";
 import { TVFocusPressable } from "../../components/tv/TVFocusPressable";
-import { useTVMessage } from "../../components/tv/TVMessage";
+import {
+  toTVUpdateMessenger,
+  useTVMessage,
+} from "../../components/tv/TVMessage";
 import { storageFolderFailed } from "../../components/tv/tvMessages";
 
 const LOG_PAGE_SIZE = 16;
@@ -47,7 +50,11 @@ export default function TVSettingsScreen() {
   const isConnected = connection.status === "connected";
 
   const [input, setInput] = useState("");
-  const { show: showTVMessage, element: tvMessageElement } = useTVMessage();
+  const {
+    show: showTVMessage,
+    ask: askTVMessage,
+    element: tvMessageElement,
+  } = useTVMessage();
   const [isManualConnectPending, setIsManualConnectPending] = useState(false);
   const [manualFailure, setManualFailure] = useState<string | null>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
@@ -174,12 +181,23 @@ export default function TVSettingsScreen() {
 
     setIsCheckingUpdate(true);
     try {
-      await checkForAndroidApkUpdate({ manual: true });
+      await checkForAndroidApkUpdate({
+        manual: true,
+        messenger: toTVUpdateMessenger({
+          show: showTVMessage,
+          ask: askTVMessage,
+        }),
+      });
     } finally {
       setIsCheckingUpdate(false);
       void refreshUpdateAvailability();
     }
-  }, [isCheckingUpdate, refreshUpdateAvailability]);
+  }, [
+    askTVMessage,
+    isCheckingUpdate,
+    refreshUpdateAvailability,
+    showTVMessage,
+  ]);
 
   const openLogViewer = useCallback(() => {
     setLogPage(0);

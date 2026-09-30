@@ -1,12 +1,18 @@
 import { useEffect } from "react";
-import { checkForAndroidApkUpdate, shouldCheckForUpdatesOnLaunch } from "../services/app-update";
+import {
+  checkForAndroidApkUpdate,
+  shouldCheckForUpdatesOnLaunch,
+  type UpdateMessenger,
+} from "../services/app-update";
 
-export function useSelfUpdateCheck() {
+/** Checks for an update once on launch, asking through `messenger` (system alerts by default). */
+export function useSelfUpdateCheck(messenger?: UpdateMessenger) {
   useEffect(() => {
     if (!shouldCheckForUpdatesOnLaunch()) {
       return;
     }
 
-    void checkForAndroidApkUpdate();
+    void checkForAndroidApkUpdate({ messenger });
+    // Once per launch: the messenger's first value is the one to ask through.
   }, []);
 }

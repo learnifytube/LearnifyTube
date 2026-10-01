@@ -44,7 +44,19 @@ import {
   decideRemoteKey,
   type RemoteKeyEvent,
 } from "../../../components/tv/remoteKeys";
-import { colors, fontSize, fontWeight, radius, spacing } from "../../../theme";
+import {
+  colors,
+  fontWeight,
+  Pause,
+  Play,
+  radius,
+  SkipBack,
+  SkipForward,
+  spacing,
+  tvFontSize,
+  tvRestingBorder,
+  tvScrim,
+} from "../../../theme";
 
 const REMOTE_NAV_AUTO_HIDE_MS = 5000;
 
@@ -83,13 +95,11 @@ export default function TVPlayerScreen() {
   const remoteNavTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  const backNavRef = useRef<TVFocusPressableHandle | null>(null);
   const prevNavRef = useRef<TVFocusPressableHandle | null>(null);
   const playPauseNavRef = useRef<TVFocusPressableHandle | null>(null);
   const nextNavRef = useRef<TVFocusPressableHandle | null>(null);
   const progressNavRef = useRef<TVFocusPressableHandle | null>(null);
   const [navNodeHandles, setNavNodeHandles] = useState<{
-    back?: number;
     prev?: number;
     playPause?: number;
     next?: number;
@@ -214,8 +224,15 @@ export default function TVPlayerScreen() {
   const hasNext =
     hasPlaylistContext && playlistIndex < playlistVideos.length - 1;
   const nextVideo = hasNext ? playlistVideos[playlistIndex + 1] : null;
-  const playbackModeLabel =
-    playbackState.kind === "stream" ? "Streaming" : "Offline";
+  // Playing from the TV is the normal case; only a Stream is worth saying.
+  const overlayMeta = [
+    playbackState.kind === "stream" ? "Streaming" : null,
+    nextVideo
+      ? `${upNext === "loading" ? "Loading next" : "Up next"}: ${nextVideo.title}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const duration =
     playback.duration > 0 ? playback.duration : (video?.duration ?? 0);
   const position =
@@ -224,9 +241,6 @@ export default function TVPlayerScreen() {
 
   useEffect(() => {
     setNavNodeHandles({
-      back: backNavRef.current
-        ? (findNodeHandle(backNavRef.current) ?? undefined)
-        : undefined,
       prev: prevNavRef.current
         ? (findNodeHandle(prevNavRef.current) ?? undefined)
         : undefined,
@@ -435,109 +449,18 @@ export default function TVPlayerScreen() {
       </View>
 
       <SafeAreaView
-        style={[
-          styles.chromeSafeArea,
-          !isRemoteNavVisible && styles.overlayHidden,
-        ]}
-        edges={["top", "left", "right"]}
+        style={[styles.overlay, !isRemoteNavVisible && styles.overlayHidden]}
+        edges={["bottom", "left", "right"]}
         pointerEvents={isRemoteNavVisible ? "auto" : "none"}
       >
-        <View style={styles.overlayTopRow}>
-          <View style={styles.titleChip}>
-            <Text style={styles.titleChipText} numberOfLines={1}>
-              {video?.title ?? "Now Playing"}
-            </Text>
-            <Text style={styles.titleChipMeta} numberOfLines={1}>
-              {nextVideo && upNext === "loading"
-                ? `${playbackModeLabel} · Loading next: ${nextVideo.title}`
-                : nextVideo
-                  ? `${playbackModeLabel} · Up next: ${nextVideo.title}`
-                  : playbackModeLabel}
-            </Text>
-          </View>
-
-          <View style={styles.navFabRow}>
-            <TVFocusPressable
-              ref={backNavRef}
-              style={styles.navFabButton}
-              onPress={() =>
-                pressRemoteNav(() => {
-                  showRemoteNav(false);
-                  router.back();
-                })
-              }
-              onFocus={handleRemoteNavFocus}
-              onBlur={handleRemoteNavBlur}
-              nextFocusDown={navNodeHandles.progress}
-              nextFocusRight={
-                hasPrevious ? navNodeHandles.prev : navNodeHandles.playPause
-              }
-            >
-              <Text style={styles.navFabText}>Back</Text>
-            </TVFocusPressable>
-
-            <TVFocusPressable
-              ref={prevNavRef}
-              style={[
-                styles.navFabButton,
-                !hasPrevious && styles.navButtonDisabled,
-              ]}
-              onPress={() =>
-                pressRemoteNav(() => {
-                  showRemoteNav(false);
-                  goToIndex(playlistIndex - 1);
-                })
-              }
-              onFocus={handleRemoteNavFocus}
-              onBlur={handleRemoteNavBlur}
-              nextFocusDown={navNodeHandles.progress}
-              disabled={!hasPrevious}
-              nextFocusLeft={navNodeHandles.back}
-              nextFocusRight={navNodeHandles.playPause}
-            >
-              <Text style={styles.navFabText}>Prev</Text>
-            </TVFocusPressable>
-
-            <TVFocusPressable
-              ref={playPauseNavRef}
-              style={styles.navFabButton}
-              onPress={() => pressRemoteNav(togglePlayPause)}
-              onFocus={handleRemoteNavFocus}
-              onBlur={handleRemoteNavBlur}
-              nextFocusDown={navNodeHandles.progress}
-              hasTVPreferredFocus={shouldPreferRemoteNavFocus}
-              nextFocusLeft={
-                hasPrevious ? navNodeHandles.prev : navNodeHandles.back
-              }
-              nextFocusRight={hasNext ? navNodeHandles.next : undefined}
-            >
-              <Text style={styles.navFabText}>
-                {isPlaying ? "Pause" : "Play"}
-              </Text>
-            </TVFocusPressable>
-
-            <TVFocusPressable
-              ref={nextNavRef}
-              style={[
-                styles.navFabButton,
-                !hasNext && styles.navButtonDisabled,
-              ]}
-              onPress={() =>
-                pressRemoteNav(() => {
-                  showRemoteNav(false);
-                  goToIndex(playlistIndex + 1);
-                })
-              }
-              onFocus={handleRemoteNavFocus}
-              onBlur={handleRemoteNavBlur}
-              nextFocusDown={navNodeHandles.progress}
-              disabled={!hasNext}
-              nextFocusLeft={navNodeHandles.playPause}
-            >
-              <Text style={styles.navFabText}>Next</Text>
-            </TVFocusPressable>
-          </View>
-        </View>
+        <Text style={styles.title} numberOfLines={1}>
+          {video?.title ?? "Now Playing"}
+        </Text>
+        {overlayMeta ? (
+          <Text style={styles.meta} numberOfLines={1}>
+            {overlayMeta}
+          </Text>
+        ) : null}
 
         <TVFocusPressable
           ref={progressNavRef}
@@ -553,7 +476,8 @@ export default function TVPlayerScreen() {
             isProgressFocusedRef.current = false;
             handleRemoteNavBlur();
           }}
-          nextFocusUp={navNodeHandles.playPause}
+          nextFocusDown={navNodeHandles.playPause}
+          nextFocusUp={navNodeHandles.progress}
           nextFocusLeft={navNodeHandles.progress}
           nextFocusRight={navNodeHandles.progress}
         >
@@ -569,6 +493,74 @@ export default function TVPlayerScreen() {
             {formatPlaybackTime(duration)}
           </Text>
         </TVFocusPressable>
+
+        <View style={styles.controls}>
+          <TVFocusPressable
+            ref={prevNavRef}
+            style={[styles.control, !hasPrevious && styles.controlDisabled]}
+            accessibilityLabel="Previous video"
+            onPress={() =>
+              pressRemoteNav(() => {
+                showRemoteNav(false);
+                goToIndex(playlistIndex - 1);
+              })
+            }
+            onFocus={handleRemoteNavFocus}
+            onBlur={handleRemoteNavBlur}
+            disabled={!hasPrevious}
+            nextFocusUp={navNodeHandles.progress}
+            nextFocusDown={navNodeHandles.prev}
+            nextFocusLeft={navNodeHandles.prev}
+            nextFocusRight={navNodeHandles.playPause}
+          >
+            <SkipBack size={28} color={colors.foreground} />
+          </TVFocusPressable>
+
+          <TVFocusPressable
+            ref={playPauseNavRef}
+            style={[styles.control, styles.playPause]}
+            accessibilityLabel={isPlaying ? "Pause" : "Play"}
+            onPress={() => pressRemoteNav(togglePlayPause)}
+            onFocus={handleRemoteNavFocus}
+            onBlur={handleRemoteNavBlur}
+            hasTVPreferredFocus={shouldPreferRemoteNavFocus}
+            nextFocusUp={navNodeHandles.progress}
+            nextFocusDown={navNodeHandles.playPause}
+            nextFocusLeft={
+              hasPrevious ? navNodeHandles.prev : navNodeHandles.playPause
+            }
+            nextFocusRight={
+              hasNext ? navNodeHandles.next : navNodeHandles.playPause
+            }
+          >
+            {isPlaying ? (
+              <Pause size={34} color={colors.primaryForeground} />
+            ) : (
+              <Play size={34} color={colors.primaryForeground} />
+            )}
+          </TVFocusPressable>
+
+          <TVFocusPressable
+            ref={nextNavRef}
+            style={[styles.control, !hasNext && styles.controlDisabled]}
+            accessibilityLabel="Next video"
+            onPress={() =>
+              pressRemoteNav(() => {
+                showRemoteNav(false);
+                goToIndex(playlistIndex + 1);
+              })
+            }
+            onFocus={handleRemoteNavFocus}
+            onBlur={handleRemoteNavBlur}
+            disabled={!hasNext}
+            nextFocusUp={navNodeHandles.progress}
+            nextFocusDown={navNodeHandles.next}
+            nextFocusLeft={navNodeHandles.playPause}
+            nextFocusRight={navNodeHandles.next}
+          >
+            <SkipForward size={28} color={colors.foreground} />
+          </TVFocusPressable>
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -577,9 +569,9 @@ export default function TVPlayerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#132447",
-    paddingHorizontal: 32,
-    paddingBottom: 20,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.lg,
   },
   fullscreenContainer: {
     flex: 1,
@@ -589,9 +581,6 @@ const styles = StyleSheet.create({
   videoFrame: {
     flex: 1,
   },
-  navButtonDisabled: {
-    opacity: 0.5,
-  },
   video: {
     flex: 1,
     backgroundColor: "#000",
@@ -599,98 +588,55 @@ const styles = StyleSheet.create({
   videoPlaceholder: {
     backgroundColor: "#000",
   },
-  chromeSafeArea: {
+  // Anchored to the bottom so the picture stays clear above it.
+  overlay: {
     position: "absolute",
-    top: 0,
     left: 0,
     right: 0,
+    bottom: 0,
     zIndex: 1,
-    paddingHorizontal: 28,
-    paddingTop: 24,
-    paddingBottom: 18,
-    backgroundColor: "rgba(0, 0, 0, 0.82)",
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.12)",
+    paddingHorizontal: spacing["2xl"],
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    backgroundColor: tvScrim,
+    gap: spacing.xs,
   },
   overlayHidden: {
     opacity: 0,
   },
-  overlayTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 16,
+  title: {
+    color: colors.foreground,
+    fontSize: tvFontSize.title,
+    fontWeight: fontWeight.bold,
   },
-  titleChip: {
-    flex: 1,
-    borderRadius: 999,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    backgroundColor: "rgba(0, 0, 0, 0.65)",
-    borderWidth: 2,
-    borderColor: "rgba(255, 255, 255, 0.28)",
-  },
-  titleChipText: {
-    color: "#fffef2",
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  titleChipMeta: {
-    marginTop: 4,
-    color: "#dbeafe",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  navFabRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  navFabButton: {
-    borderRadius: 999,
-    borderWidth: 2,
-    borderColor: "#ffd93d",
-    backgroundColor: "#ff8a00",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    minWidth: 102,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  navFabText: {
-    color: "#fffef2",
-    fontSize: 18,
-    fontWeight: "900",
+  meta: {
+    color: colors.mutedForeground,
+    fontSize: tvFontSize.body,
   },
   progressRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    marginTop: spacing.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
     borderRadius: radius.full,
-    borderWidth: 2,
-    borderColor: "transparent",
+    ...tvRestingBorder,
   },
   progressRowFocused: {
-    borderColor: colors.warning,
+    borderColor: colors.foreground,
     backgroundColor: colors.overlayLight,
   },
   progressTime: {
     color: colors.foreground,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
+    fontSize: tvFontSize.body,
+    fontWeight: fontWeight.semibold,
     fontVariant: ["tabular-nums"],
     minWidth: 72,
     textAlign: "center",
   },
   progressTrack: {
     flex: 1,
-    height: 6,
+    height: 10,
     borderRadius: radius.full,
     backgroundColor: colors.muted,
     overflow: "hidden",
@@ -698,6 +644,29 @@ const styles = StyleSheet.create({
   progressFill: {
     height: "100%",
     backgroundColor: colors.primary,
+  },
+  controls: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: spacing.lg,
+  },
+  control: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.full,
+    backgroundColor: colors.card,
+    ...tvRestingBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playPause: {
+    width: 72,
+    height: 72,
+    backgroundColor: colors.primary,
+  },
+  controlDisabled: {
+    opacity: 0.35,
   },
   centered: {
     flex: 1,

@@ -47,8 +47,8 @@ export function decideRemoteKey(
         direction: direction === "right" ? 1 : -1,
       } as const;
     }
-    // Down from the progress row, the bottom of the overlay, hides it.
-    if (direction === "down") return { kind: "hide" } as const;
+    // Up from the progress row, the top of the overlay, hides it.
+    if (direction === "up") return { kind: "hide" } as const;
   }
 
   // Play/pause also reaches expo-video's media session, which toggles playback itself;

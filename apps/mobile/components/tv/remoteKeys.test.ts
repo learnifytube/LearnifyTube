@@ -85,11 +85,11 @@ describe("Remote keys on the TV player", () => {
       });
     });
 
-    it("hides it on down from the progress row", () => {
-      expect(decideRemoteKey(press("down"), onProgress)).toEqual({
+    it("hides it on up from the progress row, the top of the overlay", () => {
+      expect(decideRemoteKey(press("up"), onProgress)).toEqual({
         kind: "hide",
       });
-      expect(decideRemoteKey(press("up"), onProgress)).toEqual({
+      expect(decideRemoteKey(press("down"), onProgress)).toEqual({
         kind: "show",
       });
     });

@@ -2,7 +2,7 @@ import type { StreamingVideo } from "../../stores/playback";
 import type { TVRecentPlaylist } from "../../stores/tvHistory";
 import {
   buildTVCatalog,
-  ON_THIS_TV_ID,
+  SENT_TO_THIS_TV_ID,
   type CachedCollection,
   type TVCatalogInput,
 } from "./tvCatalog";
@@ -110,7 +110,7 @@ describe("buildTVCatalog", () => {
     expect(catalog.tabs.playlists).toEqual([
       expect.objectContaining({
         title: "Remote playlist",
-        subtitle: "4 ready",
+        subtitle: "10 videos",
         action: {
           kind: "remote",
           collection: "playlist",
@@ -169,7 +169,7 @@ describe("buildTVCatalog", () => {
     });
   });
 
-  it('puts "On this TV" first in My Lists when the On-device set isn\'t empty', () => {
+  it('puts "Sent to this TV" first in My Lists when the On-device set isn\'t empty', () => {
     const setVideos = [
       { ...video("s1"), thumbnailUrl: null },
       { ...video("s2"), thumbnailUrl: null },
@@ -179,11 +179,14 @@ describe("buildTVCatalog", () => {
       input({ ...connected, onDeviceSet: setVideos }),
     );
     expect(whileConnected.tabs.mylists.map((card) => card.id)).toEqual([
-      ON_THIS_TV_ID,
+      SENT_TO_THIS_TV_ID,
       "ml1",
     ]);
     expect(whileConnected.tabs.mylists[0]).toEqual(
-      expect.objectContaining({ title: "On this TV", subtitle: "2 videos" }),
+      expect.objectContaining({
+        title: "Sent to this TV",
+        subtitle: "2 videos",
+      }),
     );
 
     const offline = buildTVCatalog(
@@ -194,7 +197,7 @@ describe("buildTVCatalog", () => {
       }),
     );
     expect(offline.tabs.mylists.map((card) => card.id)).toEqual([
-      ON_THIS_TV_ID,
+      SENT_TO_THIS_TV_ID,
       "mylist_held",
     ]);
     expect(offline.tabs.mylists[0]).toEqual(
@@ -208,6 +211,44 @@ describe("buildTVCatalog", () => {
     );
 
     expect(buildTVCatalog(input(connected)).tabs.mylists[0].id).toBe("ml1");
+  });
+
+  it("counts the Videos on this TV beside each card's total while connected", () => {
+    const catalog = buildTVCatalog(
+      input({
+        ...connected,
+        library: [video("a", "Remote channel"), video("b", "Remote channel")],
+        cached: [
+          collection("playlist_pl1", "playlist", ["a", "b", "x"]),
+          collection("mylist_ml1", "mylist", ["a", "y"]),
+        ],
+        onDeviceSet: [
+          { ...video("a"), thumbnailUrl: null },
+          { ...video("z"), thumbnailUrl: null },
+        ],
+      }),
+    );
+
+    expect(catalog.tabs.playlists[0].subtitle).toBe("10 videos · 2 on this TV");
+    expect(catalog.tabs.mylists.map((card) => card.subtitle)).toEqual([
+      "2 videos · 1 on this TV",
+      "3 videos · 1 on this TV",
+    ]);
+    expect(catalog.tabs.channels[0].subtitle).toBe("7 videos · 2 on this TV");
+  });
+
+  it("leaves out a playlist's total when the desktop doesn't know it", () => {
+    const catalog = buildTVCatalog(
+      input({
+        ...connected,
+        remote: {
+          ...connected.remote,
+          playlists: [{ ...connected.remote.playlists[0], itemCount: null }],
+        },
+      }),
+    );
+
+    expect(catalog.tabs.playlists[0].subtitle).toBe("");
   });
 
   it("builds Offline Channels from the Videos the TV holds", () => {

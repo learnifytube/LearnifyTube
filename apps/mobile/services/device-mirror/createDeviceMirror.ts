@@ -35,7 +35,7 @@ export type DeviceMirrorPlatform = {
   getWatchProgress: () => DeviceReport["watch"];
   loadMirroredIds: () => Promise<string[]>;
   saveMirroredIds: (videoIds: string[]) => Promise<void>;
-  /** Keeps the latest On-device set, which the TV shows as "On this TV" in Offline mode too. */
+  /** Keeps the latest On-device set, which the TV shows as "Sent to this TV" in Offline mode too. */
   saveOnDeviceSet: (videos: SetVideo[]) => void;
 };
 

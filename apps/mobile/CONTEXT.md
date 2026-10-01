@@ -7,8 +7,8 @@ The phone and Android TV app: pulls Videos from the desktop app over local WiFi 
 ### Offline playback
 
 **Offline copy**:
-The single playable file of a Video on this device, wherever it is stored. An Offline copy on a removed USB drive still exists but is unreachable until the drive returns.
-_Avoid_: local file, local path, downloaded video
+The single playable file of a Video on this device, wherever it is stored. An Offline copy on a removed USB drive still exists but is unreachable until the drive returns. Viewers see a Video with an Offline copy as "on this TV" (or "on this phone").
+_Avoid_: local file, local path, downloaded video, ready, offline (for the copy; Offline mode is the connection)
 
 **Storage location**:
 The place the user chose for new Offline copies: internal app storage, a folder picked through Android's system picker, or a detected USB folder on a TV.
@@ -31,8 +31,8 @@ The Videos the player moves through after the user presses play on a collection,
 _Avoid_: playlist (for this), streaming queue
 
 **On-device set**:
-The Videos the desktop wants this device to hold (see the desktop glossary). The device Downloads what is missing and removes Offline copies that left the set. Videos the user pulled on the device itself are not part of it and are left alone.
-_Avoid_: synced videos
+The Videos the desktop wants this device to hold (see the desktop glossary). The device Downloads what is missing and removes Offline copies that left the set. Videos the user pulled on the device itself are not part of it and are left alone. On the TV, viewers see it as "Sent to this TV", never "On this TV": it can include Videos without an Offline copy yet.
+_Avoid_: synced videos, on this TV
 
 **Mirror**:
 To bring this device in line with the On-device set on connect, on return to the foreground, and every few minutes. The mirror only removes Videos it brought itself, then sends a Device report.

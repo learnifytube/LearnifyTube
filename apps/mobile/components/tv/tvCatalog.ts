@@ -5,7 +5,9 @@ import type { RemoteChannel, RemoteMyList, RemotePlaylist } from "../../types";
 
 export type TVBrowseMode = "playlists" | "mylists" | "channels" | "history";
 
-export const ON_THIS_TV_ID = "on-this-tv";
+/** The On-device set's card. The id predates the name and stays, as TV history keeps it. */
+export const SENT_TO_THIS_TV_ID = "on-this-tv";
+const SENT_TO_THIS_TV_TITLE = "Sent to this TV";
 
 /** A collection from the browse cache, with the Videos it held when last loaded. */
 export type CachedCollection = {
@@ -68,6 +70,15 @@ export type TVCatalogCard = {
 
 const countVideos = (count: number) =>
   count === 1 ? "1 video" : `${count} videos`;
+
+/** A card's total, then how many of its Videos have an Offline copy, when any do. */
+const describeCount = (total: number | null, held: number) =>
+  [
+    total === null ? null : countVideos(total),
+    held > 0 ? `${held} on this TV` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
 const connectedEmptyText: Record<TVBrowseMode, string> = {
   playlists: "No playlists here yet",
@@ -135,7 +146,12 @@ export function buildTVCatalog(input: TVCatalogInput) {
       ];
     });
 
-  const onThisTV = () => {
+  const heldIn = (cachedId: string) =>
+    input.cached
+      .find((collection) => collection.id === cachedId)
+      ?.items.filter((item) => hasOfflineCopy(item.id)).length ?? 0;
+
+  const sentToThisTV = () => {
     const videos = input.onDeviceSet
       .filter((item) => desktop || hasOfflineCopy(item.id))
       .map((item) => ({
@@ -151,14 +167,19 @@ export function buildTVCatalog(input: TVCatalogInput) {
     if (videos.length === 0) return [];
     return [
       {
-        id: ON_THIS_TV_ID,
-        title: "On this TV",
-        subtitle: countVideos(videos.length),
+        id: SENT_TO_THIS_TV_ID,
+        title: SENT_TO_THIS_TV_TITLE,
+        subtitle: desktop
+          ? describeCount(
+              videos.length,
+              videos.filter((item) => hasOfflineCopy(item.id)).length,
+            )
+          : countVideos(videos.length),
         thumbnailUrl: videos[0].thumbnailUrl ?? null,
         action: {
           kind: "play" as const,
-          playlistId: ON_THIS_TV_ID,
-          title: "On this TV",
+          playlistId: SENT_TO_THIS_TV_ID,
+          title: SENT_TO_THIS_TV_TITLE,
           videos,
           startIndex: 0,
         },
@@ -208,7 +229,10 @@ export function buildTVCatalog(input: TVCatalogInput) {
         playlists: input.remote.playlists.map<TVCatalogCard>((item) => ({
           id: item.playlistId,
           title: item.title,
-          subtitle: `${item.downloadedCount} ready`,
+          subtitle: describeCount(
+            item.itemCount,
+            heldIn(`playlist_${item.playlistId}`),
+          ),
           thumbnailUrl:
             desktop.resolveAssetUrl(item.thumbnailUrl) ??
             desktop.playlistThumbnailUrl(item.playlistId),
@@ -220,13 +244,16 @@ export function buildTVCatalog(input: TVCatalogInput) {
           },
         })),
         mylists: [
-          ...onThisTV(),
+          ...sentToThisTV(),
           ...input.remote.myLists.map<TVCatalogCard>((item) => ({
             id: item.id,
             title: item.name,
-            subtitle: item.isFavorite
-              ? `Favorite · ${countVideos(item.itemCount)}`
-              : countVideos(item.itemCount),
+            subtitle: [
+              item.isFavorite ? "Favorite" : null,
+              describeCount(item.itemCount, heldIn(`mylist_${item.id}`)),
+            ]
+              .filter(Boolean)
+              .join(" · "),
             thumbnailUrl: desktop.resolveAssetUrl(item.thumbnailUrl),
             action: {
               kind: "remote",
@@ -239,7 +266,11 @@ export function buildTVCatalog(input: TVCatalogInput) {
         channels: input.remote.channels.map<TVCatalogCard>((item) => ({
           id: item.channelId,
           title: item.channelTitle,
-          subtitle: countVideos(item.videoCount),
+          subtitle: describeCount(
+            item.videoCount,
+            held.filter((video) => video.channelTitle === item.channelTitle)
+              .length,
+          ),
           thumbnailUrl: desktop.resolveAssetUrl(item.thumbnailUrl),
           action: {
             kind: "channel",
@@ -286,7 +317,7 @@ export function buildTVCatalog(input: TVCatalogInput) {
   return {
     tabs: {
       playlists: collectionCards("playlist"),
-      mylists: [...onThisTV(), ...collectionCards("mylist")],
+      mylists: [...sentToThisTV(), ...collectionCards("mylist")],
       channels: channelCards,
       history: historyCards,
     },

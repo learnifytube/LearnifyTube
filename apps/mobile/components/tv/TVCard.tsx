@@ -1,5 +1,6 @@
 import { useEffect, useState, type Ref } from "react";
 import {
+  ActivityIndicator,
   View,
   Text,
   Image,
@@ -20,6 +21,8 @@ const FALLBACK_THUMBNAIL = require("../../assets/tv-banner.png");
 interface TVCardProps {
   title: string;
   subtitle?: string;
+  /** Shows a spinner while pressing the card is still opening it. */
+  busy?: boolean;
   thumbnailUrl?: string | null;
   onPress?: () => void;
   onFocus?: () => void;
@@ -35,6 +38,7 @@ interface TVCardProps {
 export function TVCard({
   title,
   subtitle,
+  busy,
   thumbnailUrl,
   onPress,
   onFocus,
@@ -78,6 +82,12 @@ export function TVCard({
       />
       <View style={styles.scrim} />
       <View style={styles.bottomScrim} />
+      {busy ? (
+        <View style={styles.busy}>
+          <ActivityIndicator size="small" color="#ffffff" />
+          <Text style={styles.busyText}>Opening…</Text>
+        </View>
+      ) : null}
       <View style={styles.cardInner}>
         <Text style={styles.title} numberOfLines={2}>
           {title}
@@ -118,6 +128,23 @@ const styles = StyleSheet.create({
     bottom: 0,
     top: "38%",
     backgroundColor: "rgba(6, 12, 24, 0.76)",
+  },
+  busy: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(6, 12, 24, 0.82)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  busyText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "700",
   },
   cardFocused: {
     borderColor: "#ffd93d",

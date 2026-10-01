@@ -292,6 +292,19 @@ export default function TVHomeScreen() {
 
   useFocusEffect(refreshCachedCollections);
 
+  // A collection still opening when the viewer opens another or leaves is dropped.
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const openRequest = useRef(0);
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        openRequest.current += 1;
+        setOpeningId(null);
+      },
+      [],
+    ),
+  );
+
   const loadRemoteCollections = useCallback(async () => {
     if (!serverUrl) return;
 
@@ -409,7 +422,9 @@ export default function TVHomeScreen() {
     id: string,
     title: string,
   ) => {
-    if (!serverUrl) return;
+    if (!serverUrl || openingId === id) return;
+    const request = ++openRequest.current;
+    setOpeningId(id);
 
     try {
       const response =
@@ -440,6 +455,7 @@ export default function TVHomeScreen() {
         videos: response.videos,
       });
       refreshCachedCollections();
+      if (request !== openRequest.current) return;
 
       const streamingVideos = toStreamingVideos(normalizedVideos, serverUrl);
 
@@ -451,6 +467,7 @@ export default function TVHomeScreen() {
         startIndex: 0,
       });
     } catch {
+      if (request !== openRequest.current) return;
       // The desktop may still be fetching this collection; the connection stays as it is.
       // Fall back to what the TV holds from it.
       const collections = getCachedCollections();
@@ -465,6 +482,8 @@ export default function TVHomeScreen() {
       }
 
       showTVMessage(collectionNotReady);
+    } finally {
+      if (request === openRequest.current) setOpeningId(null);
     }
   };
 
@@ -629,6 +648,11 @@ export default function TVHomeScreen() {
               ]}
               onPress={() => setMode(tab.mode)}
               {...tabFocusHandlers}
+              onFocus={() => {
+                tabFocusHandlers.onFocus();
+                setMode(tab.mode);
+              }}
+              nextFocusDown={cardNodeHandles[0]}
               hasTVPreferredFocus={hasTabPreferredFocus(tab.mode)}
             >
               <Text style={styles.modeTabText}>{tab.label}</Text>
@@ -730,6 +754,9 @@ export default function TVHomeScreen() {
               <TVCard
                 title={item.title}
                 subtitle={item.subtitle}
+                busy={
+                  item.action.kind === "remote" && openingId === item.action.id
+                }
                 thumbnailUrl={item.thumbnailUrl}
                 // Only while paging: a tab press remounts the grid too, and must keep focus.
                 hasTVPreferredFocus={

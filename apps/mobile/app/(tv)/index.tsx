@@ -13,6 +13,14 @@ import {
 import { RefreshCw, Settings } from "lucide-react-native";
 import { router, type Href } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  colors,
+  fontWeight,
+  radius,
+  spacing,
+  tvFontSize,
+  tvRestingBorder,
+} from "../../theme";
 import type { StreamingVideo } from "../../stores/playback";
 import { useTVHistoryStore } from "../../stores/tvHistory";
 import { useOnDeviceSetStore } from "../../stores/onDeviceSet";
@@ -655,7 +663,14 @@ export default function TVHomeScreen() {
               nextFocusDown={cardNodeHandles[0]}
               hasTVPreferredFocus={hasTabPreferredFocus(tab.mode)}
             >
-              <Text style={styles.modeTabText}>{tab.label}</Text>
+              <Text
+                style={[
+                  styles.modeTabText,
+                  mode === tab.mode && styles.modeTabTextActive,
+                ]}
+              >
+                {tab.label}
+              </Text>
             </TVFocusPressable>
           ))}
         </View>
@@ -676,9 +691,9 @@ export default function TVHomeScreen() {
             disabled={isLoadingCatalog}
           >
             {isLoadingCatalog ? (
-              <ActivityIndicator size="small" color="#fffef2" />
+              <ActivityIndicator size="small" color={colors.foreground} />
             ) : (
-              <RefreshCw size={24} color="#fffef2" />
+              <RefreshCw size={24} color={colors.foreground} />
             )}
           </TVFocusPressable>
           <TVFocusPressable
@@ -688,14 +703,14 @@ export default function TVHomeScreen() {
             onFocus={() => setIsGridFocused(false)}
             nextFocusRight={settingsHandle}
           >
-            <Settings size={24} color="#fffef2" />
+            <Settings size={24} color={colors.foreground} />
           </TVFocusPressable>
         </View>
       </View>
 
       {isLoadingCatalog && activeCards.length === 0 ? (
         <View style={styles.loaderWrap}>
-          <ActivityIndicator size="large" color="#ffd93d" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : null}
 
@@ -793,130 +808,126 @@ export default function TVHomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0f1b3a",
+    backgroundColor: colors.background,
     paddingHorizontal: TV_GRID_SIDE_PADDING,
-    paddingBottom: 24,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
   },
   controlsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 18,
-    marginBottom: 12,
+    gap: spacing.md,
+    marginBottom: spacing.md,
   },
   modeTabs: {
     flexDirection: "row",
-    gap: 10,
+    gap: spacing.sm,
     flex: 1,
   },
   modeTab: {
-    borderRadius: 14,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderWidth: 2,
-    borderColor: "#8ec5ff",
-    backgroundColor: "#2d7ff9",
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    ...tvRestingBorder,
   },
   modeTabActive: {
-    borderColor: "#ffd93d",
-    backgroundColor: "#40c4aa",
+    backgroundColor: colors.primary,
   },
   modeTabText: {
-    color: "#fffef2",
-    fontSize: 18,
-    fontWeight: "800",
+    color: colors.mutedForeground,
+    fontSize: tvFontSize.label,
+    fontWeight: fontWeight.semibold,
+  },
+  modeTabTextActive: {
+    color: colors.primaryForeground,
+    fontWeight: fontWeight.bold,
   },
   iconActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: spacing.sm,
   },
   iconButton: {
-    width: 54,
-    height: 54,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "#ffb86b",
-    backgroundColor: "#ff6b6b",
+    width: 56,
+    height: 56,
+    borderRadius: radius.full,
+    backgroundColor: colors.card,
+    ...tvRestingBorder,
     alignItems: "center",
     justifyContent: "center",
   },
 
   loaderWrap: {
-    marginTop: 48,
+    marginTop: spacing["2xl"],
     alignItems: "center",
   },
   emptyState: {
-    marginTop: 24,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: "#8ec5ff",
-    backgroundColor: "#2d7ff9",
-    padding: 18,
-    gap: 8,
+    marginTop: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.card,
+    padding: spacing.lg,
+    gap: spacing.sm,
   },
   emptyText: {
-    color: "#fffef2",
-    fontSize: 22,
-    fontWeight: "800",
+    color: colors.foreground,
+    fontSize: tvFontSize.title,
+    fontWeight: fontWeight.bold,
   },
   emptyHint: {
-    color: "#eaf5ff",
-    fontSize: 18,
-    fontWeight: "700",
+    color: colors.mutedForeground,
+    fontSize: tvFontSize.body,
   },
   connectButton: {
-    marginTop: 8,
+    marginTop: spacing.sm,
     alignSelf: "flex-start",
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "#ffd93d",
-    backgroundColor: "#ff6b6b",
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+    ...tvRestingBorder,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
   connectButtonText: {
-    color: "#fffef2",
-    fontSize: 20,
-    fontWeight: "900",
+    color: colors.primaryForeground,
+    fontSize: tvFontSize.label,
+    fontWeight: fontWeight.bold,
   },
   indicator: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: "rgba(15, 27, 58, 0.6)",
+    gap: spacing.sm,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    ...tvRestingBorder,
   },
   indicatorAction: {
-    borderWidth: 2,
-    borderColor: "#ffd93d",
+    backgroundColor: colors.card,
   },
   indicatorDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: "#94a3b8",
+    backgroundColor: colors.pending,
   },
   indicatorDotConnected: {
-    backgroundColor: "#40c4aa",
+    backgroundColor: colors.success,
   },
   indicatorDotWarning: {
-    backgroundColor: "#ffb86b",
+    backgroundColor: colors.warning,
   },
   indicatorText: {
-    color: "#fffef2",
-    fontSize: 16,
-    fontWeight: "700",
+    color: colors.mutedForeground,
+    fontSize: tvFontSize.caption,
+    fontWeight: fontWeight.medium,
   },
   errorText: {
-    color: "#ffe3e3",
-    fontSize: 16,
-    fontWeight: "700",
+    color: colors.destructive,
+    fontSize: tvFontSize.body,
   },
   grid: {
-    paddingBottom: 24,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
   },
   row: {
     justifyContent: "flex-start",

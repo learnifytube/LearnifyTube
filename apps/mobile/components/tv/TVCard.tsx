@@ -10,6 +10,16 @@ import {
   type ImageSourcePropType,
 } from "react-native";
 import {
+  colors,
+  fontWeight,
+  radius,
+  spacing,
+  tvFocus,
+  tvFontSize,
+  tvRestingBorder,
+  tvScrim,
+} from "../../theme";
+import {
   TVFocusPressable,
   type TVFocusPressableHandle,
 } from "./TVFocusPressable";
@@ -80,24 +90,21 @@ export function TVCard({
         resizeMode="cover"
         onError={() => setThumbnailError(true)}
       />
-      <View style={styles.scrim} />
       <View style={styles.bottomScrim} />
       {busy ? (
         <View style={styles.busy}>
-          <ActivityIndicator size="small" color="#ffffff" />
+          <ActivityIndicator size="small" color={colors.foreground} />
           <Text style={styles.busyText}>Opening…</Text>
         </View>
       ) : null}
       <View style={styles.cardInner}>
-        <Text style={styles.title} numberOfLines={2}>
+        <Text style={styles.title} numberOfLines={1}>
           {title}
         </Text>
         {subtitle ? (
-          <View style={styles.subtitleBadge}>
-            <Text style={styles.subtitle} numberOfLines={1}>
-              {subtitle}
-            </Text>
-          </View>
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {subtitle}
+          </Text>
         ) : null}
       </View>
     </TVFocusPressable>
@@ -108,84 +115,58 @@ const styles = StyleSheet.create({
   card: {
     width: TV_GRID_CARD_WIDTH,
     height: TV_GRID_CARD_HEIGHT,
-    borderRadius: 24,
-    backgroundColor: "#1a2443",
-    borderWidth: 2,
-    borderColor: "#8ec5ff",
+    borderRadius: radius.xl,
+    backgroundColor: colors.card,
+    ...tvRestingBorder,
     overflow: "hidden",
   },
   thumbnail: {
     ...StyleSheet.absoluteFillObject,
   },
-  scrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(6, 12, 24, 0.28)",
-  },
+  // The thumbnail stays clear up top; a one-line title sits on a solid band, away from text drawn
+  // into the thumbnail itself.
   bottomScrim: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    top: "38%",
-    backgroundColor: "rgba(6, 12, 24, 0.76)",
+    top: "58%",
+    backgroundColor: tvScrim,
   },
   busy: {
     position: "absolute",
-    top: 14,
-    right: 14,
+    top: spacing.md,
+    right: spacing.md,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    borderRadius: 999,
-    backgroundColor: "rgba(6, 12, 24, 0.82)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    gap: spacing.sm,
+    borderRadius: radius.full,
+    backgroundColor: colors.overlay,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
   },
   busyText: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "700",
+    color: colors.foreground,
+    fontSize: tvFontSize.caption,
+    fontWeight: fontWeight.semibold,
   },
-  cardFocused: {
-    borderColor: "#ffd93d",
-    shadowColor: "#ffd93d",
-    shadowOpacity: 0.5,
-    shadowRadius: 18,
-    elevation: 12,
-    transform: [{ scale: 1.02 }],
-  },
+  cardFocused: tvFocus,
   cardInner: {
     flex: 1,
     justifyContent: "flex-end",
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    gap: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    gap: spacing.xs,
   },
   title: {
-    color: "#ffffff",
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: "800",
-    textShadowColor: "rgba(0,0,0,0.65)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  subtitleBadge: {
-    alignSelf: "flex-start",
-    maxWidth: "100%",
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
-    backgroundColor: "rgba(19, 36, 71, 0.72)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    color: colors.foreground,
+    fontSize: tvFontSize.title,
+    lineHeight: 28,
+    fontWeight: fontWeight.bold,
   },
   subtitle: {
-    color: "#eef6ff",
-    fontSize: 15,
-    fontWeight: "700",
-    textShadowColor: "rgba(0,0,0,0.65)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    color: colors.mutedForeground,
+    fontSize: tvFontSize.caption,
+    fontWeight: fontWeight.medium,
   },
 });

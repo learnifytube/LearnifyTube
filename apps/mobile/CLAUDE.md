@@ -49,4 +49,4 @@ TV screens, phone screens and `VideoCard` ask the module: `useUri` / `useLookup`
 
 ## Theme
 
-Styling tokens come from `theme/` (`colors`, `spacing`, `radius`, `fontSize`, `fontWeight`), matching the desktop dark palette; icons come from `theme/icons.ts` (lucide-react-native). Use these tokens in `StyleSheet.create` rather than literal colors or sizes.
+Styling tokens come from `theme/` (`colors`, `spacing`, `radius`, `fontSize`, `fontWeight`), matching the desktop dark palette; icons come from `theme/icons.ts` (lucide-react-native). Use these tokens in `StyleSheet.create` rather than literal colors or sizes. TV screens add `theme/tv.ts`: `tvFontSize` for viewing across a room, and `tvFocus` / `tvRestingBorder`, the one focus treatment (a white ring) every focusable TV element uses.

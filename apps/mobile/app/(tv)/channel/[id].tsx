@@ -11,6 +11,14 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams, type Href } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  colors,
+  fontWeight,
+  radius,
+  spacing,
+  tvFontSize,
+  tvRestingBorder,
+} from "../../../theme";
 import { useConnectionStore } from "../../../stores/connection";
 import { api } from "../../../services/api";
 import { playQueue } from "../../../services/play-queue";
@@ -24,9 +32,7 @@ import {
   getAllSavedPlaylistsWithProgress,
   getSavedPlaylistWithItems,
 } from "../../../db/repositories/playlists";
-import {
-  TVCard,
-} from "../../../components/tv/TVCard";
+import { TVCard } from "../../../components/tv/TVCard";
 import {
   TVFocusPressable,
   type TVFocusPressableHandle,
@@ -66,7 +72,8 @@ export default function TVChannelDetailScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const { id, title } = useLocalSearchParams<{ id: string; title?: string }>();
   const channelId = Array.isArray(id) ? id[0] : id;
-  const channelTitle = (Array.isArray(title) ? title[0] : title) ?? channelId ?? "";
+  const channelTitle =
+    (Array.isArray(title) ? title[0] : title) ?? channelId ?? "";
   const serverUrl = useConnectionStore((state) => state.serverUrl);
   const { videos, getOfflineUri } = useLibraryCatalog();
   const getStoredThumbnail = videoThumbnails.useLookup();
@@ -77,14 +84,14 @@ export default function TVChannelDetailScreen() {
     videos: [],
   });
   const [openedPlaylist, setOpenedPlaylist] = useState<TVOpenPlaylist | null>(
-    null
+    null,
   );
   const [pageOffset, setPageOffset] = useState(0);
   const [focusedGridIndex, setFocusedGridIndex] = useState(0);
   const [isGridFocused, setIsGridFocused] = useState(false);
-  const [cardNodeHandles, setCardNodeHandles] = useState<Array<number | undefined>>(
-    []
-  );
+  const [cardNodeHandles, setCardNodeHandles] = useState<
+    Array<number | undefined>
+  >([]);
   const cardRefs = useRef<Array<TVFocusPressableHandle | null>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<TVMessageContent | null>(null);
@@ -94,19 +101,22 @@ export default function TVChannelDetailScreen() {
     element: tvMessageElement,
   } = useTVMessage();
   const [isResolvingPlaylist, setIsResolvingPlaylist] = useState(false);
-  const gridColumns = useMemo(() => getTVGridColumns(windowWidth), [windowWidth]);
+  const gridColumns = useMemo(
+    () => getTVGridColumns(windowWidth),
+    [windowWidth],
+  );
   const pageSize = useMemo(() => getTVGridPageSize(gridColumns), [gridColumns]);
   const gridCardWidth = useMemo(
     () => getTVGridCardWidth(windowWidth, gridColumns),
-    [gridColumns, windowWidth]
+    [gridColumns, windowWidth],
   );
   const gridCardHeight = useMemo(
     () => getTVGridCardHeight(gridCardWidth),
-    [gridCardWidth]
+    [gridCardWidth],
   );
   const gridCardStyle = useMemo(
     () => ({ width: gridCardWidth, height: gridCardHeight }),
-    [gridCardHeight, gridCardWidth]
+    [gridCardHeight, gridCardWidth],
   );
 
   const resetGrid = () => {
@@ -165,7 +175,10 @@ export default function TVChannelDetailScreen() {
       const nextPlaylists =
         playlistsResult.status === "fulfilled"
           ? (
-              await cacheRemotePlaylists(serverUrl, playlistsResult.value.playlists)
+              await cacheRemotePlaylists(
+                serverUrl,
+                playlistsResult.value.playlists,
+              )
             ).filter((item) => item.channelId === channelId)
           : held.playlists;
       const nextVideos =
@@ -179,7 +192,11 @@ export default function TVChannelDetailScreen() {
               videos: channelVideosResult.value.videos,
             })
           : held.videos;
-      setContents({ from: "desktop", playlists: nextPlaylists, videos: nextVideos });
+      setContents({
+        from: "desktop",
+        playlists: nextPlaylists,
+        videos: nextVideos,
+      });
       setPageOffset(0);
       setFocusedGridIndex(0);
     } catch (nextError) {
@@ -205,10 +222,13 @@ export default function TVChannelDetailScreen() {
   const openCachedPlaylist = (playlistId: string, playlistTitle: string) => {
     const savedPlaylist = getSavedPlaylistWithItems(
       buildCachedPlaylistId("playlist", playlistId),
-      { includeUnpinned: true }
+      { includeUnpinned: true },
     );
     const heldVideos = savedPlaylist
-      ? heldPlaylistVideos(savedPlaylist, (videoId) => getOfflineUri(videoId) !== null)
+      ? heldPlaylistVideos(
+          savedPlaylist,
+          (videoId) => getOfflineUri(videoId) !== null,
+        )
       : [];
     if (heldVideos.length === 0) return false;
 
@@ -231,7 +251,7 @@ export default function TVChannelDetailScreen() {
     try {
       const response = await api.getPlaylistVideos(serverUrl, playlistId);
       const playlistMeta = contents.playlists.find(
-        (item) => item.playlistId === playlistId
+        (item) => item.playlistId === playlistId,
       );
       const playlistVideos = await cacheRemoteCollectionVideos(serverUrl, {
         kind: "playlist",
@@ -239,7 +259,10 @@ export default function TVChannelDetailScreen() {
         title: playlistTitle,
         sourceId: playlistMeta?.channelId ?? channelId ?? null,
         thumbnailUrl: playlistMeta?.thumbnailUrl,
-        thumbnailFallbackUrl: api.getPlaylistThumbnailUrl(serverUrl, playlistId),
+        thumbnailFallbackUrl: api.getPlaylistThumbnailUrl(
+          serverUrl,
+          playlistId,
+        ),
         itemCount: playlistMeta?.itemCount,
         videos: response.videos,
       });
@@ -314,7 +337,7 @@ export default function TVChannelDetailScreen() {
       getStoredThumbnail,
       openedPlaylist,
       serverUrl,
-    ]
+    ],
   );
   const cards = view.cards;
   const gridKey = openedPlaylist ? `playlist-${openedPlaylist.id}` : "channel";
@@ -323,7 +346,7 @@ export default function TVChannelDetailScreen() {
   const clampedOffset = Math.min(pageOffset, maxOffset);
   const pageItems = useMemo(
     () => cards.slice(clampedOffset, clampedOffset + pageSize),
-    [cards, clampedOffset, pageSize]
+    [cards, clampedOffset, pageSize],
   );
 
   useEffect(() => {
@@ -335,8 +358,8 @@ export default function TVChannelDetailScreen() {
     setCardNodeHandles(
       pageItems.map((_, index) => {
         const node = cardRefs.current[index];
-        return node ? findNodeHandle(node) ?? undefined : undefined;
-      })
+        return node ? (findNodeHandle(node) ?? undefined) : undefined;
+      }),
     );
   }, [pageItems]);
 
@@ -365,7 +388,10 @@ export default function TVChannelDetailScreen() {
       (event: { eventType?: string; eventKeyAction?: number }) => {
         if (!isGridFocused || isTVMessageOpen) return;
         if (!pageItems.length) return;
-        if (typeof event.eventKeyAction === "number" && event.eventKeyAction !== 0) {
+        if (
+          typeof event.eventKeyAction === "number" &&
+          event.eventKeyAction !== 0
+        ) {
           return;
         }
 
@@ -377,12 +403,12 @@ export default function TVChannelDetailScreen() {
           if (nextOffset !== clampedOffset) {
             const nextGlobalIndex = Math.min(
               clampedOffset + focusedGridIndex + 1,
-              cards.length - 1
+              cards.length - 1,
             );
             const nextPageCount = Math.min(pageSize, cards.length - nextOffset);
             setPageOffset(nextOffset);
             setFocusedGridIndex(
-              clampGridFocusIndex(nextGlobalIndex, nextOffset, nextPageCount)
+              clampGridFocusIndex(nextGlobalIndex, nextOffset, nextPageCount),
             );
           }
         }
@@ -394,15 +420,18 @@ export default function TVChannelDetailScreen() {
         ) {
           const nextOffset = Math.max(0, clampedOffset - 1);
           if (nextOffset !== clampedOffset) {
-            const nextGlobalIndex = Math.max(clampedOffset + focusedGridIndex - 1, 0);
+            const nextGlobalIndex = Math.max(
+              clampedOffset + focusedGridIndex - 1,
+              0,
+            );
             const nextPageCount = Math.min(pageSize, cards.length - nextOffset);
             setPageOffset(nextOffset);
             setFocusedGridIndex(
-              clampGridFocusIndex(nextGlobalIndex, nextOffset, nextPageCount)
+              clampGridFocusIndex(nextGlobalIndex, nextOffset, nextPageCount),
             );
           }
         }
-      }
+      },
     );
 
     return () => {
@@ -443,13 +472,13 @@ export default function TVChannelDetailScreen() {
 
       {isLoading ? (
         <View style={styles.loaderWrap}>
-          <ActivityIndicator size="large" color="#ffd93d" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : null}
 
       {!isLoading && isResolvingPlaylist ? (
         <View style={styles.selectionLoader}>
-          <ActivityIndicator size="large" color="#ffd93d" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : null}
 
@@ -489,14 +518,17 @@ export default function TVChannelDetailScreen() {
             const isRightEdge = isRightEdgeGridIndex(
               index,
               gridColumns,
-              pageItems.length
+              pageItems.length,
             );
             const rightTargetIndex = isRightEdge ? index : index + 1;
             const leftTargetIndex = isLeftEdge ? index : index - 1;
-            const upTargetIndex = index >= gridColumns ? index - gridColumns : undefined;
+            const upTargetIndex =
+              index >= gridColumns ? index - gridColumns : undefined;
             const downCandidateIndex = index + gridColumns;
             const downTargetIndex =
-              downCandidateIndex < pageItems.length ? downCandidateIndex : index;
+              downCandidateIndex < pageItems.length
+                ? downCandidateIndex
+                : index;
 
             return (
               <TVCard
@@ -534,44 +566,43 @@ export default function TVChannelDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0f1b3a",
+    backgroundColor: colors.background,
     paddingHorizontal: TV_GRID_SIDE_PADDING,
-    paddingBottom: 24,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
   },
   topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   backButton: {
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: "#ffd93d",
-    backgroundColor: "#ff8a00",
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    borderRadius: radius.full,
+    backgroundColor: colors.card,
+    ...tvRestingBorder,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
   backButtonText: {
-    color: "#fffef2",
-    fontSize: 20,
-    fontWeight: "900",
+    color: colors.foreground,
+    fontSize: tvFontSize.label,
+    fontWeight: fontWeight.semibold,
   },
   settingsButton: {
-    borderRadius: 16,
-    backgroundColor: "#ff6b6b",
-    borderColor: "#ffb86b",
-    borderWidth: 2,
-    paddingHorizontal: 22,
-    paddingVertical: 12,
+    borderRadius: radius.full,
+    backgroundColor: colors.card,
+    ...tvRestingBorder,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
   settingsButtonText: {
-    color: "#fffdf4",
-    fontSize: 20,
-    fontWeight: "800",
+    color: colors.foreground,
+    fontSize: tvFontSize.label,
+    fontWeight: fontWeight.semibold,
   },
   loaderWrap: {
-    marginTop: 48,
+    marginTop: spacing["2xl"],
     alignItems: "center",
   },
   selectionLoader: {
@@ -581,41 +612,38 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   emptyState: {
-    marginTop: 24,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: "#8ec5ff",
-    backgroundColor: "#2d7ff9",
-    padding: 18,
-    gap: 8,
+    marginTop: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.card,
+    padding: spacing.lg,
+    gap: spacing.sm,
   },
   emptyText: {
-    color: "#fffef2",
-    fontSize: 22,
-    fontWeight: "800",
+    color: colors.foreground,
+    fontSize: tvFontSize.title,
+    fontWeight: fontWeight.bold,
   },
   errorText: {
-    color: "#ffe3e3",
-    fontSize: 16,
-    fontWeight: "700",
+    color: colors.destructive,
+    fontSize: tvFontSize.body,
   },
   retryButton: {
-    marginTop: 6,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "#ffd93d",
-    backgroundColor: "#ff6b6b",
+    marginTop: spacing.xs,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+    ...tvRestingBorder,
     alignSelf: "flex-start",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
   retryButtonText: {
-    color: "#fffef2",
-    fontSize: 18,
-    fontWeight: "900",
+    color: colors.primaryForeground,
+    fontSize: tvFontSize.label,
+    fontWeight: fontWeight.bold,
   },
   grid: {
-    paddingBottom: 24,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
   },
   row: {
     justifyContent: "flex-start",

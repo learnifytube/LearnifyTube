@@ -5,7 +5,7 @@ export const TV_GRID_GAP = 18;
 const TV_GRID_WIDE_BREAKPOINT = 1600;
 const TV_GRID_NARROW_COLUMNS = 3;
 const TV_GRID_WIDE_COLUMNS = 4;
-const TV_GRID_CARD_ASPECT_RATIO = 2.02;
+const TV_GRID_CARD_ASPECT_RATIO = 1.6;
 
 export function getTVGridColumns(viewportWidth: number): number {
   return viewportWidth >= TV_GRID_WIDE_BREAKPOINT
@@ -19,7 +19,7 @@ export function getTVGridPageSize(columns: number): number {
 
 export function getTVGridCardWidth(
   viewportWidth: number,
-  columns: number
+  columns: number,
 ): number {
   const availableWidth =
     viewportWidth - TV_GRID_SIDE_PADDING * 2 - TV_GRID_GAP * (columns - 1);
@@ -33,7 +33,7 @@ export function getTVGridCardHeight(cardWidth: number): number {
 export function isRightEdgeGridIndex(
   index: number,
   columns: number,
-  itemCount: number
+  itemCount: number,
 ): boolean {
   if (itemCount <= 0) return false;
   return index % columns === columns - 1 || index === itemCount - 1;
@@ -46,7 +46,7 @@ export function isLeftEdgeGridIndex(index: number, columns: number): boolean {
 export function clampGridFocusIndex(
   nextGlobalIndex: number,
   nextOffset: number,
-  nextPageCount: number
+  nextPageCount: number,
 ): number {
   if (nextPageCount <= 0) return 0;
   return Math.max(0, Math.min(nextGlobalIndex - nextOffset, nextPageCount - 1));

@@ -7,12 +7,12 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import { tvFocus } from "../../theme";
 
 type TVFocusState = PressableStateCallbackType & { focused: boolean };
 
 type FocusableStyle =
-  | StyleProp<ViewStyle>
-  | ((state: TVFocusState) => StyleProp<ViewStyle>);
+  StyleProp<ViewStyle> | ((state: TVFocusState) => StyleProp<ViewStyle>);
 
 interface TVFocusPressableProps extends Omit<PressableProps, "style"> {
   style?: FocusableStyle;
@@ -26,7 +26,10 @@ interface TVFocusPressableProps extends Omit<PressableProps, "style"> {
 
 export type TVFocusPressableHandle = ComponentRef<typeof Pressable>;
 
-function resolveStyle(style: FocusableStyle | undefined, state: TVFocusState): StyleProp<ViewStyle> {
+function resolveStyle(
+  style: FocusableStyle | undefined,
+  state: TVFocusState,
+): StyleProp<ViewStyle> {
   if (typeof style === "function") return style(state);
   return style;
 }
@@ -36,7 +39,7 @@ export const TVFocusPressable = forwardRef<
   TVFocusPressableProps
 >(function TVFocusPressable(
   { style, focusedStyle, pressedStyle, onFocus, onBlur, ...props },
-  ref
+  ref,
 ) {
   const [focused, setFocused] = useState(false);
 
@@ -71,13 +74,5 @@ const styles = StyleSheet.create({
     opacity: 0.95,
     transform: [{ scale: 0.985 }],
   },
-  defaultFocused: {
-    borderWidth: 4,
-    borderColor: "#ffd93d",
-    shadowColor: "#ff8a00",
-    shadowOpacity: 0.55,
-    shadowRadius: 18,
-    elevation: 12,
-    transform: [{ scale: 1.05 }],
-  },
+  defaultFocused: tvFocus,
 });

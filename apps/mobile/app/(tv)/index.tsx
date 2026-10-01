@@ -52,13 +52,14 @@ import { TVCard } from "../../components/tv/TVCard";
 import {
   TV_GRID_GAP,
   TV_GRID_SIDE_PADDING,
-  clampGridFocusIndex,
+  getLastPageOffset,
   getTVGridCardHeight,
   getTVGridCardWidth,
   getTVGridColumns,
   getTVGridPageSize,
   isLeftEdgeGridIndex,
   isRightEdgeGridIndex,
+  turnGridPage,
 } from "../../components/tv/grid";
 import {
   buildTVCatalog,
@@ -520,8 +521,10 @@ export default function TVHomeScreen() {
   const openPairing = () => router.push("/(tv)/connect" as Href);
 
   const currentOffset = pageOffsets[mode];
-  const maxOffset = Math.max(0, activeCards.length - pageSize);
-  const pageOffset = Math.min(currentOffset, maxOffset);
+  const pageOffset = Math.min(
+    Math.floor(currentOffset / pageSize) * pageSize,
+    getLastPageOffset(activeCards.length, pageSize),
+  );
 
   const pageItems = useMemo(
     () => activeCards.slice(pageOffset, pageOffset + pageSize),
@@ -573,54 +576,18 @@ export default function TVHomeScreen() {
           return;
         }
 
-        if (
-          event.eventType === "right" &&
-          isRightEdgeGridIndex(focusedGridIndex, gridColumns, pageItems.length)
-        ) {
-          const nextOffset = Math.min(pageOffset + 1, maxOffset);
-          if (nextOffset !== pageOffset) {
-            const nextGlobalIndex = Math.min(
-              pageOffset + focusedGridIndex + 1,
-              activeCards.length - 1,
-            );
-            const nextPageCount = Math.min(
-              pageSize,
-              activeCards.length - nextOffset,
-            );
-            setPageOffsets((prev) => ({
-              ...prev,
-              [mode]: nextOffset,
-            }));
-            setFocusedGridIndex(
-              clampGridFocusIndex(nextGlobalIndex, nextOffset, nextPageCount),
-            );
-          }
-        }
-
-        if (
-          event.eventType === "left" &&
-          isLeftEdgeGridIndex(focusedGridIndex, gridColumns) &&
-          pageOffset > 0
-        ) {
-          const nextOffset = Math.max(0, pageOffset - 1);
-          if (nextOffset !== pageOffset) {
-            const nextGlobalIndex = Math.max(
-              pageOffset + focusedGridIndex - 1,
-              0,
-            );
-            const nextPageCount = Math.min(
-              pageSize,
-              activeCards.length - nextOffset,
-            );
-            setPageOffsets((prev) => ({
-              ...prev,
-              [mode]: nextOffset,
-            }));
-            setFocusedGridIndex(
-              clampGridFocusIndex(nextGlobalIndex, nextOffset, nextPageCount),
-            );
-          }
-        }
+        if (event.eventType !== "left" && event.eventType !== "right") return;
+        const turn = turnGridPage({
+          direction: event.eventType,
+          focusedIndex: focusedGridIndex,
+          pageOffset,
+          itemCount: activeCards.length,
+          columns: gridColumns,
+          pageSize,
+        });
+        if (!turn) return;
+        setPageOffsets((prev) => ({ ...prev, [mode]: turn.pageOffset }));
+        setFocusedGridIndex(turn.focusedIndex);
       },
     );
 
@@ -632,7 +599,6 @@ export default function TVHomeScreen() {
     focusedGridIndex,
     gridColumns,
     isGridFocused,
-    maxOffset,
     mode,
     pageItems.length,
     pageOffset,

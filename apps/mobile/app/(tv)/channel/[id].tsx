@@ -40,13 +40,14 @@ import {
 import {
   TV_GRID_GAP,
   TV_GRID_SIDE_PADDING,
-  clampGridFocusIndex,
+  getLastPageOffset,
   getTVGridCardHeight,
   getTVGridCardWidth,
   getTVGridColumns,
   getTVGridPageSize,
   isLeftEdgeGridIndex,
   isRightEdgeGridIndex,
+  turnGridPage,
 } from "../../../components/tv/grid";
 import { useLibraryCatalog } from "../../../core/hooks/useLibraryCatalog";
 import { offlineCopy } from "../../../services/offline-copy";
@@ -342,8 +343,10 @@ export default function TVChannelDetailScreen() {
   const cards = view.cards;
   const gridKey = openedPlaylist ? `playlist-${openedPlaylist.id}` : "channel";
 
-  const maxOffset = Math.max(0, cards.length - pageSize);
-  const clampedOffset = Math.min(pageOffset, maxOffset);
+  const clampedOffset = Math.min(
+    Math.floor(pageOffset / pageSize) * pageSize,
+    getLastPageOffset(cards.length, pageSize),
+  );
   const pageItems = useMemo(
     () => cards.slice(clampedOffset, clampedOffset + pageSize),
     [cards, clampedOffset, pageSize],
@@ -395,42 +398,18 @@ export default function TVChannelDetailScreen() {
           return;
         }
 
-        if (
-          event.eventType === "right" &&
-          isRightEdgeGridIndex(focusedGridIndex, gridColumns, pageItems.length)
-        ) {
-          const nextOffset = Math.min(clampedOffset + 1, maxOffset);
-          if (nextOffset !== clampedOffset) {
-            const nextGlobalIndex = Math.min(
-              clampedOffset + focusedGridIndex + 1,
-              cards.length - 1,
-            );
-            const nextPageCount = Math.min(pageSize, cards.length - nextOffset);
-            setPageOffset(nextOffset);
-            setFocusedGridIndex(
-              clampGridFocusIndex(nextGlobalIndex, nextOffset, nextPageCount),
-            );
-          }
-        }
-
-        if (
-          event.eventType === "left" &&
-          isLeftEdgeGridIndex(focusedGridIndex, gridColumns) &&
-          clampedOffset > 0
-        ) {
-          const nextOffset = Math.max(0, clampedOffset - 1);
-          if (nextOffset !== clampedOffset) {
-            const nextGlobalIndex = Math.max(
-              clampedOffset + focusedGridIndex - 1,
-              0,
-            );
-            const nextPageCount = Math.min(pageSize, cards.length - nextOffset);
-            setPageOffset(nextOffset);
-            setFocusedGridIndex(
-              clampGridFocusIndex(nextGlobalIndex, nextOffset, nextPageCount),
-            );
-          }
-        }
+        if (event.eventType !== "left" && event.eventType !== "right") return;
+        const turn = turnGridPage({
+          direction: event.eventType,
+          focusedIndex: focusedGridIndex,
+          pageOffset: clampedOffset,
+          itemCount: cards.length,
+          columns: gridColumns,
+          pageSize,
+        });
+        if (!turn) return;
+        setPageOffset(turn.pageOffset);
+        setFocusedGridIndex(turn.focusedIndex);
       },
     );
 
@@ -443,7 +422,6 @@ export default function TVChannelDetailScreen() {
     focusedGridIndex,
     gridColumns,
     isGridFocused,
-    maxOffset,
     pageItems.length,
     pageSize,
     isTVMessageOpen,

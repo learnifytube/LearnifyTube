@@ -43,11 +43,47 @@ export function isLeftEdgeGridIndex(index: number, columns: number): boolean {
   return index % columns === 0;
 }
 
-export function clampGridFocusIndex(
-  nextGlobalIndex: number,
-  nextOffset: number,
-  nextPageCount: number,
-): number {
-  if (nextPageCount <= 0) return 0;
-  return Math.max(0, Math.min(nextGlobalIndex - nextOffset, nextPageCount - 1));
+/** Where the last page starts. The grid pages a whole page at a time, so cards never reflow. */
+export function getLastPageOffset(itemCount: number, pageSize: number) {
+  if (itemCount <= 0) return 0;
+  return Math.floor((itemCount - 1) / pageSize) * pageSize;
+}
+
+/**
+ * Right from the right column shows the next page, Left from the left column the previous
+ * one, keeping focus on the same row. Null when the press stays on this page.
+ */
+export function turnGridPage({
+  direction,
+  focusedIndex,
+  pageOffset,
+  itemCount,
+  columns,
+  pageSize,
+}: {
+  direction: "left" | "right";
+  focusedIndex: number;
+  pageOffset: number;
+  itemCount: number;
+  columns: number;
+  pageSize: number;
+}) {
+  const pageCount = Math.min(pageSize, itemCount - pageOffset);
+  const row = Math.floor(focusedIndex / columns);
+
+  if (direction === "right") {
+    if (!isRightEdgeGridIndex(focusedIndex, columns, pageCount)) return null;
+    const nextOffset = pageOffset + pageSize;
+    if (nextOffset > getLastPageOffset(itemCount, pageSize)) return null;
+    const nextCount = Math.min(pageSize, itemCount - nextOffset);
+    return {
+      pageOffset: nextOffset,
+      focusedIndex: Math.min(row * columns, nextCount - 1),
+    };
+  }
+
+  if (!isLeftEdgeGridIndex(focusedIndex, columns)) return null;
+  const nextOffset = pageOffset - pageSize;
+  if (nextOffset < 0) return null;
+  return { pageOffset: nextOffset, focusedIndex: row * columns + columns - 1 };
 }

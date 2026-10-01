@@ -77,6 +77,13 @@ import type {
   RemoteVideoWithStatus,
 } from "../../types";
 
+const TABS: Array<{ mode: TVBrowseMode; label: string }> = [
+  { mode: "playlists", label: "Playlists" },
+  { mode: "mylists", label: "My Lists" },
+  { mode: "channels", label: "Channels" },
+  { mode: "history", label: "History" },
+];
+
 const CATALOG_ERROR =
   "Couldn't load everything from the desktop. Press refresh to try again.";
 
@@ -202,6 +209,14 @@ export default function TVHomeScreen() {
     Array<number | undefined>
   >([]);
   const cardRefs = useRef<Array<TVFocusPressableHandle | null>>([]);
+  const tabRefs = useRef<
+    Partial<Record<TVBrowseMode, TVFocusPressableHandle | null>>
+  >({});
+  const settingsRef = useRef<TVFocusPressableHandle>(null);
+  // Up from the top row goes to the selected tab, not the nearest header button.
+  const [selectedTabHandle, setSelectedTabHandle] = useState<number>();
+  // Right on Settings, the last header button, stays put rather than losing focus.
+  const [settingsHandle, setSettingsHandle] = useState<number>();
   // Back on the tabs exits the app; from anywhere else it goes up to the selected tab.
   // hasTVPreferredFocus only moves focus when it turns true, so the selected tab's is
   // released for one render first, then set.
@@ -230,6 +245,19 @@ export default function TVHomeScreen() {
   useEffect(() => {
     if (tabFocus === "released") setTabFocus("selected");
   }, [tabFocus]);
+
+  useEffect(() => {
+    const tab = tabRefs.current[mode];
+    setSelectedTabHandle(tab ? (findNodeHandle(tab) ?? undefined) : undefined);
+  }, [mode]);
+
+  useEffect(() => {
+    setSettingsHandle(
+      settingsRef.current
+        ? (findNodeHandle(settingsRef.current) ?? undefined)
+        : undefined,
+    );
+  }, []);
 
   const hasTabPreferredFocus = (tab: TVBrowseMode) =>
     tabFocus === "initial"
@@ -473,11 +501,7 @@ export default function TVHomeScreen() {
     [activeCards, pageOffset, pageSize],
   );
 
-  useEffect(() => {
-    setCardNodeHandles([]);
-    cardRefs.current = [];
-  }, [mode, pageItems.length, pageOffset]);
-
+  // The cards' ref callbacks run before this, so it reads the page just rendered.
   useEffect(() => {
     setCardNodeHandles(
       pageItems.map((_, index) => {
@@ -593,44 +617,23 @@ export default function TVHomeScreen() {
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <View style={styles.controlsRow}>
         <View style={styles.modeTabs}>
-          <TVFocusPressable
-            style={[
-              styles.modeTab,
-              mode === "playlists" && styles.modeTabActive,
-            ]}
-            onPress={() => setMode("playlists")}
-            {...tabFocusHandlers}
-            hasTVPreferredFocus={hasTabPreferredFocus("playlists")}
-          >
-            <Text style={styles.modeTabText}>Playlists</Text>
-          </TVFocusPressable>
-          <TVFocusPressable
-            style={[styles.modeTab, mode === "mylists" && styles.modeTabActive]}
-            onPress={() => setMode("mylists")}
-            {...tabFocusHandlers}
-            hasTVPreferredFocus={hasTabPreferredFocus("mylists")}
-          >
-            <Text style={styles.modeTabText}>My Lists</Text>
-          </TVFocusPressable>
-          <TVFocusPressable
-            style={[
-              styles.modeTab,
-              mode === "channels" && styles.modeTabActive,
-            ]}
-            onPress={() => setMode("channels")}
-            {...tabFocusHandlers}
-            hasTVPreferredFocus={hasTabPreferredFocus("channels")}
-          >
-            <Text style={styles.modeTabText}>Channels</Text>
-          </TVFocusPressable>
-          <TVFocusPressable
-            style={[styles.modeTab, mode === "history" && styles.modeTabActive]}
-            onPress={() => setMode("history")}
-            {...tabFocusHandlers}
-            hasTVPreferredFocus={hasTabPreferredFocus("history")}
-          >
-            <Text style={styles.modeTabText}>History</Text>
-          </TVFocusPressable>
+          {TABS.map((tab) => (
+            <TVFocusPressable
+              key={tab.mode}
+              ref={(node) => {
+                tabRefs.current[tab.mode] = node;
+              }}
+              style={[
+                styles.modeTab,
+                mode === tab.mode && styles.modeTabActive,
+              ]}
+              onPress={() => setMode(tab.mode)}
+              {...tabFocusHandlers}
+              hasTVPreferredFocus={hasTabPreferredFocus(tab.mode)}
+            >
+              <Text style={styles.modeTabText}>{tab.label}</Text>
+            </TVFocusPressable>
+          ))}
         </View>
 
         <View style={styles.iconActions}>
@@ -655,9 +658,11 @@ export default function TVHomeScreen() {
             )}
           </TVFocusPressable>
           <TVFocusPressable
+            ref={settingsRef}
             style={styles.iconButton}
             onPress={() => router.push("/(tv)/settings" as Href)}
             onFocus={() => setIsGridFocused(false)}
+            nextFocusRight={settingsHandle}
           >
             <Settings size={24} color="#fffef2" />
           </TVFocusPressable>
@@ -726,7 +731,10 @@ export default function TVHomeScreen() {
                 title={item.title}
                 subtitle={item.subtitle}
                 thumbnailUrl={item.thumbnailUrl}
-                hasTVPreferredFocus={index === focusedGridIndex}
+                // Only while paging: a tab press remounts the grid too, and must keep focus.
+                hasTVPreferredFocus={
+                  isGridFocused && index === focusedGridIndex
+                }
                 onFocus={() => {
                   setIsGridFocused(true);
                   isTabFocused.current = false;
@@ -740,7 +748,7 @@ export default function TVHomeScreen() {
                 nextFocusRight={cardNodeHandles[rightTargetIndex]}
                 nextFocusUp={
                   upTargetIndex === undefined
-                    ? undefined
+                    ? selectedTabHandle
                     : cardNodeHandles[upTargetIndex]
                 }
                 nextFocusDown={cardNodeHandles[downTargetIndex]}

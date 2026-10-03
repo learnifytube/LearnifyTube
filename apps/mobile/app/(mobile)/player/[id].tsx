@@ -56,6 +56,7 @@ export default function PlayerScreen() {
   const [captionsOn, setCaptionsOn] = useState(false);
   const [captionText, setCaptionText] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<Transcript | null>(null);
+  const [isVideoViewReady, setIsVideoViewReady] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -93,6 +94,13 @@ export default function PlayerScreen() {
     instance.showNowPlayingNotification = true;
     instance.play();
   });
+
+  useEffect(() => {
+    setIsVideoViewReady(false);
+    if (!sourceUri) return;
+    const timeout = setTimeout(() => setIsVideoViewReady(true), 0);
+    return () => clearTimeout(timeout);
+  }, [sourceUri, id]);
 
   useWatchProgressRecorder(player, video);
 
@@ -178,7 +186,12 @@ export default function PlayerScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <Pressable style={styles.back} onPress={goBack} accessibilityLabel="Back">
+      <Pressable
+        testID="player-back"
+        style={styles.back}
+        onPress={goBack}
+        accessibilityLabel="Back"
+      >
         <ArrowLeft size={22} color={colors.foreground} />
       </Pressable>
 
@@ -206,14 +219,17 @@ export default function PlayerScreen() {
         </View>
       ) : null}
 
-      {sourceUri ? (
+      {sourceUri && isVideoViewReady ? (
         <VideoView
+          key={`${id}:${sourceUri}`}
           player={player}
           style={styles.video}
-          nativeControls
+          nativeControls={false}
           contentFit="contain"
         />
-      ) : null}
+      ) : (
+        <View style={styles.video} />
+      )}
 
       {captionsOn && captionText ? (
         <View style={[styles.caption, { bottom: insets.bottom + 72 }]} pointerEvents="none">
@@ -227,6 +243,7 @@ export default function PlayerScreen() {
         </Text>
         <View style={styles.actions}>
           <Pressable
+            testID="previous-video"
             onPress={() => {
               const prev = playPrevious();
               if (prev) router.replace(`/player/${prev.id}`);
@@ -240,6 +257,7 @@ export default function PlayerScreen() {
             />
           </Pressable>
           <Pressable
+            testID="captions-toggle"
             onPress={() => setCaptionsOn((value) => !value)}
             accessibilityLabel="Captions"
           >
@@ -249,6 +267,7 @@ export default function PlayerScreen() {
             />
           </Pressable>
           <Pressable
+            testID="next-video"
             onPress={() => {
               const next = playNext();
               if (next) router.replace(`/player/${next.id}`);
@@ -320,9 +339,14 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   chrome: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
-    backgroundColor: "#000",
+    backgroundColor: "rgba(0,0,0,0.55)",
     gap: spacing.sm,
   },
   title: {

@@ -9,6 +9,7 @@ import {
   SyncCompatibilityError,
 } from "../sync-compatibility";
 import { useConnectionStore } from "../../stores/connection";
+import { verifyDesktopUrl } from "../verify-desktop";
 import {
   createDesktopConnection,
   DEFAULT_SYNC_PORT,
@@ -91,6 +92,7 @@ const platform: DesktopConnectionPlatform = {
     DEFAULT_SYNC_PORT,
     LEGACY_SYNC_PORT,
   ]),
+  pinnedUrl: verifyDesktopUrl,
   clock: {
     setTimeout: (fn, ms) => setTimeout(fn, ms),
     clearTimeout: (timer) =>

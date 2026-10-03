@@ -13,6 +13,7 @@ function createHarness({
   savedUrl = null as string | null,
   pairingCode = "CODE" as string | null,
   fallbackUrls = [] as string[],
+  pinnedUrl = undefined as string | undefined,
 } = {}) {
   let now = 0;
   let nextTimerId = 1;
@@ -60,6 +61,7 @@ function createHarness({
       saved.pairingCode = code;
     },
     fallbackUrls,
+    pinnedUrl,
     clock: {
       setTimeout: (fn, ms) => {
         const id = nextTimerId++;
@@ -211,6 +213,26 @@ describe("Desktop connection", () => {
     h.desktopAt("http://10.0.2.2:53318", ok());
     await h.advance(3_000);
     expect(h.connection.getState().url).toBe("http://10.0.2.2:53318");
+  });
+
+  it("tries only the pinned desktop, ignoring saved, discovered and fallback ones", async () => {
+    const pinned = "http://10.0.2.2:53318";
+    const h = createHarness({
+      savedUrl: SAVED,
+      fallbackUrls: [pinned, "http://10.0.2.2:8384"],
+      pinnedUrl: pinned,
+    });
+    await h.start();
+    await h.peerFound({ host: "192.168.1.30", port: 53318 });
+    await h.advance(3_000);
+    expect(new Set(h.requests)).toEqual(new Set([pinned]));
+
+    h.desktopAt(pinned, ok());
+    await h.advance(60_000);
+    expect(h.connection.getState()).toMatchObject({
+      status: "connected",
+      url: pinned,
+    });
   });
 
   it("stops retrying on a rejected pairing code until a new one is entered", async () => {

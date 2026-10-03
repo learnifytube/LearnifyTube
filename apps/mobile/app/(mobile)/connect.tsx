@@ -20,6 +20,7 @@ import { useLibraryStore } from "../../stores/library";
 import { downloadQueue } from "../../services/download-queue";
 import { ensureDiscoveryPermissions } from "../../services/discovery-permissions";
 import { startScanning, stopScanning } from "../../services/p2p/discovery";
+import { verifyDesktopUrl } from "../../services/verify-desktop";
 import {
   assertSyncCompatibility,
   SyncCompatibilityError,
@@ -115,7 +116,7 @@ function buildDiscoveredConnectUrls(device: DiscoveredPeer): string[] {
 }
 
 export default function ConnectScreen() {
-  const [ipAddress, setIpAddress] = useState("");
+  const [ipAddress, setIpAddress] = useState(verifyDesktopUrl ?? "");
   const [isConnecting, setIsConnecting] = useState(false);
   const [remoteVideos, setRemoteVideos] = useState<RemoteVideo[]>([]);
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
@@ -128,6 +129,7 @@ export default function ConnectScreen() {
 
   // Start mDNS scanning on mount
   useEffect(() => {
+    if (verifyDesktopUrl) return;
     let cancelled = false;
 
     const beginScanning = async () => {

@@ -45,6 +45,8 @@ export type DesktopConnectionPlatform = {
   savePairingCode: (code: string) => void;
   /** Other addresses to try when the saved one fails, such as the emulator's host. */
   fallbackUrls: string[];
+  /** When set, the only address ever tried (verify builds keep off the user's own desktop). */
+  pinnedUrl?: string;
   clock: {
     setTimeout: (fn: () => void, ms: number) => Timer;
     clearTimeout: (timer: Timer) => void;
@@ -169,6 +171,7 @@ export function createDesktopConnection(platform: DesktopConnectionPlatform) {
     platform.isForeground();
 
   const candidates = () => {
+    if (platform.pinnedUrl) return [platform.pinnedUrl];
     const alternatePorts = savedUrl
       ? [DEFAULT_SYNC_PORT, LEGACY_SYNC_PORT].map((port) =>
           withPort(savedUrl!, port),

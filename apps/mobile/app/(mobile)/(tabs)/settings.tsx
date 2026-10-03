@@ -33,6 +33,7 @@ import {
 } from "../../../services/app-update";
 import { ensureDiscoveryPermissions } from "../../../services/discovery-permissions";
 import { logger, type AppLogEntry } from "../../../services/logger";
+import { verifyDesktopUrl } from "../../../services/verify-desktop";
 import type { DiscoveredPeer } from "../../../types";
 
 const DEFAULT_SYNC_PORT = 53318;
@@ -142,7 +143,7 @@ export default function SettingsScreen() {
   const [logPage, setLogPage] = useState(0);
 
   // Connection state
-  const [ipAddress, setIpAddress] = useState("");
+  const [ipAddress, setIpAddress] = useState(verifyDesktopUrl ?? "");
   const [isConnecting, setIsConnecting] = useState(false);
   const [discoveredDevices, setDiscoveredDevices] = useState<DiscoveredPeer[]>(
     []
@@ -151,7 +152,7 @@ export default function SettingsScreen() {
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanDebugDetails, setScanDebugDetails] = useState<string | null>(null);
   const [scanAttempt, setScanAttempt] = useState(0);
-  const [showManualInput, setShowManualInput] = useState(false);
+  const [showManualInput, setShowManualInput] = useState(!!verifyDesktopUrl);
   const [manualConnectError, setManualConnectError] = useState<string | null>(null);
   const [manualConnectDebugDetails, setManualConnectDebugDetails] = useState<string | null>(
     null
@@ -198,7 +199,7 @@ export default function SettingsScreen() {
 
   // mDNS scanning when not connected
   useEffect(() => {
-    if (isConnected) {
+    if (isConnected || verifyDesktopUrl) {
       setIsScanning(false);
       setScanError(null);
       setScanDebugDetails(null);

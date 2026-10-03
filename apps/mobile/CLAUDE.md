@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Expo app (phone + Android TV) that syncs downloaded YouTube videos from the LearnifyTube desktop app over local WiFi and plays them offline with transcripts, word lookup, and flashcards.
+Expo app (phone + Android TV) that pulls Videos from the LearnifyTube desktop app over local WiFi and plays them, including Offline.
 
 ## Commands
 
@@ -22,7 +22,7 @@ Phone/TV UI against an isolated desktop: `.cursor/skills/verify/SKILL.md`. AVDs 
 
 `app/index.tsx` redirects to `app/(mobile)` or `app/(tv)` via `getAppSurface()` (`core/hooks/useAppSurface.ts`: `EXPO_PUBLIC_APP_SURFACE`, else `Platform.isTV`).
 
-- `app/(mobile)` — phone: tab navigator, player, sync, share (P2P), saved playlists.
+- `app/(mobile)` — phone: Home catalog, On this phone, player, pairing, share (P2P).
 - `app/(tv)` — Android TV: d-pad navigation, player with overlay controls, channel browsing.
 
 On the TV, hardware Back goes through one handler that `app/(tv)/_layout.tsx` mounts (`components/tv/tvBack.ts`): it pops the stack, lands on the TV home when there's nothing to pop, and exits from the home screen. A screen takes Back first with `useTVBackInterceptor` (the home grid, a channel's open playlist). `app/+native-intent.tsx` sends `learnify://` deep links into the TV group on the TV surface. Keep `predictiveBackGestureEnabled` off in `app.json`: with it on, Android 13–15 finish the activity on Back without telling JS.

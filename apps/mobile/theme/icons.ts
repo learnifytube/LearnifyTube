@@ -21,6 +21,7 @@ export {
   MoreVertical,
   Home,
   Inbox,
+  Captions,
 
   // Media & Content
   Play,

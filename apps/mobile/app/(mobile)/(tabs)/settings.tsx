@@ -742,7 +742,7 @@ export default function SettingsScreen() {
 
         {/* Translation Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Translation</Text>
+          <Text style={styles.sectionTitle}>Captions</Text>
           <Pressable
             style={(state) => [
               styles.settingRow,
@@ -751,9 +751,9 @@ export default function SettingsScreen() {
             onPress={() => setShowLangPicker(true)}
           >
             <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>Target Language</Text>
+              <Text style={styles.settingLabel}>Caption language</Text>
               <Text style={styles.settingDescription}>
-                Words will be translated to this language
+                Captions on the player use this language when it is available
               </Text>
             </View>
             <View style={styles.settingValue}>

@@ -1,7 +1,7 @@
 import { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "../../../theme";
-import { Radio, Layers, Clock, Library, Settings } from "../../../theme/icons";
+import { Home, Smartphone, Settings } from "../../../theme/icons";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
@@ -12,13 +12,6 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        headerStyle: {
-          backgroundColor: colors.card,
-        },
-        headerTintColor: colors.foreground,
-        headerTitleStyle: {
-          fontWeight: "600",
-        },
         tabBarStyle: {
           backgroundColor: colors.background,
           borderTopColor: colors.border,
@@ -39,44 +32,19 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Channels",
-          headerTitle: "LearnifyTube",
+          title: "Home",
           tabBarIcon: ({ focused, color }) => (
-            <Radio size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="flashcards"
-        options={{
-          title: "Flashcards",
-          tabBarIcon: ({ focused, color }) => (
-            <Layers size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="history"
-        options={{
-          title: "History",
-          tabBarIcon: ({ focused, color }) => (
-            <Clock size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
+            <Home size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),
         }}
       />
       <Tabs.Screen
         name="library"
         options={{
-          title: "Library",
+          title: "On this phone",
           tabBarIcon: ({ focused, color }) => (
-            <Library size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
+            <Smartphone size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="lists"
-        options={{
-          href: null,
         }}
       />
       <Tabs.Screen
@@ -88,6 +56,9 @@ export default function TabsLayout() {
           ),
         }}
       />
+      <Tabs.Screen name="flashcards" options={{ href: null }} />
+      <Tabs.Screen name="history" options={{ href: null }} />
+      <Tabs.Screen name="lists" options={{ href: null }} />
     </Tabs>
   );
 }

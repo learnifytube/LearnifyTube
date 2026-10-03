@@ -28,6 +28,7 @@ interface VideoGridCardProps {
     video: VideoGridCardData;
     pending?: PendingState;
     onPress: () => void;
+    onLongPress?: () => void;
     onCancelPress?: () => void;
     subtitle?: string;
 }
@@ -45,6 +46,7 @@ export function VideoGridCard({
     video,
     pending = { type: "none" },
     onPress,
+    onLongPress,
     onCancelPress,
     subtitle,
 }: VideoGridCardProps) {
@@ -54,6 +56,7 @@ export function VideoGridCard({
         <Pressable
             style={({ pressed }) => [styles.card, pressed && !isPending && styles.cardPressed]}
             onPress={onPress}
+            onLongPress={onLongPress}
             disabled={isPending}
         >
             <View style={styles.thumbnailContainer}>

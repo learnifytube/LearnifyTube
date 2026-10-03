@@ -11,3 +11,4 @@ Two apps, one sync protocol:
 - **Issues** — GitHub Issues on `learnifytube/LearnifyTube` via `gh`. Commands: `docs/agents/issue-tracker.md`.
 - **Triage labels** — role-to-label mapping: `docs/agents/triage-labels.md`.
 - **Domain docs** — glossary (`CONTEXT.md`) and ADR layout: `docs/agents/domain.md`.
+- **Verify** — isolated desktop + phone + TV screenshots and pairing: `.cursor/skills/verify/SKILL.md`.

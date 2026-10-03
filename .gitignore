@@ -40,6 +40,8 @@ local.db*
 *.log
 *.tsbuildinfo
 
+.cursor/skills/verify/out/
+
 .idea/
 .vscode/
 .DS_Store

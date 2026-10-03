@@ -1,0 +1,16 @@
+appId: com.learnifytube.mobile
+---
+- launchApp:
+    appId: com.learnifytube.mobile
+- openLink: learnify://connect
+- tapOn:
+    id: pairing-code-input
+- eraseText
+- inputText: "VERFY234"
+- tapOn:
+    id: tv-connect-submit
+- extendedWaitUntil:
+    visible:
+      text: "Little Science Lab"
+    timeout: 20000
+- takeScreenshot: tv-home-after-pair

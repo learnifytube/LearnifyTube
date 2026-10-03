@@ -16,6 +16,8 @@ npm test                    # jest-expo
 
 Verify with `test`, `type-check`, `lint`, and `check:ui-boundaries`. Tests exercise modules through their public interface with a fake platform built via the module's factory; no module mocking.
 
+Phone/TV UI against an isolated desktop: `.cursor/skills/verify/SKILL.md`. AVDs are `LearnifyPhone` and `LearnifyTV` (`npm run emulator:phone` / `emulator:tv`).
+
 ## Two Surfaces
 
 `app/index.tsx` redirects to `app/(mobile)` or `app/(tv)` via `getAppSurface()` (`core/hooks/useAppSurface.ts`: `EXPO_PUBLIC_APP_SURFACE`, else `Platform.isTV`).

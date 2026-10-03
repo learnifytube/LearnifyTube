@@ -1,0 +1,15 @@
+appId: com.learnifytube.mobile
+---
+- launchApp:
+    appId: com.learnifytube.mobile
+- openLink: learnify://connect
+- tapOn:
+    id: pairing-code-input
+- eraseText
+- inputText: "VERFY234"
+- tapOn:
+    id: connect-submit
+- extendedWaitUntil:
+    visible: "Available Videos"
+    timeout: 15000
+- takeScreenshot: phone-paired-videos

@@ -7,6 +7,7 @@ import {
   findNodeHandle,
 } from "react-native";
 import { useLocalSearchParams, router, type Href } from "expo-router";
+import { goBackOrTVHome } from "../../../components/tv/tvBack";
 import { useVideoPlayer, VideoView, type VideoPlayer } from "expo-video";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLibraryStore } from "../../../stores/library";
@@ -368,7 +369,7 @@ export default function TVPlayerScreen() {
     }
     navigationLockVideoIdRef.current = id;
     showNotice(desktopGoneNothingLeft);
-    router.back();
+    goBackOrTVHome();
   }, [goToIndex, id, lostNextIndex, showNotice]);
 
   useEffect(() => {
@@ -420,7 +421,7 @@ export default function TVPlayerScreen() {
             ) : null}
             <TVMessageButton
               label="Back"
-              onPress={() => router.back()}
+              onPress={goBackOrTVHome}
               hasTVPreferredFocus={!canRetry}
             />
           </TVMessageCard>

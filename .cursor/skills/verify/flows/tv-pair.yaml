@@ -1,16 +1,23 @@
 appId: com.learnifytube.mobile
 ---
-- launchApp:
-    appId: com.learnifytube.mobile
+# Cold-launch straight into connect: launchApp + openLink drops the link while
+# the bundle is still loading.
+- stopApp
 - openLink: learnify://connect
+- extendedWaitUntil:
+    visible:
+      id: pairing-code-input
+    timeout: 90000
 - tapOn:
     id: pairing-code-input
 - eraseText
 - inputText: "VERFY234"
+# While the TV keyboard is up Maestro only sees its window.
+- hideKeyboard
 - tapOn:
     id: tv-connect-submit
 - extendedWaitUntil:
     visible:
-      text: "Little Science Lab"
+      text: "Science for kids"
     timeout: 20000
 - takeScreenshot: tv-home-after-pair

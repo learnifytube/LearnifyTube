@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { router, type Href } from "expo-router";
+import { goBackOrTVHome } from "../../components/tv/tvBack";
 import { Logs } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { desktopConnection } from "../../services/desktop-connection";
@@ -226,10 +227,7 @@ export default function TVSettingsScreen() {
           <TVFocusPressable style={styles.logButton} onPress={openLogViewer}>
             <Logs size={20} color="#fffef2" />
           </TVFocusPressable>
-          <TVFocusPressable
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
+          <TVFocusPressable style={styles.backButton} onPress={goBackOrTVHome}>
             <Text style={styles.backText}>Back</Text>
           </TVFocusPressable>
         </View>

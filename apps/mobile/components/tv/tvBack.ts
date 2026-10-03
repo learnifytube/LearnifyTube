@@ -3,6 +3,18 @@ import { BackHandler } from "react-native";
 import { router, useIsFocused, usePathname, type Href } from "expo-router";
 
 /**
+ * Leaves the current TV screen: pops the stack, or lands on the TV home screen when
+ * there is nothing to pop (the screen was opened from a deep link).
+ */
+export function goBackOrTVHome() {
+  if (router.canGoBack()) {
+    router.back();
+    return;
+  }
+  router.replace("/(tv)" as Href);
+}
+
+/**
  * The TV's hardware Back fallback, mounted by the TV route group's layout: Back pops
  * the stack, lands on the TV home screen when there is nothing to pop (a deep link),
  * and exits the app from the home screen.

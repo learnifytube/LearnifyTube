@@ -52,7 +52,10 @@ import {
 import { useLibraryCatalog } from "../../../core/hooks/useLibraryCatalog";
 import { offlineCopy } from "../../../services/offline-copy";
 import { videoThumbnails } from "../../../services/video-thumbnails";
-import { useTVBackInterceptor } from "../../../components/tv/tvBack";
+import {
+  useTVBackInterceptor,
+  goBackOrTVHome,
+} from "../../../components/tv/tvBack";
 import { useTVMessage } from "../../../components/tv/TVMessage";
 import {
   channelNotFound,
@@ -304,7 +307,7 @@ export default function TVChannelDetailScreen() {
   }, [openedPlaylist]);
 
   const handleBack = () => {
-    if (!closePlaylist()) router.back();
+    if (!closePlaylist()) goBackOrTVHome();
   };
 
   useTVBackInterceptor(closePlaylist);

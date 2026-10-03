@@ -6,7 +6,7 @@ import {
   StyleSheet,
   TextInput,
 } from "react-native";
-import { router } from "expo-router";
+import { goBackOrTVHome } from "../../components/tv/tvBack";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useConnectionStore } from "../../stores/connection";
 import { colors } from "../../theme";
@@ -35,7 +35,7 @@ export default function TVConnectScreen() {
     const result = await desktopConnection.pair(code, target);
     setIsPairing(false);
     if (result.status === "connected") {
-      router.back();
+      goBackOrTVHome();
       return;
     }
     setFailure(describeConnectionProblem(result));
@@ -123,7 +123,7 @@ export default function TVConnectScreen() {
 
         <TVFocusPressable
           style={styles.secondaryButton}
-          onPress={() => router.back()}
+          onPress={goBackOrTVHome}
         >
           <Text style={styles.secondaryButtonText}>Back</Text>
         </TVFocusPressable>

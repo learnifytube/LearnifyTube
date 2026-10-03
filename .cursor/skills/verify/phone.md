@@ -11,7 +11,7 @@ EXPO_PUBLIC_APP_SURFACE=mobile \
 npm start
 ```
 
-`EXPO_PUBLIC_VERIFY_DESKTOP_URL` is read in `apps/mobile/services/verify-desktop.ts`. It pins `services/desktop-connection` to that URL and prefills the phone connect fields.
+`EXPO_PUBLIC_VERIFY_DESKTOP_URL` is read in `apps/mobile/services/verify-desktop.ts`. It pins `services/desktop-connection` to that URL, prefills the phone connect address, and sets the pairing code to `VERFY234` (so a previous session cannot keep a bad code).
 
 Load the app with `npm run android --prefix apps/mobile` if it is not already installed, or open it from the Expo dev client / `adb shell monkey -p com.learnifytube.mobile 1`.
 

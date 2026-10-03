@@ -18,7 +18,7 @@ import { X } from "../../theme/icons";
 import { api, PairingRequiredError } from "../../services/api";
 import { ensureDiscoveryPermissions } from "../../services/discovery-permissions";
 import { startScanning, stopScanning } from "../../services/p2p/discovery";
-import { verifyDesktopUrl } from "../../services/verify-desktop";
+import { verifyDesktopUrl, verifyPairingCode } from "../../services/verify-desktop";
 import {
   assertSyncCompatibility,
   SyncCompatibilityError,
@@ -125,6 +125,10 @@ export default function ConnectScreen() {
   const goHome = () => {
     router.replace("/(mobile)/(tabs)");
   };
+
+  useEffect(() => {
+    if (verifyPairingCode) setPairingCode(verifyPairingCode);
+  }, [setPairingCode]);
 
   // Start mDNS scanning on mount
   useEffect(() => {

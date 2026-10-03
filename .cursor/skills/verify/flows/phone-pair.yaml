@@ -2,14 +2,24 @@ appId: com.learnifytube.mobile
 ---
 - launchApp:
     appId: com.learnifytube.mobile
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 60000
 - openLink: learnify://connect
+- extendedWaitUntil:
+    visible: "Pair with desktop"
+    timeout: 10000
 - tapOn:
-    id: pairing-code-input
-- eraseText
-- inputText: "VERFY234"
+    text: "OK"
+    optional: true
 - tapOn:
     id: connect-submit
 - extendedWaitUntil:
     visible: "Little Science Lab"
-    timeout: 15000
+    timeout: 20000
 - takeScreenshot: phone-paired-home
+- tapOn: "Floating and sinking"
+- extendedWaitUntil:
+    visible: "Floating and sinking"
+    timeout: 20000
+- takeScreenshot: phone-player

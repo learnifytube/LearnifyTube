@@ -6,3 +6,6 @@
  */
 export const verifyDesktopUrl =
   process.env.EXPO_PUBLIC_VERIFY_DESKTOP_URL || undefined;
+
+/** Pairing code of the isolated desktop (verify skill). */
+export const verifyPairingCode = verifyDesktopUrl ? "VERFY234" : undefined;

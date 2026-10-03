@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAppSurface } from "../core/hooks/useAppSurface";
+import { verifyPairingCode } from "../services/verify-desktop";
 
 const isTV = getAppSurface() === "tv";
 
@@ -64,10 +65,14 @@ export const useConnectionStore = create<ConnectionStore>()(
       merge: (persisted, current) => {
         // Nothing is persisted on a fresh install.
         const saved = (persisted ?? {}) as Partial<ConnectionStore>;
-        if (!isTV) return { ...current, ...saved };
+        const withVerifyCode = verifyPairingCode
+          ? { pairingCode: verifyPairingCode }
+          : {};
+        if (!isTV) return { ...current, ...saved, ...withVerifyCode };
         return {
           ...current,
           ...saved,
+          ...withVerifyCode,
           serverUrl: null,
           savedUrl: saved.savedUrl ?? saved.serverUrl ?? null,
         };

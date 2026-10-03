@@ -15,6 +15,7 @@
     "knip": "knip",
     "test": "jest",
     "test:e2e": "playwright test",
+    "verify:seed": "tsx scripts/verify-seed.ts",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",

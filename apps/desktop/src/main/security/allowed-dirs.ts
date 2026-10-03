@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import defaultDb from "../../api/db";
 import { userPreferences } from "../../api/db/schema";
 import { logger } from "../../helpers/logger";
+import { thumbnailsDir } from "../../api/utils/ytdlp-utils/thumbnails-dir";
 
 /**
  * Base directories from which the app is allowed to serve files to the renderer
@@ -19,10 +20,15 @@ import { logger } from "../../helpers/logger";
 
 const getDefaultDownloadDir = (): string => path.join(app.getPath("downloads"), "LearnifyTube");
 
-// Thumbnails and transcripts are streamed from here.
+// Transcripts may still live here; do not put thumbnails under `cache/` — that is Chromium's Cache.
 const getCacheDir = (): string => path.join(app.getPath("userData"), "cache");
+const getThumbnailsDir = (): string => thumbnailsDir(app.getPath("userData"));
 
-const getStaticBaseDirs = (): string[] => [getDefaultDownloadDir(), getCacheDir()];
+const getStaticBaseDirs = (): string[] => [
+  getDefaultDownloadDir(),
+  getCacheDir(),
+  getThumbnailsDir(),
+];
 
 let cachedAllowedDirs: string[] | null = null;
 

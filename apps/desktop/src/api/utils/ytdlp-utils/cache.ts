@@ -1,9 +1,7 @@
-import { app } from "electron";
 import fs from "fs";
 import path from "path";
 import { logger } from "@/helpers/logger";
-
-const getThumbCacheDir = (): string => path.join(app.getPath("userData"), "cache", "thumbnails");
+import { getThumbCacheDir } from "./paths";
 
 async function ensureDir(p: string): Promise<void> {
   try {

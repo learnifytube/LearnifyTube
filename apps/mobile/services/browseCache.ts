@@ -6,6 +6,7 @@ import type {
 } from "../types";
 import { api } from "./api";
 import { cacheThumbnail } from "./thumbnailCache";
+import { resolveRemoteAssetUrl } from "./remoteAssetUrl";
 import {
   buildCachedPlaylistId,
   getAllSavedPlaylistsWithProgress,
@@ -19,30 +20,7 @@ import {
 } from "../db/repositories/playlists";
 import * as videoRepo from "../db/repositories/videos";
 
-export function resolveRemoteAssetUrl(
-  serverUrl: string | null,
-  assetUrl?: string | null
-): string | null {
-  const trimmed = assetUrl?.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
-    return trimmed;
-  }
-  if (trimmed.startsWith("//")) {
-    return `https:${trimmed}`;
-  }
-  if (!serverUrl) {
-    return trimmed;
-  }
-  if (trimmed.startsWith("/")) {
-    return `${serverUrl}${trimmed}`;
-  }
-
-  return `${serverUrl}/${trimmed}`;
-}
+export { resolveRemoteAssetUrl } from "./remoteAssetUrl";
 
 function getBrowseOrderTimestamp(startedAt: number, index: number): number {
   return Math.max(0, startedAt - index);

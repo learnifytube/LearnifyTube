@@ -117,7 +117,7 @@ async function main() {
   prepareFolder(dir);
 
   const mediaDir = path.join(dir, "downloads", "LearnifyTube");
-  const thumbDir = path.join(dir, "cache", "thumbnails");
+  const thumbDir = path.join(dir, "thumbnails");
   fs.mkdirSync(mediaDir, { recursive: true });
   fs.mkdirSync(thumbDir, { recursive: true });
 

@@ -62,6 +62,7 @@ function playRow(row: PhoneHomeRow, startIndex: number) {
 
 export default function HomeScreen() {
   const serverUrl = useConnectionStore((state) => state.serverUrl);
+  const savedUrl = useConnectionStore((state) => state.savedUrl);
   const connected = !!serverUrl;
   const { channels, playlists, myLists } = useBrowseCatalog();
   const onDeviceSet = useOnDeviceSetStore((state) => state.videos);
@@ -149,7 +150,7 @@ export default function HomeScreen() {
   );
 
   const empty = rows.length === 0;
-  const needsPairing = empty && !connected;
+  const needsPairing = empty && !connected && !savedUrl;
 
   if (openRow) {
     return (

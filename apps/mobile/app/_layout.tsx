@@ -14,6 +14,7 @@ import { useLibraryStore } from "../stores/library";
 import { useNavigationLogger } from "../hooks/useNavigationLogger";
 import { usePresencePublisher } from "../hooks/usePresencePublisher";
 import { useSelfUpdateCheck } from "../hooks/useSelfUpdateCheck";
+import { usePhoneDesktopHealth } from "../hooks/usePhoneDesktopHealth";
 import { colors } from "../theme";
 
 function DownloadQueueRunner() {
@@ -53,6 +54,11 @@ function PresencePublisher() {
 // The TV checks from its own layout, with TV messages.
 function PhoneSelfUpdateChecker() {
   useSelfUpdateCheck();
+  return null;
+}
+
+function PhoneDesktopHealth() {
+  usePhoneDesktopHealth();
   return null;
 }
 
@@ -143,7 +149,12 @@ export default function RootLayout() {
         <OfflineCopyScanner />
         <NavigationLogger />
         <PresencePublisher />
-        {getAppSurface() === "tv" ? null : <PhoneSelfUpdateChecker />}
+        {getAppSurface() === "tv" ? null : (
+          <>
+            <PhoneSelfUpdateChecker />
+            <PhoneDesktopHealth />
+          </>
+        )}
         <OrientationController />
         <StatusBar style="light" />
         <Stack

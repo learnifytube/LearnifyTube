@@ -1,10 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getAppSurface } from "../core/hooks/useAppSurface";
 import { verifyPairingCode } from "../services/verify-desktop";
-
-const isTV = getAppSurface() === "tv";
 
 interface ConnectionStore {
   // The desktop the app talks to right now. On the TV, the Desktop connection sets it while connected only.
@@ -20,6 +17,7 @@ interface ConnectionStore {
   setPairingCode: (code: string) => void;
   saveDesktop: (url: string, name: string) => void;
   forgetDesktop: () => void;
+  markOffline: () => void;
   disconnect: () => void;
   isConnected: () => boolean;
 }
@@ -36,6 +34,7 @@ export const useConnectionStore = create<ConnectionStore>()(
       setServerUrl: (url) =>
         set({
           serverUrl: url,
+          savedUrl: url,
           lastConnected: Date.now(),
         }),
 
@@ -48,9 +47,12 @@ export const useConnectionStore = create<ConnectionStore>()(
 
       forgetDesktop: () => set({ savedUrl: null, serverName: null }),
 
+      markOffline: () => set({ serverUrl: null }),
+
       disconnect: () =>
         set({
           serverUrl: null,
+          savedUrl: null,
           serverName: null,
           lastConnected: null,
         }),
@@ -60,15 +62,15 @@ export const useConnectionStore = create<ConnectionStore>()(
     {
       name: "learnify-connection",
       storage: createJSONStorage(() => AsyncStorage),
-      // On the TV, a desktop from the last session isn't connected until the Desktop connection
-      // checks it; before savedUrl existed, serverUrl was the only saved address.
+      // A desktop from the last session isn't connected until a health check
+      // (TV Desktop connection, phone usePhoneDesktopHealth). Before savedUrl
+      // existed, serverUrl was the only saved address.
       merge: (persisted, current) => {
         // Nothing is persisted on a fresh install.
         const saved = (persisted ?? {}) as Partial<ConnectionStore>;
         const withVerifyCode = verifyPairingCode
           ? { pairingCode: verifyPairingCode }
           : {};
-        if (!isTV) return { ...current, ...saved, ...withVerifyCode };
         return {
           ...current,
           ...saved,

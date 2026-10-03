@@ -10,6 +10,6 @@ appId: com.learnifytube.mobile
 - tapOn:
     id: connect-submit
 - extendedWaitUntil:
-    visible: "Available Videos"
+    visible: "Little Science Lab"
     timeout: 15000
-- takeScreenshot: phone-paired-videos
+- takeScreenshot: phone-paired-home

@@ -7,7 +7,6 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
-  FlatList,
   Pressable,
   TextInput,
 } from "react-native";
@@ -17,8 +16,6 @@ import { useConnectionStore } from "../../stores/connection";
 import { colors } from "../../theme";
 import { X } from "../../theme/icons";
 import { api, PairingRequiredError } from "../../services/api";
-import { useLibraryStore } from "../../stores/library";
-import { downloadQueue } from "../../services/download-queue";
 import { ensureDiscoveryPermissions } from "../../services/discovery-permissions";
 import { startScanning, stopScanning } from "../../services/p2p/discovery";
 import { verifyDesktopUrl } from "../../services/verify-desktop";
@@ -26,7 +23,7 @@ import {
   assertSyncCompatibility,
   SyncCompatibilityError,
 } from "../../services/sync-compatibility";
-import type { RemoteVideo, DiscoveredPeer } from "../../types";
+import type { DiscoveredPeer } from "../../types";
 
 const DEFAULT_SYNC_PORT = 53318;
 const LEGACY_SYNC_PORT = 8384;
@@ -119,14 +116,15 @@ function buildDiscoveredConnectUrls(device: DiscoveredPeer): string[] {
 export default function ConnectScreen() {
   const [ipAddress, setIpAddress] = useState(verifyDesktopUrl ?? "");
   const [isConnecting, setIsConnecting] = useState(false);
-  const [remoteVideos, setRemoteVideos] = useState<RemoteVideo[]>([]);
-  const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
   const [discoveredDevices, setDiscoveredDevices] = useState<DiscoveredPeer[]>([]);
   const [isScanning, setIsScanning] = useState(false);
 
   const { setServerUrl, setServerName, pairingCode, setPairingCode } =
     useConnectionStore();
-  const { addVideo } = useLibraryStore();
+
+  const goHome = () => {
+    router.replace("/(mobile)/(tabs)");
+  };
 
   // Start mDNS scanning on mount
   useEffect(() => {
@@ -209,9 +207,7 @@ export default function ConnectScreen() {
 
           setServerUrl(url);
           setServerName(info.name);
-          const videosResponse = await api.getVideos(url);
-          console.log("[Connect] Got", videosResponse.videos.length, "videos");
-          setRemoteVideos(videosResponse.videos);
+          goHome();
           return;
         } catch (error) {
           // Ignore AbortError - user navigated away before connection completed
@@ -273,8 +269,7 @@ export default function ConnectScreen() {
 
           setServerUrl(url);
           setServerName(info.name);
-          const videosResponse = await api.getVideos(url);
-          setRemoteVideos(videosResponse.videos);
+          goHome();
           return;
         } catch (error) {
           // Ignore AbortError - user navigated away before connection completed
@@ -313,62 +308,12 @@ export default function ConnectScreen() {
     }
   };
 
-  const toggleVideoSelection = (videoId: string) => {
-    setSelectedVideos((prev) => {
-      const next = new Set(prev);
-      if (next.has(videoId)) {
-        next.delete(videoId);
-      } else {
-        next.add(videoId);
-      }
-      return next;
-    });
-  };
-
-  const handleDownloadSelected = () => {
-    console.log(
-      "[Connect] handleDownloadSelected called, selected:",
-      selectedVideos.size
-    );
-
-    if (selectedVideos.size === 0) {
-      Alert.alert("No Videos Selected", "Please select videos to download");
-      return;
-    }
-
-    // Queue each selected video for download
-    for (const videoId of selectedVideos) {
-      const video = remoteVideos.find((v) => v.id === videoId);
-      if (!video) continue;
-
-      console.log("[Connect] Queueing download:", video.title);
-
-      // Add to library (the Offline copy module records its file)
-      addVideo({
-        id: video.id,
-        title: video.title,
-        channelTitle: video.channelTitle,
-        duration: video.duration,
-        thumbnailUrl: video.thumbnailUrl,
-      });
-
-      // Queue for download
-      downloadQueue.request(video);
-    }
-
-    Alert.alert(
-      "Downloads Queued",
-      `${selectedVideos.size} video${selectedVideos.size !== 1 ? "s" : ""} added to download queue`,
-      [{ text: "OK", onPress: () => router.back() }]
-    );
-  };
-
   const close = () => {
     if (router.canGoBack()) {
       router.back();
       return;
     }
-    router.replace("/(mobile)/(tabs)");
+    goHome();
   };
 
   return (
@@ -385,9 +330,6 @@ export default function ConnectScreen() {
         </Pressable>
       </View>
       <View style={styles.content}>
-        {remoteVideos.length === 0 ? (
-          <>
-            {/* Pairing code: the desktop rejects requests without it */}
             <Text style={styles.instruction}>
               Pairing code from desktop Settings → Sync:
             </Text>
@@ -506,77 +448,9 @@ export default function ConnectScreen() {
                 </Text>
               </View>
             )}
-          </>
-        ) : (
-          <>
-            <Text style={styles.sectionTitle}>
-              Available Videos ({remoteVideos.length})
-            </Text>
-            <FlatList
-              data={remoteVideos}
-              keyExtractor={(item) => item.id}
-              style={styles.videoList}
-              renderItem={({ item }) => (
-                <Pressable
-                  style={[
-                    styles.videoItem,
-                    selectedVideos.has(item.id) && styles.videoItemSelected,
-                  ]}
-                  onPress={() => toggleVideoSelection(item.id)}
-                >
-                  <View style={styles.checkbox}>
-                    {selectedVideos.has(item.id) && (
-                      <Text style={styles.checkmark}>✓</Text>
-                    )}
-                  </View>
-                  <View style={styles.videoInfo}>
-                    <Text style={styles.videoTitle} numberOfLines={2}>
-                      {item.title}
-                    </Text>
-                    <Text style={styles.videoChannel}>{item.channelTitle}</Text>
-                    <Text style={styles.videoMeta}>
-                      {formatDuration(item.duration)} • {formatFileSize(item.fileSize)}
-                    </Text>
-                  </View>
-                </Pressable>
-              )}
-            />
-            <View style={styles.footer}>
-              <Text style={styles.selectedCount}>
-                {selectedVideos.size} selected
-              </Text>
-              <Pressable
-                style={[
-                  styles.downloadButton,
-                  selectedVideos.size === 0 && styles.downloadButtonDisabled,
-                ]}
-                onPress={handleDownloadSelected}
-                disabled={selectedVideos.size === 0}
-              >
-                <Text style={styles.downloadButtonText}>Download Selected</Text>
-              </Pressable>
-            </View>
-          </>
-        )}
       </View>
     </SafeAreaView>
   );
-}
-
-function formatDuration(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  if (bytes < 1024 * 1024 * 1024) {
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 const styles = StyleSheet.create({
@@ -736,83 +610,5 @@ const styles = StyleSheet.create({
   scanningText: {
     color: "#a0a0a0",
     fontSize: 13,
-  },
-  sectionTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 16,
-  },
-  videoList: {
-    flex: 1,
-  },
-  videoItem: {
-    flexDirection: "row",
-    backgroundColor: "#1a1a2e",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-    alignItems: "center",
-  },
-  videoItemSelected: {
-    borderWidth: 2,
-    borderColor: "#e94560",
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: "#444",
-    marginRight: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkmark: {
-    color: "#e94560",
-    fontWeight: "bold",
-  },
-  videoInfo: {
-    flex: 1,
-  },
-  videoTitle: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: 4,
-  },
-  videoChannel: {
-    color: "#a0a0a0",
-    fontSize: 12,
-    marginBottom: 2,
-  },
-  videoMeta: {
-    color: "#666",
-    fontSize: 11,
-  },
-  footer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#1a1a2e",
-  },
-  selectedCount: {
-    color: "#a0a0a0",
-    fontSize: 14,
-  },
-  downloadButton: {
-    backgroundColor: "#e94560",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  downloadButtonDisabled: {
-    opacity: 0.5,
-  },
-  downloadButtonText: {
-    color: "#fff",
-    fontWeight: "600",
   },
 });

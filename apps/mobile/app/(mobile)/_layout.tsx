@@ -34,32 +34,13 @@ export default function MobileLayout() {
       <Stack.Screen
         name="connect"
         options={{
-          title: "Sync Videos",
+          title: "Pair with desktop",
           headerShown: false,
           presentation: "modal",
           headerStyle: {
             backgroundColor: colors.card,
           },
           headerTintColor: colors.foreground,
-        }}
-      />
-      <Stack.Screen
-        name="sync"
-        options={{
-          title: "Browse Server",
-          headerShown: false,
-          presentation: "modal",
-          headerStyle: {
-            backgroundColor: colors.card,
-          },
-          headerTintColor: colors.foreground,
-        }}
-      />
-      <Stack.Screen
-        name="saved-playlist/[id]"
-        options={{
-          headerShown: false,
-          presentation: "card",
         }}
       />
     </Stack>

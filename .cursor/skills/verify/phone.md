@@ -29,12 +29,12 @@ Maestro (desktop + Metro already up):
 maestro test .cursor/skills/verify/flows/phone-pair.yaml
 ```
 
-Code `VERFY234`. Address should already be `http://10.0.2.2:53318`. After connect, the screen lists seeded videos.
+Code `VERFY234`. Address should already be `http://10.0.2.2:53318`. After connect, Home opens (Continue watching / Sent to this phone / channel and list rows). There is no Download confirm.
 
 ## What to look at
 
-Tabs: Channels, Flashcards, History, Library, Settings. Player is a full-screen modal.
+Tabs: Home, On this phone, Settings. Player is a full-screen modal. Tap a poster to play; a Download starts in the background.
 
-Offline: stop **only** the verify Forge process (port 53318). Do not kill the user's app on 8384. Channels with cached catalog should still render; streaming a video without an Offline copy should explain itself.
+Offline: stop **only** the verify Forge process (port 53318). Do not kill the user's app on 8384. Home should keep rows that still have Offline copies; streaming a video without an Offline copy should explain itself.
 
 Screencap: `.cursor/skills/verify/scripts/adb-screencap.sh /tmp/learnify-verify-out/phone-channels.png`

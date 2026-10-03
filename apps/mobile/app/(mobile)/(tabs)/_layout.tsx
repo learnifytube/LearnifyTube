@@ -56,9 +56,6 @@ export default function TabsLayout() {
           ),
         }}
       />
-      <Tabs.Screen name="flashcards" options={{ href: null }} />
-      <Tabs.Screen name="history" options={{ href: null }} />
-      <Tabs.Screen name="lists" options={{ href: null }} />
     </Tabs>
   );
 }

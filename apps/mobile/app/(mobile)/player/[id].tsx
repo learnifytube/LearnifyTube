@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -22,17 +22,9 @@ import { api } from "../../../services/api";
 import { useWatchProgressRecorder } from "../../../hooks/useWatchProgressRecorder";
 import * as videoRepo from "../../../db/repositories/videos";
 import { colors, fontSize, fontWeight, spacing } from "../../../theme";
+import { currentCaption } from "../../../components/phone/captions";
 import { ArrowLeft, Captions, SkipBack, SkipForward } from "../../../theme/icons";
-import type { Transcript, TranscriptSegment } from "../../../types";
-
-function currentCaption(
-  segments: TranscriptSegment[] | undefined,
-  time: number,
-): string | null {
-  if (!segments?.length) return null;
-  const segment = segments.find((item) => time >= item.start && time < item.end);
-  return segment?.text ?? null;
-}
+import type { Transcript } from "../../../types";
 
 function failureText(failure: PlaybackFailure): string {
   if (failure.kind === "videoNotFound") return "This video isn't in the library.";

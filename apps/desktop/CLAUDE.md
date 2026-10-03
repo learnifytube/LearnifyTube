@@ -59,6 +59,7 @@ Resolved in `src/utils/paths.ts`:
 - **Dev** (`npm run dev`): `apps/desktop/local.db`
 - **Packaged**: `~/Library/Application Support/LearnifyTube/local.db`
 - **Custom**: set in Settings, stored in `<userData>/database-path.json`; overrides both. `LEARNIFYTUBE_FORCE_DEV_DB=true` ignores it.
+- **Isolated**: `LEARNIFYTUBE_USER_DATA_DIR=<dir>` (`src/main/userDataOverride.ts`) moves userData, the downloads folder and the database (`<dir>/local.db`) into `<dir>`, so a second desktop can run beside the installed app.
 
 ```bash
 sqlite3 local.db "SELECT video_id, title, download_status FROM youtube_videos WHERE download_status = 'failed';"

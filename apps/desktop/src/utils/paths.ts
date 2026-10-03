@@ -71,6 +71,10 @@ export const getDefaultDatabaseFilePath = (): string => {
   const forceDevDb = process.env.LEARNIFYTUBE_FORCE_DEV_DB === "true";
   const shouldUseDevDb = forceDevDb || !isPackaged;
 
+  if (process.env.LEARNIFYTUBE_USER_DATA_DIR) {
+    return path.join(getAppUserDataPath(), "local.db");
+  }
+
   if (shouldUseDevDb) {
     return resolveDevDatabasePath();
   }

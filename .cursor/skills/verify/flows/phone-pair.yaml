@@ -1,14 +1,14 @@
 appId: com.learnifytube.mobile
 ---
-- launchApp:
-    appId: com.learnifytube.mobile
-- extendedWaitUntil:
-    visible: "Home"
-    timeout: 60000
+# Cold-launch straight into connect: it opens the same way whether the phone
+# was on Home, the pair screen, or a splash, and a slow Metro bundle only
+# stretches the wait.
+- stopApp
 - openLink: learnify://connect
 - extendedWaitUntil:
-    visible: "Pair with desktop"
-    timeout: 10000
+    visible:
+      id: connect-submit
+    timeout: 90000
 - tapOn:
     text: "OK"
     optional: true
@@ -16,10 +16,11 @@ appId: com.learnifytube.mobile
     id: connect-submit
 - extendedWaitUntil:
     visible: "Little Science Lab"
-    timeout: 20000
+    timeout: 30000
 - takeScreenshot: phone-paired-home
 - tapOn: "Floating and sinking"
 - extendedWaitUntil:
-    visible: "Floating and sinking"
+    visible:
+      id: player-back
     timeout: 20000
 - takeScreenshot: phone-player

@@ -29,7 +29,15 @@ Maestro (desktop + Metro already up):
 maestro test .cursor/skills/verify/flows/phone-pair.yaml
 ```
 
-Code `VERFY234`. Address should already be `http://10.0.2.2:53318`. After connect, Home opens (Continue watching / Sent to this phone / channel and list rows). There is no Download confirm.
+The flow force-stops the app and cold-launches into `learnify://connect`, so it does not depend on Home rendering first. Code `VERFY234`. Address should already be `http://10.0.2.2:53318`. After connect, Home opens (Continue watching / Sent to this phone / channel and list rows). There is no Download confirm.
+
+Then See all + hardware Back, skip next/previous, and On this phone:
+
+```bash
+maestro test --test-output-dir /tmp/learnify-verify-out/maestro .cursor/skills/verify/flows/phone-browse.yaml
+```
+
+`takeScreenshot` PNGs land in `/tmp/learnify-verify-out/maestro/screenshots`. Verify builds turn off the LogBox banner (it covered the tab bar and caught taps); warnings still print in Metro. Use `testID`s (`row-see-all-<row id>`, `row-grid-back`, `player-back`, `next-video`, `previous-video`, `captions-toggle`) over truncated titles.
 
 ## What to look at
 

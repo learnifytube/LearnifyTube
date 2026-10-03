@@ -7,6 +7,7 @@ import {
   FlatList,
   Pressable,
   ActivityIndicator,
+  BackHandler,
 } from "react-native";
 import { router } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -76,6 +77,22 @@ export default function HomeScreen() {
     useCallback(() => {
       setHistoryTick((tick) => tick + 1);
     }, []),
+  );
+
+  // The See-all grid is local state, so hardware Back would otherwise exit the app.
+  // Scoped to focus so Back from the player still closes the player.
+  useFocusEffect(
+    useCallback(() => {
+      if (!openRow) return;
+      const subscription = BackHandler.addEventListener(
+        "hardwareBackPress",
+        () => {
+          setOpenRow(null);
+          return true;
+        },
+      );
+      return () => subscription.remove();
+    }, [openRow]),
   );
 
   useEffect(() => {
@@ -157,6 +174,7 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.container} edges={["top"]}>
         <View style={styles.header}>
           <Pressable
+            testID="row-grid-back"
             style={styles.backButton}
             onPress={() => setOpenRow(null)}
             accessibilityLabel="Back"
@@ -221,7 +239,11 @@ export default function HomeScreen() {
         ) : null}
         {rows.map((row) => (
           <View key={row.id} style={styles.rowBlock}>
-            <Pressable onPress={() => setOpenRow(row)} style={styles.rowHeader}>
+            <Pressable
+              testID={`row-see-all-${row.id}`}
+              onPress={() => setOpenRow(row)}
+              style={styles.rowHeader}
+            >
               <Text style={styles.rowTitle}>{row.title}</Text>
               <Text style={styles.rowMore}>See all</Text>
             </Pressable>
@@ -273,7 +295,11 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: spacing.sm,
   },
-  rowMore: { color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
+  rowMore: {
+    color: colors.primary,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+  },
   rowScroll: { paddingHorizontal: spacing.sm },
   poster: { width: POSTER_WIDTH },
   header: {
@@ -283,7 +309,12 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     gap: spacing.sm,
   },
-  backButton: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   headerTitle: {
     color: colors.foreground,
     fontSize: fontSize.xl,

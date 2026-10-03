@@ -1,5 +1,12 @@
 import { useEffect } from "react";
-import { View, Text, ActivityIndicator, StyleSheet, Platform } from "react-native";
+import {
+  View,
+  Text,
+  ActivityIndicator,
+  StyleSheet,
+  Platform,
+  LogBox,
+} from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -15,7 +22,12 @@ import { useNavigationLogger } from "../hooks/useNavigationLogger";
 import { usePresencePublisher } from "../hooks/usePresencePublisher";
 import { useSelfUpdateCheck } from "../hooks/useSelfUpdateCheck";
 import { usePhoneDesktopHealth } from "../hooks/usePhoneDesktopHealth";
+import { verifyDesktopUrl } from "../services/verify-desktop";
 import { colors } from "../theme";
+
+// The LogBox banner covers the tab bar and steals Maestro taps; warnings still
+// reach the Metro console.
+if (verifyDesktopUrl) LogBox.ignoreAllLogs();
 
 function DownloadQueueRunner() {
   useEffect(() => downloadQueue.start(), []);

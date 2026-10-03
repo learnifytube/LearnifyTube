@@ -188,7 +188,7 @@ export default function PlayerScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <Pressable
         testID="player-back"
-        style={styles.back}
+        style={[styles.back, { top: insets.top + spacing.md }]}
         onPress={goBack}
         accessibilityLabel="Back"
       >
@@ -291,7 +291,6 @@ const styles = StyleSheet.create({
   video: { flex: 1, backgroundColor: "#000" },
   back: {
     position: "absolute",
-    top: spacing.md,
     left: spacing.sm,
     zIndex: 2,
     width: 44,

@@ -1,0 +1,57 @@
+appId: com.learnifytube.mobile
+---
+# Run after phone-pair.yaml. Covers See all + hardware Back, skipping through a
+# row in the player, and the On this phone tab.
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: row-see-all-channel-UCverifyScience01
+    timeout: 60000
+- tapOn:
+    id: row-see-all-channel-UCverifyScience01
+- extendedWaitUntil:
+    visible:
+      id: row-grid-back
+    timeout: 5000
+- takeScreenshot: phone-see-all
+# Hardware Back closes the grid instead of leaving the app.
+- back
+- extendedWaitUntil:
+    visible:
+      id: row-see-all-channel-UCverifyScience01
+    timeout: 5000
+- tapOn:
+    id: row-see-all-channel-UCverifyScience01
+- tapOn: "Floating and sinking"
+- extendedWaitUntil:
+    visible:
+      id: player-back
+    timeout: 20000
+- takeScreenshot: phone-player-start
+- tapOn:
+    id: next-video
+- extendedWaitUntil:
+    visible: "Rainbows"
+    timeout: 20000
+- takeScreenshot: phone-player-next
+- tapOn:
+    id: previous-video
+- extendedWaitUntil:
+    visible: "Floating and sinking"
+    timeout: 20000
+# Back from the player lands on the grid it was opened from, then Home.
+- back
+- extendedWaitUntil:
+    visible:
+      id: row-grid-back
+    timeout: 5000
+- back
+- extendedWaitUntil:
+    visible:
+      id: row-see-all-channel-UCverifyScience01
+    timeout: 5000
+- tapOn: "On this phone"
+- extendedWaitUntil:
+    visible: "Floating and sinking"
+    timeout: 10000
+- takeScreenshot: phone-on-this-phone

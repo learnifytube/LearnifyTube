@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as http from "http";
 import * as os from "os";
+import { pipeline } from "stream";
 import { eq, and, inArray, count, desc, sql, lte, asc } from "drizzle-orm";
 import { logger } from "../helpers/logger";
 import defaultDb from "../api/db";
@@ -36,6 +37,20 @@ import {
   deviceReportSchema,
 } from "../../../shared/mobile-sync-contract";
 import { loadOnDeviceSet, recordDeviceReport } from "../api/on-device/store";
+
+// pipe() leaves the file open when the client hangs up mid-stream (a skip or seek);
+// pipeline() closes it.
+const streamFileToResponse = (
+  fileStream: fs.ReadStream,
+  res: http.ServerResponse,
+  errorMessage: string,
+  context: Record<string, unknown>
+): void => {
+  pipeline(fileStream, res, (err) => {
+    if (!err || err.code === "ERR_STREAM_PREMATURE_CLOSE") return;
+    logger.error(errorMessage, { ...context, error: err });
+  });
+};
 
 /**
  * HTTP server for mobile sync - allows the mobile companion app
@@ -782,8 +797,6 @@ const createMobileSyncServer = (): MobileSyncServer => {
           fileSize,
         });
 
-        const fileStream = fs.createReadStream(filePath, { start, end });
-
         res.writeHead(206, {
           "Content-Range": `bytes ${start}-${end}/${fileSize}`,
           "Accept-Ranges": "bytes",
@@ -792,15 +805,12 @@ const createMobileSyncServer = (): MobileSyncServer => {
           "Cache-Control": "no-cache",
         });
 
-        fileStream.pipe(res);
-
-        fileStream.on("error", (err) => {
-          logger.error("[MobileSyncServer] Stream error", { videoId, error: err });
-          if (!res.headersSent) {
-            res.writeHead(500);
-          }
-          res.end();
-        });
+        streamFileToResponse(
+          fs.createReadStream(filePath, { start, end }),
+          res,
+          "[MobileSyncServer] Stream error",
+          { videoId }
+        );
       } else {
         // Full file response
         logger.debug("[MobileSyncServer] Full file request", { videoId, fileSize });
@@ -812,16 +822,12 @@ const createMobileSyncServer = (): MobileSyncServer => {
           "Cache-Control": "no-cache",
         });
 
-        const fileStream = fs.createReadStream(filePath);
-        fileStream.pipe(res);
-
-        fileStream.on("error", (err) => {
-          logger.error("[MobileSyncServer] Stream error", { videoId, error: err });
-          if (!res.headersSent) {
-            res.writeHead(500);
-          }
-          res.end();
-        });
+        streamFileToResponse(
+          fs.createReadStream(filePath),
+          res,
+          "[MobileSyncServer] Stream error",
+          { videoId }
+        );
       }
     } catch (error) {
       logger.error("[MobileSyncServer] Error streaming video file", { videoId, error });
@@ -889,16 +895,12 @@ const createMobileSyncServer = (): MobileSyncServer => {
         "Cache-Control": "max-age=86400",
       });
 
-      const fileStream = fs.createReadStream(filePath);
-      fileStream.pipe(res);
-
-      fileStream.on("error", (err) => {
-        logger.error("[MobileSyncServer] Thumbnail stream error", { videoId, error: err });
-        if (!res.headersSent) {
-          res.writeHead(500);
-        }
-        res.end();
-      });
+      streamFileToResponse(
+        fs.createReadStream(filePath),
+        res,
+        "[MobileSyncServer] Thumbnail stream error",
+        { videoId }
+      );
     } catch (error) {
       logger.error("[MobileSyncServer] Error serving thumbnail", { videoId, error });
       sendError(res, "Failed to serve thumbnail");
@@ -1158,19 +1160,12 @@ const createMobileSyncServer = (): MobileSyncServer => {
         "Cache-Control": "max-age=86400",
       });
 
-      const fileStream = fs.createReadStream(filePath);
-      fileStream.pipe(res);
-
-      fileStream.on("error", (err) => {
-        logger.error("[MobileSyncServer] Channel thumbnail stream error", {
-          channelId,
-          error: err,
-        });
-        if (!res.headersSent) {
-          res.writeHead(500);
-        }
-        res.end();
-      });
+      streamFileToResponse(
+        fs.createReadStream(filePath),
+        res,
+        "[MobileSyncServer] Channel thumbnail stream error",
+        { channelId }
+      );
     } catch (error) {
       logger.error("[MobileSyncServer] Error serving channel thumbnail", { channelId, error });
       sendError(res, "Failed to serve channel thumbnail");
@@ -1625,19 +1620,12 @@ const createMobileSyncServer = (): MobileSyncServer => {
         "Cache-Control": "max-age=86400",
       });
 
-      const fileStream = fs.createReadStream(filePath);
-      fileStream.pipe(res);
-
-      fileStream.on("error", (err) => {
-        logger.error("[MobileSyncServer] Playlist thumbnail stream error", {
-          playlistId,
-          error: err,
-        });
-        if (!res.headersSent) {
-          res.writeHead(500);
-        }
-        res.end();
-      });
+      streamFileToResponse(
+        fs.createReadStream(filePath),
+        res,
+        "[MobileSyncServer] Playlist thumbnail stream error",
+        { playlistId }
+      );
     } catch (error) {
       logger.error("[MobileSyncServer] Error serving playlist thumbnail", { playlistId, error });
       sendError(res, "Failed to serve playlist thumbnail");

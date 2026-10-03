@@ -12,6 +12,7 @@ import {
   Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { useConnectionStore } from "../../../stores/connection";
 import { api } from "../../../services/api";
 import * as wordsRepo from "../../../db/repositories/words";
@@ -21,6 +22,7 @@ import type { RemoteFlashcard, RemoteSavedWord } from "../../../types";
 type StudyMode = "flashcards" | "words";
 
 export default function FlashcardsScreen() {
+  const router = useRouter();
   const serverUrl = useConnectionStore((s) => s.serverUrl);
   const isConnected = serverUrl !== null;
 
@@ -287,9 +289,14 @@ export default function FlashcardsScreen() {
               ? "No flashcards due for review. Create more on your desktop app."
               : "Connect to your desktop app once to sync flashcards for offline study."}
           </Text>
-          <Pressable style={styles.retryButton} onPress={loadCards}>
+          <Pressable
+            style={styles.retryButton}
+            onPress={
+              isConnected ? loadCards : () => router.push("/(mobile)/connect")
+            }
+          >
             <Text style={styles.retryButtonText}>
-              {isConnected ? "Refresh" : "Retry"}
+              {isConnected ? "Refresh" : "Connect desktop"}
             </Text>
           </Pressable>
         </View>

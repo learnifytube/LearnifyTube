@@ -383,7 +383,7 @@ export default function SyncScreen() {
         <Text style={styles.errorText}>Not connected to server</Text>
         <Pressable
           style={styles.connectButton}
-          onPress={() => router.push("/(mobile)/(tabs)/settings")}
+          onPress={() => router.push("/(mobile)/connect")}
         >
           <Text style={styles.connectButtonText}>Connect</Text>
         </Pressable>
@@ -660,7 +660,7 @@ export default function SyncScreen() {
           </Text>
           <Pressable
             style={styles.offlineBannerButton}
-            onPress={() => router.push("/(mobile)/(tabs)/settings")}
+            onPress={() => router.push("/(mobile)/connect")}
           >
             <Text style={styles.offlineBannerButtonText}>Reconnect</Text>
           </Pressable>

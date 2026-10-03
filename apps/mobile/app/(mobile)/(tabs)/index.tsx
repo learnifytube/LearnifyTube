@@ -279,9 +279,9 @@ export default function HomeScreen() {
           <Text style={styles.emptyText}>
             Connect to your LearnifyTube desktop app to browse and sync videos
           </Text>
-          <Link href="/(mobile)/(tabs)/settings" asChild>
-            <Pressable style={styles.connectButton}>
-              <Text style={styles.connectButtonText}>Go to Settings</Text>
+          <Link href="/(mobile)/connect" asChild>
+            <Pressable style={styles.connectButton} testID="open-connect">
+              <Text style={styles.connectButtonText}>Connect desktop</Text>
             </Pressable>
           </Link>
         </View>

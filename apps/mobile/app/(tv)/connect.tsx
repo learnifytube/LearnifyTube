@@ -13,6 +13,7 @@ import { colors } from "../../theme";
 import { desktopConnection } from "../../services/desktop-connection";
 import { describeConnectionProblem } from "../../components/tv/connectionText";
 import { TVFocusPressable } from "../../components/tv/TVFocusPressable";
+import { verifyDesktopUrl } from "../../services/verify-desktop";
 import type { DiscoveredPeer } from "../../types";
 
 function getPeerKey(peer: DiscoveredPeer): string {
@@ -24,7 +25,7 @@ export default function TVConnectScreen() {
   const savedCode = useConnectionStore((state) => state.pairingCode);
 
   const [code, setCode] = useState(savedCode ?? "");
-  const [address, setAddress] = useState("");
+  const [address, setAddress] = useState(verifyDesktopUrl ?? "");
   const [isPairing, setIsPairing] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -51,6 +52,8 @@ export default function TVConnectScreen() {
 
       <View style={styles.inputWrap}>
         <TextInput
+          testID="pairing-code-input"
+          accessibilityLabel="Pairing code"
           value={code}
           onChangeText={setCode}
           placeholder="Pairing code"
@@ -107,6 +110,8 @@ export default function TVConnectScreen() {
 
       <View style={styles.actions}>
         <TVFocusPressable
+          testID="tv-connect-submit"
+          accessibilityLabel="Connect"
           style={styles.primaryButton}
           onPress={() => void pair(address.trim() || undefined)}
           disabled={isPairing}

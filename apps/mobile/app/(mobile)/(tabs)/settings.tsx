@@ -18,6 +18,7 @@ import {
   TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { useSettingsStore, LANGUAGES } from "../../../stores/settings";
 import { useConnectionStore } from "../../../stores/connection";
 import { api } from "../../../services/api";
@@ -121,6 +122,7 @@ function buildDiscoveredConnectUrls(device: DiscoveredPeer): string[] {
 }
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const targetLang = useSettingsStore((s) => s.translationTargetLang);
   const setTargetLang = useSettingsStore((s) => s.setTranslationTargetLang);
 
@@ -571,8 +573,26 @@ export default function SettingsScreen() {
               </Pressable>
             </View>
           ) : (
-            /* Disconnected state — show discovery + manual */
+            /* Disconnected state — pairing screen first, then discovery + manual */
             <>
+              <Pressable
+                testID="open-connect"
+                accessibilityLabel="Pair with desktop"
+                style={(state) => [
+                  styles.manualConnectRow,
+                  state.pressed && styles.pressablePressed,
+                ]}
+                onPress={() => router.push("/(mobile)/connect")}
+              >
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Pair with desktop</Text>
+                  <Text style={styles.settingDescription}>
+                    Enter the pairing code from desktop Settings → Sync
+                  </Text>
+                </View>
+                <Text style={styles.chevron}>›</Text>
+              </Pressable>
+
               {/* Discovered devices */}
               {discoveredDevices.length > 0 && (
                 <View style={styles.discoveredSection}>

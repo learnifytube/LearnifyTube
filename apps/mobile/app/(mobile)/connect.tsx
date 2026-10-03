@@ -15,6 +15,7 @@ import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useConnectionStore } from "../../stores/connection";
 import { colors } from "../../theme";
+import { X } from "../../theme/icons";
 import { api, PairingRequiredError } from "../../services/api";
 import { useLibraryStore } from "../../stores/library";
 import { downloadQueue } from "../../services/download-queue";
@@ -362,8 +363,27 @@ export default function ConnectScreen() {
     );
   };
 
+  const close = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/(mobile)/(tabs)");
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Pair with desktop</Text>
+        <Pressable
+          testID="connect-close"
+          accessibilityLabel="Close"
+          style={styles.closeButton}
+          onPress={close}
+        >
+          <X size={22} color={colors.foreground} />
+        </Pressable>
+      </View>
       <View style={styles.content}>
         {remoteVideos.length === 0 ? (
           <>
@@ -373,6 +393,8 @@ export default function ConnectScreen() {
             </Text>
             <View style={styles.inputContainer}>
               <TextInput
+                testID="pairing-code-input"
+                accessibilityLabel="Pairing code"
                 style={styles.input}
                 placeholder="ABCD-2345"
                 placeholderTextColor={colors.textTertiary}
@@ -436,6 +458,8 @@ export default function ConnectScreen() {
 
             <View style={styles.inputContainer}>
               <TextInput
+                testID="desktop-address-input"
+                accessibilityLabel="Desktop address"
                 style={styles.input}
                 placeholder="192.168.1.100 or 192.168.1.100:53318"
                 placeholderTextColor="#666"
@@ -448,6 +472,8 @@ export default function ConnectScreen() {
             </View>
 
             <Pressable
+              testID="connect-submit"
+              accessibilityLabel="Connect"
               style={[styles.connectButton, isConnecting && styles.connectButtonDisabled]}
               onPress={handleConnect}
               disabled={isConnecting}
@@ -556,7 +582,26 @@ function formatFileSize(bytes: number): string {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#16213e",
+    backgroundColor: colors.background,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  headerTitle: {
+    color: colors.foreground,
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
   content: {
     flex: 1,

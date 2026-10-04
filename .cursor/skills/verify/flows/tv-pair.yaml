@@ -20,4 +20,3 @@ appId: com.learnifytube.mobile
     visible:
       text: "Science for kids"
     timeout: 20000
-- takeScreenshot: tv-home-after-pair

@@ -3,15 +3,19 @@
  * phone and TV emulators. See .cursor/skills/verify/SKILL.md.
  *
  *   npm run verify -- up [phone|tv] [--fresh] [--headless]
+ *   npm run verify -- pair [phone|tv]
  *   npm run verify -- status
  *   npm run verify -- down [--emulators]
  *   npm run verify -- install phone|tv
  */
+import fs from "node:fs";
+import path from "node:path";
 import {
   allSurfaces,
   avds,
   log,
   metroPort,
+  runDir,
   syncPort,
   type Surface,
 } from "./env";
@@ -31,6 +35,7 @@ import {
   stopEmulator,
   upEmulator,
 } from "./emulator";
+import { runFlow } from "./maestro";
 import { metroHealthy, metroPids, stopMetro, upMetro } from "./metro";
 
 const [command, ...rest] = process.argv.slice(2);
@@ -49,6 +54,23 @@ const up = async () => {
     await prepareApp(surface, serials[i], fresh);
   }
   log("ready");
+};
+
+const tail = (file: string, lines: number) =>
+  fs.readFileSync(file, "utf8").trimEnd().split("\n").slice(-lines).join("\n");
+
+/** Pairs each device with the verify desktop; it ends on the device's Home. */
+const pair = async () => {
+  // One at a time: parallel Maestro runs fight over the driver port.
+  for (const surface of surfaces) {
+    const outDir = path.join(runDir, `pair-${surface}`);
+    const { ok } = await runFlow(`${surface}-pair`, outDir);
+    if (!ok) {
+      console.error(tail(path.join(outDir, "maestro.log"), 15));
+      throw new Error(`${surface} did not pair; Maestro output in ${outDir}`);
+    }
+    log(`${surface} paired`);
+  }
 };
 
 const status = async () => {
@@ -94,6 +116,7 @@ const install = async () => {
 
 const commands: Record<string, () => Promise<void>> = {
   up,
+  pair,
   status,
   down,
   install,

@@ -17,10 +17,3 @@ appId: com.learnifytube.mobile
 - extendedWaitUntil:
     visible: "Little Science Lab"
     timeout: 30000
-- takeScreenshot: phone-paired-home
-- tapOn: "Floating and sinking"
-- extendedWaitUntil:
-    visible:
-      id: player-back
-    timeout: 20000
-- takeScreenshot: phone-player

@@ -76,6 +76,12 @@ const getMainLogger = async (): Promise<LogFunctions> => {
       log.initialize();
     }
 
+    // An isolated desktop (LEARNIFYTUBE_USER_DATA_DIR) keeps its log out of the installed app's.
+    const userDataDir = process.env.LEARNIFYTUBE_USER_DATA_DIR;
+    if (userDataDir && log.transports?.file) {
+      log.transports.file.resolvePathFn = () => `${userDataDir}/logs/main.log`;
+    }
+
     // Ensure console transport is enabled so logs appear in terminal
     // This is especially important for showing renderer logs received via IPC
     if (log.transports?.console) {

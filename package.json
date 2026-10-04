@@ -33,6 +33,7 @@
     "mobile:emulator:tv": "npm run emulator:tv --prefix apps/mobile",
     "mobile:emulator:phone": "npm run emulator:phone --prefix apps/mobile",
     "desktop:verify:seed": "npm run verify:seed --prefix apps/desktop",
+    "verify": "apps/desktop/node_modules/.bin/tsx scripts/verify/cli.ts",
     "knip": "npm run desktop:knip:dead && npm run mobile:knip:dead",
     "knip:full": "npm run desktop:knip && npm run mobile:knip",
     "knip:report": "npm run desktop:knip:dead -- --no-exit-code && npm run mobile:knip:dead -- --no-exit-code"

@@ -8,7 +8,7 @@
  *   npm run verify -- shot desktop|phone|tv [desktop-shot.mjs flags]
  *   npm run verify -- logs desktop|metro|phone|tv
  *   npm run verify -- status
- *   npm run verify -- down [--emulators]
+ *   npm run verify -- down [desktop] [--emulators]
  *   npm run verify -- install phone|tv
  */
 import fs from "node:fs";
@@ -108,6 +108,12 @@ const status = async () => {
 };
 
 const down = async () => {
+  // `down desktop` drops only the desktop, to check Offline mode.
+  if (rest.includes("desktop")) {
+    await stopDesktop();
+    log("desktop down");
+    return;
+  }
   await Promise.all([stopMetro(), stopDesktop()]);
   if (flags.has("--emulators")) await Promise.all(surfaces.map(stopEmulator));
   log("down");

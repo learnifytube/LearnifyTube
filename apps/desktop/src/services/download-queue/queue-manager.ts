@@ -13,7 +13,6 @@ import {
   getNextFallbackState,
   getFallbackRetryDelayMs,
   PLAYER_CLIENTS,
-  FORMAT_STRATEGIES,
 } from "./fallback-strategy";
 
 /**
@@ -47,9 +46,10 @@ interface QueueItem {
   totalSize: string | null;
   eta: string | null;
   nextRetryAt: number | null;
+  /** First real error in the current fallback chain; later clients often fail less usefully */
+  firstError: { message: string; type: string; details: string[] | null } | null;
   // Fallback strategy state
   playerClientIndex: number;
-  formatStrategyIndex: number;
   fallbackAttempts: number;
   maxFallbackAttempts: number;
 }
@@ -151,7 +151,6 @@ const queueItemToQueuedDownload = (item: QueueItem): QueuedDownload => ({
   // nextRetryAt is internal queue scheduler metadata, not exposed in API shape
   // Fallback strategy state
   playerClientIndex: item.playerClientIndex,
-  formatStrategyIndex: item.formatStrategyIndex,
   fallbackAttempts: item.fallbackAttempts,
   maxFallbackAttempts: item.maxFallbackAttempts,
 });
@@ -201,9 +200,9 @@ const createQueueItemFromVideo = (
     totalSize: null,
     eta: null,
     nextRetryAt: null,
+    firstError: null,
     // Initialize fallback state
     playerClientIndex: initialFallback.playerClientIndex,
-    formatStrategyIndex: initialFallback.formatStrategyIndex,
     fallbackAttempts: initialFallback.fallbackAttempts,
     maxFallbackAttempts: initialFallback.maxFallbackAttempts,
   };
@@ -386,7 +385,6 @@ const createQueueManager = (
     if (shouldAutoFallback(errorMessage, resolvedErrorType)) {
       const currentState = {
         playerClientIndex: item.playerClientIndex,
-        formatStrategyIndex: item.formatStrategyIndex,
         fallbackAttempts: item.fallbackAttempts,
         maxFallbackAttempts: item.maxFallbackAttempts,
       };
@@ -401,8 +399,12 @@ const createQueueManager = (
         );
 
         // Advance fallback state and re-queue
+        item.firstError ??= {
+          message: userFacingErrorMessage,
+          type: resolvedErrorType,
+          details: errorDetails || null,
+        };
         item.playerClientIndex = nextState.playerClientIndex;
-        item.formatStrategyIndex = nextState.formatStrategyIndex;
         item.fallbackAttempts = nextState.fallbackAttempts;
         item.status = "queued";
         item.errorMessage = null;
@@ -417,7 +419,6 @@ const createQueueManager = (
           previousError: errorMessage,
           previousErrorType: resolvedErrorType,
           newPlayerClient: PLAYER_CLIENTS[nextState.playerClientIndex],
-          newFormatStrategy: FORMAT_STRATEGIES[nextState.formatStrategyIndex],
           fallbackAttempt: nextState.fallbackAttempts,
           maxFallbackAttempts: nextState.maxFallbackAttempts,
           retryDelayMs,
@@ -441,12 +442,18 @@ const createQueueManager = (
       }
     }
 
-    // No more fallbacks available, mark as truly failed
-    item.errorMessage = userFacingErrorMessage;
-    item.errorType = resolvedErrorType;
-    item.errorDetails = errorDetails || null;
+    // No more fallbacks available, mark as truly failed with the first error of the chain
+    const shownError = item.firstError ?? {
+      message: userFacingErrorMessage,
+      type: resolvedErrorType,
+      details: errorDetails || null,
+    };
+    item.errorMessage = shownError.message;
+    item.errorType = shownError.type;
+    item.errorDetails = shownError.details;
     item.status = "paused"; // Paused so user can retry
     item.nextRetryAt = null;
+    item.firstError = null;
 
     // Sync to youtube_videos
     if (item.videoId) {
@@ -454,8 +461,8 @@ const createQueueManager = (
         .update(youtubeVideos)
         .set({
           downloadStatus: "failed",
-          lastErrorMessage: userFacingErrorMessage,
-          errorType: resolvedErrorType,
+          lastErrorMessage: shownError.message,
+          errorType: shownError.type,
           isRetryable: true,
           updatedAt: Date.now(),
         })
@@ -466,8 +473,9 @@ const createQueueManager = (
     logger.error("[queue-manager] Download failed (all fallbacks exhausted)", {
       downloadId,
       videoId: item.videoId,
-      error: userFacingErrorMessage,
-      errorType: resolvedErrorType,
+      error: shownError.message,
+      errorType: shownError.type,
+      lastError: userFacingErrorMessage,
       fallbackAttempts: item.fallbackAttempts,
       maxFallbackAttempts: item.maxFallbackAttempts,
     });
@@ -689,7 +697,6 @@ const createQueueManager = (
           // Spawn download with fallback state
           const fallbackState = {
             playerClientIndex: item.playerClientIndex,
-            formatStrategyIndex: item.formatStrategyIndex,
             fallbackAttempts: item.fallbackAttempts,
             maxFallbackAttempts: item.maxFallbackAttempts,
           };
@@ -710,7 +717,6 @@ const createQueueManager = (
             title: item.title,
             url: item.url,
             playerClient: PLAYER_CLIENTS[item.playerClientIndex],
-            formatStrategy: FORMAT_STRATEGIES[item.formatStrategyIndex],
             fallbackAttempt: item.fallbackAttempts,
           });
         } catch (error) {
@@ -905,9 +911,9 @@ const createQueueManager = (
           totalSize: null,
           eta: null,
           nextRetryAt: null,
+          firstError: null,
           // Initialize fallback state
           playerClientIndex: initialFallback.playerClientIndex,
-          formatStrategyIndex: initialFallback.formatStrategyIndex,
           fallbackAttempts: initialFallback.fallbackAttempts,
           maxFallbackAttempts: initialFallback.maxFallbackAttempts,
         };
@@ -1111,10 +1117,10 @@ const createQueueManager = (
       // Reset fallback state on manual retry (start fresh)
       const freshFallback = createDefaultFallbackState();
       item.playerClientIndex = freshFallback.playerClientIndex;
-      item.formatStrategyIndex = freshFallback.formatStrategyIndex;
       item.fallbackAttempts = freshFallback.fallbackAttempts;
       item.maxFallbackAttempts = freshFallback.maxFallbackAttempts;
       item.nextRetryAt = null;
+      item.firstError = null;
 
       // Update status to queued
       item.status = "queued";
@@ -1232,7 +1238,6 @@ const createQueueManager = (
           eta: null,
           // Fallback state not relevant for completed downloads
           playerClientIndex: 0,
-          formatStrategyIndex: 0,
           fallbackAttempts: 0,
           maxFallbackAttempts: 10,
         })),
@@ -1269,7 +1274,6 @@ const createQueueManager = (
           eta: null,
           // Fallback state exhausted for failed downloads
           playerClientIndex: PLAYER_CLIENTS.length - 1,
-          formatStrategyIndex: FORMAT_STRATEGIES.length - 1,
           fallbackAttempts: 10,
           maxFallbackAttempts: 10,
         })),

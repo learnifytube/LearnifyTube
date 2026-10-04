@@ -15,8 +15,12 @@ The Videos the user chose to keep: fetched from YouTube, or on their way. A Vide
 _Avoid_: collection, downloads (for the whole set)
 
 **Keep**:
-To add a Video to the Library, which fetches it from YouTube onto the desktop.
+To add a Video to the Library, which fetches it from YouTube onto the desktop. The fetch is done once the desktop has a watchable file of the Video, at whatever resolution YouTube offers up to the Maximum quality. A file the user can watch is never thrown away to look for a sharper one.
 _Avoid_: download (that word belongs to the phone fetching from the desktop)
+
+**Maximum quality**:
+The highest resolution a Keep fetches, set by the user to keep files small. It is a ceiling, never a requirement: a Video that YouTube only offers below it is still kept.
+_Avoid_: download quality, quality target
 
 **List**:
 A user-made, ordered group of Videos from the Library. The only thing the user organises with. A Video can be in many Lists.

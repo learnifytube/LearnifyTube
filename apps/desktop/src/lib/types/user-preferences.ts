@@ -139,13 +139,12 @@ export const DEFAULT_LEARNING_PREFERENCES: LearningPreferences = {
 };
 
 export const DEFAULT_DOWNLOAD_PREFERENCES: DownloadPreferences = {
-  downloadQuality: "1080p", // Prefer Full HD by default; keep a 720p floor for smaller legacy presets
+  downloadQuality: "1080p", // Maximum quality: a ceiling for new Keeps, never a requirement
   cookiesFromBrowser: "none",
 };
 
 /**
- * Video downloads default to 1080p, but never go below 720p.
- * Users who want much smaller files should convert to audio instead.
+ * Maximum quality is 1080p or 720p; older 360p/480p presets are read as 720p.
  */
 export const normalizeVideoDownloadQuality = (
   quality: DownloadQuality | null | undefined

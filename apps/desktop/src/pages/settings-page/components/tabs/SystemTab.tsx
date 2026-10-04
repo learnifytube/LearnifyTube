@@ -40,12 +40,12 @@ const DOWNLOAD_QUALITY_OPTIONS: Array<{
   {
     value: "1080p",
     label: "1080p (Full HD)",
-    description: "Sharper video and now the default choice for new downloads.",
+    description: "Sharpest video, larger files.",
   },
   {
     value: "720p",
     label: "720p (HD)",
-    description: "Balanced quality, smaller files, and faster downloads.",
+    description: "Smaller files and faster downloads.",
   },
 ];
 
@@ -424,15 +424,13 @@ export function SystemTab(): React.JSX.Element {
             <Film className="h-5 w-5" />
             Video Downloads
           </CardTitle>
-          <CardDescription>
-            Choose the default resolution for newly downloaded videos
-          </CardDescription>
+          <CardDescription>The highest resolution to fetch for new videos</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {customizationPreferences ? (
             <>
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Default Resolution</Label>
+                <Label className="text-sm font-medium">Maximum quality</Label>
                 <Select
                   value={customizationPreferences.download.downloadQuality}
                   onValueChange={(value) => {
@@ -461,8 +459,8 @@ export function SystemTab(): React.JSX.Element {
                 }
               </p>
               <p className="text-xs text-muted-foreground">
-                This applies to new downloads. LearnifyTube keeps a 720p floor, so smaller presets
-                are not offered here.
+                This applies to new downloads. A video YouTube only offers in lower quality is still
+                downloaded at the best quality available.
               </p>
             </>
           ) : (

@@ -24,24 +24,10 @@ export const PLAYER_CLIENTS = [
 export type PlayerClient = (typeof PLAYER_CLIENTS)[number];
 
 /**
- * Format strategies from most specific to most permissive
- */
-export const FORMAT_STRATEGIES = [
-  "quality", // User's preferred quality, WebM-first
-  "quality_any", // User's preferred quality, any format
-  "fallback", // Reliability fallback while keeping HD floor
-  "best", // Just get the best available
-  "hls", // HLS streaming fallback (for SABR-affected formats)
-] as const;
-
-export type FormatStrategy = (typeof FORMAT_STRATEGIES)[number];
-
-/**
  * Fallback state tracking
  */
 export interface FallbackState {
   playerClientIndex: number;
-  formatStrategyIndex: number;
   fallbackAttempts: number;
   maxFallbackAttempts: number;
 }
@@ -49,7 +35,7 @@ export interface FallbackState {
 /**
  * Error types that trigger specific fallback actions
  */
-type FallbackAction = "next_client" | "next_format" | "delay_retry" | "no_fallback";
+type FallbackAction = "next_client" | "delay_retry" | "no_fallback";
 
 /**
  * Get player client by index
@@ -60,43 +46,19 @@ export const getPlayerClient = (index: number): PlayerClient => {
 };
 
 /**
- * Get format string based on strategy and quality preference
+ * Any format with a video track is accepted; this only decides which one yt-dlp tries first.
+ * Without ffmpeg, separate video and audio streams can't be merged, so take a single file.
  */
-export const getFormatString = (strategy: FormatStrategy, quality: DownloadQuality): string => {
-  const normalizedQuality = normalizeVideoDownloadQuality(quality);
-  const heightMap: Record<DownloadQuality, number> = {
-    "360p": 360,
-    "480p": 480,
-    "720p": 720,
-    "1080p": 1080,
-  };
-  const maxHeight = heightMap[normalizedQuality];
+export const getFormatSelector = (canMerge: boolean): string => (canMerge ? "bv*+ba/b" : "b");
 
-  switch (strategy) {
-    case "quality":
-      // User's preferred quality, WebM-first with progressive fallback
-      return `best[height<=${maxHeight}][ext=webm]/bestvideo[height<=${maxHeight}][ext=webm]+bestaudio[ext=webm]/best[height<=${Math.min(maxHeight, 720)}][ext=webm]/best[height<=${Math.min(maxHeight, 480)}][ext=webm]/best[height<=${maxHeight}][ext=mp4][vcodec^=avc1]/bestvideo[height<=${maxHeight}][ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[height<=${maxHeight}]`;
-
-    case "quality_any":
-      // User's preferred quality, any format (no codec restrictions)
-      return `best[height<=${maxHeight}]/bestvideo[height<=${maxHeight}]+bestaudio/best[height<=${maxHeight}]`;
-
-    case "fallback":
-      // Reliability fallback still keeps HD video floor.
-      return `best[height<=720]/bestvideo[height<=720]+bestaudio/best[height<=720]`;
-
-    case "best":
-      // Just get anything that works
-      return `bv*+ba/b/best`;
-
-    case "hls":
-      // HLS streaming fallback (bypasses SABR-affected formats)
-      return `bv*[protocol=m3u8]+ba[protocol=m3u8]/b[protocol=m3u8]/best`;
-
-    default:
-      // Fallback to quality strategy
-      return getFormatString("quality", quality);
-  }
+/**
+ * Sort order for yt-dlp (-S). The Maximum quality is a ceiling, never a requirement:
+ * sorting prefers resolutions up to it but still falls back to whatever YouTube offers.
+ * VP9 is preferred over AV1, which older Android TV boxes can't decode in hardware.
+ */
+export const getFormatSort = (quality: DownloadQuality): string => {
+  const maxHeight = normalizeVideoDownloadQuality(quality) === "720p" ? 720 : 1080;
+  return `res:${maxHeight},vcodec:vp9,acodec:opus`;
 };
 
 /**
@@ -131,66 +93,22 @@ const determineFallbackAction = (errorMessage: string, errorType: string): Fallb
     return "no_fallback";
   }
 
-  // If ffmpeg is missing, prefer switching format strategy to avoid merge requirements.
-  if (lowerType === "ffmpeg_missing" || lowerMessage.includes("ffmpeg")) {
-    return "next_format";
-  }
-
-  // If yt-dlp cannot solve YouTube's JS challenges for the default client, fall back.
-  if (lowerType === "js_runtime_missing" || lowerMessage.includes("javascript runtime")) {
-    return "next_client";
-  }
-
-  // Download succeeded but did not meet the requested quality target.
-  if (lowerType === "quality_too_low") {
-    return "next_client";
-  }
-
-  // Transient network failures should retry same config after delay.
+  // Transient network failures and rate limiting retry the same client after a delay.
   if (
     lowerMessage.includes("timed out") ||
     lowerMessage.includes("connection reset") ||
     lowerMessage.includes("temporary failure in name resolution") ||
     lowerMessage.includes("name or service not known") ||
-    lowerMessage.includes("nodename nor servname")
+    lowerMessage.includes("nodename nor servname") ||
+    lowerMessage.includes("http error 429") ||
+    lowerType === "http_429_rate_limited"
   ) {
     return "delay_retry";
   }
 
-  // Player client issues - try next client
-  if (
-    lowerMessage.includes("n challenge") ||
-    lowerMessage.includes("nsig") ||
-    lowerMessage.includes("sabr") ||
-    lowerMessage.includes("http error 403") ||
-    lowerType === "http_403_forbidden"
-  ) {
-    return "next_client";
-  }
-
-  // Format availability issues - try simpler format
-  if (
-    lowerMessage.includes("format not available") ||
-    lowerMessage.includes("requested format") ||
-    lowerMessage.includes("no video formats") ||
-    lowerMessage.includes("unable to download") ||
-    lowerMessage.includes("format is not available")
-  ) {
-    return "next_format";
-  }
-
-  // Rate limiting - delay and retry same config
-  if (lowerMessage.includes("http error 429") || lowerType === "http_429_rate_limited") {
-    return "delay_retry";
-  }
-
-  // Generic HTTP errors - try next client
-  if (lowerMessage.includes("http error") || lowerType.includes("http_error")) {
-    return "next_client";
-  }
-
-  // Default: try next format (less disruptive than changing client)
-  return "next_format";
+  // Anything else (403, SABR, missing formats, JS challenges, reload prompts) is usually
+  // specific to how one client talks to YouTube, so try the next one.
+  return "next_client";
 };
 
 /**
@@ -229,58 +147,23 @@ export const getNextFallbackState = (
     return null;
   }
 
-  let nextClientIndex = current.playerClientIndex;
-  let nextFormatIndex = current.formatStrategyIndex;
+  const nextClientIndex =
+    action === "next_client" ? current.playerClientIndex + 1 : current.playerClientIndex;
 
-  if (action === "next_client") {
-    // Try next player client, reset format strategy
-    nextClientIndex = current.playerClientIndex + 1;
-    nextFormatIndex = 0; // Reset format strategy for new client
-
-    // If we've exhausted all clients, cycle back to first client with next format
-    if (nextClientIndex >= PLAYER_CLIENTS.length) {
-      nextClientIndex = 0;
-      nextFormatIndex = current.formatStrategyIndex + 1;
-
-      // If we've also exhausted all formats, no more fallbacks
-      if (nextFormatIndex >= FORMAT_STRATEGIES.length) {
-        logger.debug("[fallback-strategy] All player clients and formats exhausted");
-        return null;
-      }
-    }
-  } else if (action === "next_format") {
-    // Try next format strategy with same client
-    nextFormatIndex = current.formatStrategyIndex + 1;
-
-    // If we've exhausted formats for this client, try next client
-    if (nextFormatIndex >= FORMAT_STRATEGIES.length) {
-      nextClientIndex = current.playerClientIndex + 1;
-      nextFormatIndex = 0;
-
-      // If we've exhausted all clients too, no more fallbacks
-      if (nextClientIndex >= PLAYER_CLIENTS.length) {
-        logger.debug("[fallback-strategy] All formats and player clients exhausted");
-        return null;
-      }
-    }
-  } else if (action === "delay_retry") {
-    // Retry same client/format after delay (managed by queue-manager scheduling).
-    nextClientIndex = current.playerClientIndex;
-    nextFormatIndex = current.formatStrategyIndex;
+  if (nextClientIndex >= PLAYER_CLIENTS.length) {
+    logger.debug("[fallback-strategy] All player clients exhausted");
+    return null;
   }
 
   const nextState: FallbackState = {
     playerClientIndex: nextClientIndex,
-    formatStrategyIndex: nextFormatIndex,
     fallbackAttempts: current.fallbackAttempts + 1,
     maxFallbackAttempts: current.maxFallbackAttempts,
   };
 
   logger.info("[fallback-strategy] Advancing to next fallback", {
     previousClient: PLAYER_CLIENTS[current.playerClientIndex],
-    previousFormat: FORMAT_STRATEGIES[current.formatStrategyIndex],
     nextClient: PLAYER_CLIENTS[nextClientIndex],
-    nextFormat: FORMAT_STRATEGIES[nextFormatIndex],
     attempt: nextState.fallbackAttempts,
     maxAttempts: nextState.maxFallbackAttempts,
     action,
@@ -294,15 +177,13 @@ export const getNextFallbackState = (
  */
 export const createInitialFallbackState = (maxAttempts = 10): FallbackState => ({
   playerClientIndex: 0,
-  formatStrategyIndex: 0,
   fallbackAttempts: 0,
   maxFallbackAttempts: maxAttempts,
 });
 
-export const createDefaultFallbackState = (): FallbackState => {
-  const exhaustiveCombinations = PLAYER_CLIENTS.length * FORMAT_STRATEGIES.length;
-  return createInitialFallbackState(exhaustiveCombinations);
-};
+// Every client once, plus room for a few delayed retries on rate limits and timeouts.
+export const createDefaultFallbackState = (): FallbackState =>
+  createInitialFallbackState(PLAYER_CLIENTS.length * 2);
 
 export const getFallbackRetryDelayMs = (
   errorMessage: string,
@@ -344,7 +225,6 @@ export const getFallbackStatusString = (state: FallbackState): string | null => 
   }
 
   const client = PLAYER_CLIENTS[state.playerClientIndex];
-  const format = FORMAT_STRATEGIES[state.formatStrategyIndex];
 
-  return `Fallback ${state.fallbackAttempts}/${state.maxFallbackAttempts}: ${client} client, ${format} format`;
+  return `Fallback ${state.fallbackAttempts}/${state.maxFallbackAttempts}: ${client} client`;
 };

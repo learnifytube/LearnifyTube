@@ -19,8 +19,8 @@ import {
 import {
   type FallbackState,
   getPlayerClient,
-  getFormatString as getFallbackFormatString,
-  FORMAT_STRATEGIES,
+  getFormatSelector,
+  getFormatSort,
 } from "./fallback-strategy";
 import { getPreferredYtDlpJsRuntime } from "./yt-dlp-runtime";
 
@@ -340,142 +340,20 @@ const getFfmpegPath = (): string | null => {
 };
 
 /**
- * Determine the minimum acceptable output height for a requested quality.
- * We enforce the user's explicit 1080p target while keeping the 720p floor for older presets.
- */
-const getMinimumAcceptedHeight = (quality: DownloadQuality): number => {
-  const normalizedQuality = normalizeVideoDownloadQuality(quality);
-  return normalizedQuality === "1080p" ? 1080 : 720;
-};
-
-/**
- * Inspect a completed file with ffmpeg and extract its primary video resolution.
- * ffmpeg returns stream metadata on stderr even without an output target.
- */
-const getCompletedVideoResolution = async (
-  filePath: string
-): Promise<{ width: number; height: number } | null> => {
-  const ffmpegPath = getFfmpegPath();
-  if (!ffmpegPath || !fs.existsSync(filePath)) {
-    return null;
-  }
-
-  return new Promise((resolve) => {
-    const proc = spawn(ffmpegPath, ["-i", filePath]);
-    let stderrOutput = "";
-
-    proc.stderr?.on("data", (data: Buffer) => {
-      stderrOutput += data.toString();
-    });
-
-    const finalize = (): void => {
-      const match = stderrOutput.match(/Video:\s.*?,\s(\d+)x(\d+)(?:[,\s]|$)/);
-      if (!match) {
-        resolve(null);
-        return;
-      }
-
-      resolve({
-        width: parseInt(match[1], 10),
-        height: parseInt(match[2], 10),
-      });
-    };
-
-    proc.on("close", finalize);
-    proc.on("error", () => resolve(null));
-  });
-};
-
-/**
- * Decide whether a completed download should be accepted or retried because it undershot
- * the requested resolution.
- */
-const getQualityShortfallDetails = async ({
-  downloadId,
-  videoId,
-  completedPath,
-  requestedQuality,
-  playerClient,
-  formatStrategy,
-  formatUsed,
-}: {
-  downloadId: string;
-  videoId: string | null;
-  completedPath: string;
-  requestedQuality: DownloadQuality | null;
-  playerClient: string;
-  formatStrategy: string;
-  formatUsed: string;
-}): Promise<{
-  errorMessage: string;
-  errorDetails: string[];
-} | null> => {
-  if (!requestedQuality || !fs.existsSync(completedPath)) {
-    return null;
-  }
-
-  const actualResolution = await getCompletedVideoResolution(completedPath);
-  const minimumAcceptedHeight = getMinimumAcceptedHeight(requestedQuality);
-
-  if (!actualResolution || actualResolution.height >= minimumAcceptedHeight) {
-    return null;
-  }
-
-  logger.warn("[download-worker] Download completed below requested quality target", {
-    downloadId,
-    videoId,
-    requestedQuality,
-    minimumAcceptedHeight,
-    actualResolution,
-    playerClient,
-    formatStrategy,
-    formatUsed,
-    note: "Treating low-resolution result as retryable so fallback can search for HD formats.",
-  });
-
-  try {
-    fs.unlinkSync(completedPath);
-  } catch (unlinkError) {
-    logger.warn("[download-worker] Failed to remove below-target download before retry", {
-      downloadId,
-      videoId,
-      completedPath,
-      error: unlinkError,
-    });
-  }
-
-  return {
-    errorMessage: `Requested ${requestedQuality} but downloaded ${actualResolution.height}p`,
-    errorDetails: [
-      `Requested quality: ${requestedQuality}`,
-      `Downloaded resolution: ${actualResolution.width}x${actualResolution.height}`,
-      `Player client: ${playerClient}`,
-      `Format strategy: ${formatStrategy}`,
-      `Selected format: ${formatUsed}`,
-    ],
-  };
-};
-
-/**
- * Finalize a successful download, including post-download quality validation.
+ * Finalize a successful download. Any finished file is kept: the format selector only
+ * picks formats with a video track, so there is nothing to second-guess here.
  */
 const handleSuccessfulDownload = async ({
   downloadId,
   videoId,
   outputPath,
   worker,
-  requestedQuality,
-  playerClient,
-  formatStrategy,
   formatUsed,
 }: {
   downloadId: string;
   videoId: string | null;
   outputPath: string;
   worker: WorkerState;
-  requestedQuality: DownloadQuality | null;
-  playerClient: string;
-  formatStrategy: string;
   formatUsed: string;
 }): Promise<void> => {
   const queueManager = requireQueueManager();
@@ -507,26 +385,6 @@ const handleSuccessfulDownload = async ({
   }
 
   const completedPath = finalPath || outputPath;
-  const qualityShortfall = await getQualityShortfallDetails({
-    downloadId,
-    videoId,
-    completedPath,
-    requestedQuality,
-    playerClient,
-    formatStrategy,
-    formatUsed,
-  });
-
-  if (qualityShortfall) {
-    await queueManager.markFailed(
-      downloadId,
-      qualityShortfall.errorMessage,
-      "quality_too_low",
-      qualityShortfall.errorDetails
-    );
-    return;
-  }
-
   await queueManager.markCompleted(downloadId, completedPath);
 
   let fileExtension: string | null = null;
@@ -709,13 +567,8 @@ export const spawnDownload = async (
       });
     }
 
-    // Determine format strategy from fallback state
-    const formatStrategyIndex = fallbackState?.formatStrategyIndex ?? 0;
-    const formatStrategy = FORMAT_STRATEGIES[formatStrategyIndex];
-
-    // Add format if specified, otherwise use quality preference from settings with fallback strategy
+    // Add format if specified, otherwise take any video, sorted toward the Maximum quality
     let selectedFormat: string;
-    let requestedQuality: DownloadQuality | null = null;
     if (format) {
       selectedFormat = format;
       args.push("-f", format);
@@ -725,25 +578,21 @@ export const spawnDownload = async (
         format: selectedFormat,
       });
     } else {
-      // Keep video downloads at 720p minimum, even for older settings.
-      requestedQuality = await resolveDownloadQuality(db, qualityOverride);
-      selectedFormat = getFallbackFormatString(formatStrategy, requestedQuality);
-      args.push("-f", selectedFormat);
-      logger.info(
-        "[download-worker] Using quality preference from settings with fallback strategy",
-        {
-          downloadId,
-          videoId,
-          quality: requestedQuality,
-          formatStrategy,
-          playerClient,
-          jsRuntime: ytDlpJsRuntime ?? "none",
-          cookiesFromBrowser,
-          preferredFormat: selectedFormat,
-          fallbackAttempt: fallbackState?.fallbackAttempts ?? 0,
-          note: `${formatStrategy} strategy at ${requestedQuality} with ${playerClient} client`,
-        }
-      );
+      const maximumQuality = await resolveDownloadQuality(db, qualityOverride);
+      const formatSort = getFormatSort(maximumQuality);
+      selectedFormat = getFormatSelector(Boolean(ffmpegPath));
+      args.push("-f", selectedFormat, "-S", formatSort);
+      logger.info("[download-worker] Using Maximum quality from settings", {
+        downloadId,
+        videoId,
+        maximumQuality,
+        formatSort,
+        playerClient,
+        jsRuntime: ytDlpJsRuntime ?? "none",
+        cookiesFromBrowser,
+        preferredFormat: selectedFormat,
+        fallbackAttempt: fallbackState?.fallbackAttempts ?? 0,
+      });
     }
 
     // Log full command for debugging
@@ -759,7 +608,6 @@ export const spawnDownload = async (
       configuredCookiesFromBrowser,
       cookiesFromBrowser,
       useCookies,
-      formatStrategy,
       fallbackAttempt,
       maxFallbackAttempts: fallbackState?.maxFallbackAttempts ?? 10,
       fullCommand: `${ytDlpPath} ${args.join(" ")}`,
@@ -1073,15 +921,18 @@ export const spawnDownload = async (
     process.on("close", async (code: number | null) => {
       activeWorkers.delete(downloadId);
 
+      if (worker.stoppedByUser) {
+        // Paused or cancelled: the queue manager already set the status, so this is not a failure.
+        logger.info("[download-worker] yt-dlp stopped by user", { downloadId, videoId, code });
+        return;
+      }
+
       if (code === 0) {
         await handleSuccessfulDownload({
           downloadId,
           videoId,
           outputPath,
           worker,
-          requestedQuality,
-          playerClient,
-          formatStrategy,
           formatUsed,
         });
       } else {
@@ -1241,6 +1092,7 @@ const formatSize = (bytes: number): string => {
 export const killDownload = (downloadId: string): boolean => {
   const worker = activeWorkers.get(downloadId);
   if (worker?.process) {
+    worker.stoppedByUser = true;
     worker.process.kill("SIGTERM");
     activeWorkers.delete(downloadId);
     return true;

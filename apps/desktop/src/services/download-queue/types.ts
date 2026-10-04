@@ -50,7 +50,6 @@ export interface QueuedDownload {
   eta: string | null; // e.g., "00:15" or "01:23:45"
   // Fallback strategy state for automatic retries
   playerClientIndex: number; // Current position in player client chain (0 = default, 1 = android, etc.)
-  formatStrategyIndex: number; // Current position in format strategy chain
   fallbackAttempts: number; // Total fallback attempts made
   maxFallbackAttempts: number; // Maximum fallback attempts allowed (default: 10)
 }
@@ -104,4 +103,6 @@ export interface WorkerState {
   lastStderrError?: string;
   /** Collected stderr output for debugging */
   stderrBuffer?: string[];
+  /** Set when the user paused or cancelled, so the process exit is not treated as a failure */
+  stoppedByUser?: boolean;
 }

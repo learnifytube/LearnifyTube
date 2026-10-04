@@ -1,7 +1,15 @@
 // forge.config.ts - Configuration for Electron Forge build process
 
 import type { ForgeConfig, ForgePackagerOptions } from "@electron-forge/shared-types";
-import { readdirSync, rmdirSync, statSync, copyFileSync, mkdirSync, existsSync } from "node:fs";
+import {
+  readdirSync,
+  readFileSync,
+  rmdirSync,
+  statSync,
+  copyFileSync,
+  mkdirSync,
+  existsSync,
+} from "node:fs";
 import path, { join, normalize } from "node:path";
 import { MakerDeb } from "@electron-forge/maker-deb";
 import { MakerRpm } from "@electron-forge/maker-rpm";
@@ -16,6 +24,10 @@ import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { PublisherGithub } from "@electron-forge/publisher-github";
+
+const { version: appVersion } = JSON.parse(
+  readFileSync(path.join(__dirname, "package.json"), "utf8")
+) as { version: string };
 
 // Track native module dependencies that need to be packaged
 let nativeModuleDependenciesToPackage: string[] = [];
@@ -359,8 +371,9 @@ const config: ForgeConfig = {
       setupIcon: path.resolve(__dirname, "resources", "icon.ico"),
       iconUrl: "https://raw.githubusercontent.com/learnifytube/LearnifyTube/main/apps/desktop/resources/icon.ico",
       loadingGif: path.resolve(__dirname, "resources", "icon_64x64.png"),
-      // Naming pattern: LearnifyTube-{version}.Setup.exe
-      name: "LearnifyTube-${version}.Setup.exe",
+      // name is the NuGet package ID, so it may not carry the version
+      name: "LearnifyTube",
+      setupExe: `LearnifyTube-${appVersion}.Setup.exe`,
     }),
     new ResilientMakerDMG({
       icon: path.resolve(__dirname, "resources", "icon.icns"),

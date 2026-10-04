@@ -4,6 +4,9 @@
  *
  *   npm run verify -- up [phone|tv] [--fresh] [--headless]
  *   npm run verify -- pair [phone|tv]
+ *   npm run verify -- run <flow> [flow…]
+ *   npm run verify -- shot desktop|phone|tv [desktop-shot.mjs flags]
+ *   npm run verify -- logs desktop|metro|phone|tv
  *   npm run verify -- status
  *   npm run verify -- down [--emulators]
  *   npm run verify -- install phone|tv
@@ -36,6 +39,7 @@ import {
   upEmulator,
 } from "./emulator";
 import { runFlow } from "./maestro";
+import { followLogs, runFlows, shot } from "./results";
 import { metroHealthy, metroPids, stopMetro, upMetro } from "./metro";
 
 const [command, ...rest] = process.argv.slice(2);
@@ -117,6 +121,9 @@ const install = async () => {
 const commands: Record<string, () => Promise<void>> = {
   up,
   pair,
+  run: () => runFlows(rest.filter((arg) => !arg.startsWith("--"))),
+  shot: () => shot(rest[0], rest.slice(1)),
+  logs: () => followLogs(rest[0]),
   status,
   down,
   install,

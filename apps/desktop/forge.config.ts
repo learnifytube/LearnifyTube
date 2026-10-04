@@ -199,9 +199,9 @@ const config: ForgeConfig = {
               await walkDependenciesForModule.call(walker, moduleRoot, DepType.PROD);
             }
             const modulesValue = Reflect.get(walker, "modules");
-            const walkerModules = Array.isArray(modulesValue) ? modulesValue : [];
+            const walkerModules: Module[] = Array.isArray(modulesValue) ? modulesValue : [];
             walkerModules
-              .filter((dep) => dep instanceof Module && dep.nativeModuleType === DepType.PROD)
+              .filter((dep) => (dep.nativeModuleType as number) === DepType.PROD)
               // for a package like '@realm/fetch', need to split the path and just take the first part
               .map((dep) => dep.name.split("/")[0])
               .forEach((name) => foundModules.add(name));

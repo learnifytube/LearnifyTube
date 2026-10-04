@@ -28,6 +28,7 @@ import { downloadImageToCache } from "../api/utils/ytdlp-utils/thumbnail";
 import { getPlaylistDetailsForServer } from "../api/routers/playlists";
 import { z } from "zod";
 import { authorizeSyncRequest, withPairingToken } from "./security/sync-auth";
+import { readRequestBody, type StuckBody } from "./sync-request-body";
 import { createPairingStore, type PairingStore } from "./security/pairing-store";
 import {
   MOBILE_SYNC_PROTOCOL_VERSION,
@@ -315,6 +316,21 @@ const createMobileSyncServer = (): MobileSyncServer => {
   let keepAwakeBlockerId: number | null = null;
   let resumeReannounceTimer: ReturnType<typeof setTimeout> | null = null;
   let powerMonitorListenersRegistered = false;
+  // The last requests before a stuck POST body, for issue #29. URLs have the pairing code stripped.
+  const recentRequests: { at: string; method?: string; url: string; remotePort?: number }[] = [];
+  const RECENT_REQUESTS_KEPT = 40;
+
+  const logStuckBody = (stuck: StuckBody): void => {
+    server?.getConnections((_err, openConnections) => {
+      logger.warn("[MobileSyncServer] Stuck POST body (issue #29)", {
+        ...stuck,
+        openConnections,
+        recentRequests,
+      });
+    });
+  };
+
+  const readBody = (req: http.IncomingMessage): Promise<string> => readRequestBody(req, logStuckBody);
 
   // Clean up stale devices (not seen in last 5 minutes)
   const cleanupStaleDevices = (): void => {
@@ -667,10 +683,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
       // Parse optional body for language preference
       let lang: string | undefined;
       try {
-        let body = "";
-        for await (const chunk of req) {
-          body += chunk;
-        }
+        const body = await readBody(req);
         if (body) {
           const parsed = transcriptDownloadBodySchema.parse(parseJsonUnknown(body));
           if (parsed.lang) lang = parsed.lang;
@@ -1638,10 +1651,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
     res: http.ServerResponse
   ): Promise<void> => {
     try {
-      let body = "";
-      for await (const chunk of req) {
-        body += chunk;
-      }
+      const body = await readBody(req);
 
       const parsed = addFavoriteBodySchema.parse(parseJsonUnknown(body));
       const { entityType, entityId } = parsed;
@@ -1709,10 +1719,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
     res: http.ServerResponse
   ): Promise<void> => {
     try {
-      let body = "";
-      for await (const chunk of req) {
-        body += chunk;
-      }
+      const body = await readBody(req);
       const parsed = deviceReportSchema.safeParse(parseJsonUnknown(body));
       if (!parsed.success) {
         sendError(res, "Invalid device report", 400);
@@ -1917,10 +1924,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
   ): Promise<void> => {
     try {
       // Read request body
-      let body = "";
-      for await (const chunk of req) {
-        body += chunk;
-      }
+      const body = await readBody(req);
 
       const { videoId, url } = downloadRequestBodySchema.parse(parseJsonUnknown(body));
 
@@ -2097,10 +2101,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
     res: http.ServerResponse
   ): Promise<void> => {
     try {
-      let body = "";
-      for await (const chunk of req) {
-        body += chunk;
-      }
+      const body = await readBody(req);
 
       const { id, grade } = flashcardReviewBodySchema.parse(parseJsonUnknown(body));
 
@@ -2185,10 +2186,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
     res: http.ServerResponse
   ): Promise<void> => {
     try {
-      let body = "";
-      for await (const chunk of req) {
-        body += chunk;
-      }
+      const body = await readBody(req);
 
       const parsed = translateBodySchema.parse(parseJsonUnknown(body));
 
@@ -2367,10 +2365,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
     res: http.ServerResponse
   ): Promise<void> => {
     try {
-      let body = "";
-      for await (const chunk of req) {
-        body += chunk;
-      }
+      const body = await readBody(req);
 
       const { translationId, notes } = saveWordBodySchema.parse(parseJsonUnknown(body));
 
@@ -2478,6 +2473,13 @@ const createMobileSyncServer = (): MobileSyncServer => {
 
     // Track connected device
     trackDevice(req);
+    recentRequests.push({
+      at: new Date().toISOString(),
+      method,
+      url,
+      remotePort: req.socket.remotePort,
+    });
+    if (recentRequests.length > RECENT_REQUESTS_KEPT) recentRequests.shift();
 
     logger.info(`[MobileSyncServer] ← ${method} ${url}`);
 

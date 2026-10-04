@@ -31,7 +31,7 @@ npm run verify -- down          # `down desktop` for Offline; --emulators shuts 
 - `up` reuses whatever is healthy and restarts what is not. Run it whenever unsure.
 - `up phone` / `up tv` limits it to one surface. `--headless` boots emulators without a window.
 - `up --fresh` reseeds the desktop and wipes app data on the emulators (pairing, cache, Offline copies). Pair again afterwards.
-- A desktop that answers GET but hangs on POST is issue #29; `up` restarts it and says so.
+- A desktop that answers GET but hangs on POST is issue #29; `up` restarts it and says so. The desktop logs each stuck POST ("Stuck POST body (issue #29)"), and `status` / `up` print how many are in its log. If they report one, add its log entry to #29 before anything else.
 - `up` never builds. If the app is missing it prints `npm run verify -- install phone|tv`, which runs `expo run:android` (slow). Only needed after a native change.
 - `down` stops only processes carrying the verify environment's markers. It never touches the user's app or port 8384.
 

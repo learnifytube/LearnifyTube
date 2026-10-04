@@ -27,6 +27,7 @@ import {
   desktopPids,
   isSeeded,
   stopDesktop,
+  stuckPostNote,
   upDesktop,
 } from "./desktop";
 import {
@@ -91,6 +92,8 @@ const status = async () => {
   console.log(
     `desktop ${mark(desktopOk)} :${syncPort} ${desktopPids().length} procs, ${seeded}${desktopNote}`,
   );
+  const stuck = stuckPostNote();
+  if (stuck) console.log(`        ${stuck}`);
   console.log(
     `metro   ${mark(metro)} :${metroPort} ${metroPids().length} procs`,
   );

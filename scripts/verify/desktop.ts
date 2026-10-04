@@ -41,6 +41,28 @@ export const desktopHealth = async () => {
   return { info: !!info?.ok, cdp: !!cdp?.ok, post: !!post };
 };
 
+// Written by the desktop when a POST body is all in but the request never ends.
+const stuckPostMark = "Stuck POST body (issue #29)";
+
+/** When the verify desktop logged a stuck POST (issue #29), oldest first. */
+export const stuckPostTimes = () =>
+  ["main.old.log", "main.log"]
+    .map((name) => path.join(verifyDir, "logs", name))
+    .filter((file) => fs.existsSync(file))
+    .flatMap((file) =>
+      fs
+        .readFileSync(file, "utf8")
+        .split("\n")
+        .filter((line) => line.includes(stuckPostMark))
+        .map((line) => line.slice(1, 20)),
+    );
+
+export const stuckPostNote = () => {
+  const times = stuckPostTimes();
+  if (times.length === 0) return null;
+  return `desktop logged ${times.length} stuck POST(s), latest ${times.at(-1)} — issue #29; details in \`npm run verify -- logs desktop\``;
+};
+
 const portOwner = async () => {
   const pid = await sh("lsof", [
     "-nP",
@@ -72,6 +94,9 @@ export const upDesktop = async (fresh: boolean) => {
     await stopDesktop();
     await seed();
   }
+
+  const stuck = stuckPostNote();
+  if (stuck) log(`WARNING: ${stuck}`);
 
   const health = await desktopHealth();
   if (health.info && health.cdp && health.post) {

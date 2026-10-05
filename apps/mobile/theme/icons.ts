@@ -28,6 +28,8 @@ export {
   Pause,
   SkipBack,
   SkipForward,
+  Maximize,
+  Minimize,
   Volume2,
   VolumeX,
   Film,

@@ -39,6 +39,7 @@
     "expo-file-system": "~55.0.2",
     "expo-intent-launcher": "~55.0.8",
     "expo-linking": "~55.0.3",
+    "expo-navigation-bar": "~55.0.17",
     "expo-router": "~55.0.7",
     "expo-screen-orientation": "~55.0.8",
     "expo-sqlite": "~55.0.2",

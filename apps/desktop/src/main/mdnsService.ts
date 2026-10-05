@@ -363,7 +363,8 @@ const createMdnsService = (): MdnsService => {
 
     if (publishedService) {
       try {
-        publishedService.stop?.();
+        // bonjour-service types stop as CallableFunction, which no-unsafe-call rejects
+        (publishedService.stop as (() => void) | undefined)?.();
         logger.info("[mDNS] ✓ Service stopped");
       } catch (error) {
         logger.error("[mDNS] ✗ Failed to stop service", error);

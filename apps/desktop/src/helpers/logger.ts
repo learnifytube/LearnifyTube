@@ -82,6 +82,14 @@ const getMainLogger = async (): Promise<LogFunctions> => {
       log.transports.file.resolvePathFn = () => `${userDataDir}/logs/main.log`;
     }
 
+    // Debug lines (mostly tRPC status polling) rotated the packaged log within hours,
+    // losing the evidence of user-reported failures; keep the file at info and larger.
+    if (log.transports?.file) {
+      const { app } = await import("electron");
+      log.transports.file.level = app.isPackaged ? "info" : "debug";
+      log.transports.file.maxSize = 5 * 1024 * 1024;
+    }
+
     // Ensure console transport is enabled so logs appear in terminal
     // This is especially important for showing renderer logs received via IPC
     if (log.transports?.console) {

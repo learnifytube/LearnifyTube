@@ -65,6 +65,11 @@ Resolved in `src/utils/paths.ts`:
 sqlite3 local.db "SELECT video_id, title, download_status FROM youtube_videos WHERE download_status = 'failed';"
 ```
 
+## Logs
+
+- **Packaged**: `~/Library/Logs/LearnifyTube/main.log`, rotated once into `main.old.log` (info and above).
+- **Isolated**: `<LEARNIFYTUBE_USER_DATA_DIR>/logs/main.log`.
+
 ## Mobile Sync Server
 
 `src/main/mobileSyncServer.ts` is the HTTP server the mobile/TV app talks to — a second entry point beside the tRPC routers. Keep its payloads in step with `apps/shared/mobile-sync-contract.ts` and `apps/mobile/services/api.ts`.

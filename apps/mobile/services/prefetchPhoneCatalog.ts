@@ -4,11 +4,29 @@ import {
   getCachedChannels,
   getCachedMyLists,
   getCachedPlaylists,
+  shouldRefreshCollectionVideos,
 } from "./browseCache";
+import type { BrowseCachePlaylistKind } from "../db/repositories/playlists";
+import type { RemoteVideoWithStatus } from "../types";
 import { useSyncStore } from "../stores/sync";
 
-/** Load Home row contents into the browse cache without changing the old selected-item UI. */
+type CollectionRequest = {
+  kind: BrowseCachePlaylistKind;
+  id: string;
+  title: string;
+  sourceId?: string | null;
+  thumbnailUrl?: string | null;
+  thumbnailFallbackUrl?: string | null;
+  itemCount?: number | null;
+  load: () => Promise<{ videos: RemoteVideoWithStatus[] }>;
+};
+
+/**
+ * Refresh the Catalog snapshot behind the phone's Home rows. Collections fetched
+ * in the last 15 minutes are left alone, and Video thumbnails are not downloaded.
+ */
 export async function prefetchPhoneCatalog(serverUrl: string): Promise<void> {
+  const startedAt = Date.now();
   const sync = useSyncStore.getState();
   await Promise.all([
     sync.fetchChannels(serverUrl),
@@ -16,70 +34,63 @@ export async function prefetchPhoneCatalog(serverUrl: string): Promise<void> {
     sync.fetchPlaylists(serverUrl),
   ]);
 
-  const channels = getCachedChannels();
-  const myLists = getCachedMyLists();
-  const playlists = getCachedPlaylists();
+  const requests: CollectionRequest[] = [
+    ...getCachedChannels().map((channel) => ({
+      kind: "channel" as const,
+      id: channel.channelId,
+      title: channel.channelTitle,
+      sourceId: channel.channelId,
+      thumbnailUrl: channel.thumbnailUrl,
+      itemCount: channel.videoCount,
+      load: () => api.getChannelVideos(serverUrl, channel.channelId),
+    })),
+    ...getCachedMyLists().map((list) => ({
+      kind: "mylist" as const,
+      id: list.id,
+      title: list.name,
+      sourceId: list.sourceId,
+      thumbnailUrl: list.thumbnailUrl,
+      itemCount: list.itemCount,
+      load: () => api.getMyListVideos(serverUrl, list.id),
+    })),
+    ...getCachedPlaylists().map((playlist) => ({
+      kind: "playlist" as const,
+      id: playlist.playlistId,
+      title: playlist.title,
+      sourceId: playlist.channelId,
+      thumbnailUrl: playlist.thumbnailUrl,
+      thumbnailFallbackUrl: api.getPlaylistThumbnailUrl(
+        serverUrl,
+        playlist.playlistId,
+      ),
+      itemCount: playlist.itemCount,
+      load: () => api.getPlaylistVideos(serverUrl, playlist.playlistId),
+    })),
+  ];
+  const stale = requests.filter((request) =>
+    shouldRefreshCollectionVideos(request.kind, request.id),
+  );
 
-  await Promise.all([
-    ...channels.map(async (channel) => {
+  let videoCount = 0;
+  await Promise.all(
+    stale.map(async ({ load, ...collection }) => {
       try {
-        const { videos } = await api.getChannelVideos(
+        const { videos } = await load();
+        await cacheRemoteCollectionVideos(
           serverUrl,
-          channel.channelId,
+          { ...collection, videos },
+          { downloadThumbnails: false },
         );
-        await cacheRemoteCollectionVideos(serverUrl, {
-          kind: "channel",
-          id: channel.channelId,
-          title: channel.channelTitle,
-          sourceId: channel.channelId,
-          thumbnailUrl: channel.thumbnailUrl,
-          itemCount: channel.videoCount,
-          videos,
-        });
+        videoCount += videos.length;
       } catch {
-        // Keep the cached row if this Channel's Videos fail to load.
+        // Keep the cached row if this collection's Videos fail to load.
       }
     }),
-    ...myLists.map(async (list) => {
-      try {
-        const { videos } = await api.getMyListVideos(serverUrl, list.id);
-        await cacheRemoteCollectionVideos(serverUrl, {
-          kind: "mylist",
-          id: list.id,
-          title: list.name,
-          sourceId: list.sourceId,
-          thumbnailUrl: list.thumbnailUrl,
-          itemCount: list.itemCount,
-          videos,
-        });
-      } catch {
-        // Keep the cached row if this List's Videos fail to load.
-      }
-    }),
-    ...playlists.map(async (playlist) => {
-      try {
-        const { videos } = await api.getPlaylistVideos(
-          serverUrl,
-          playlist.playlistId,
-        );
-        await cacheRemoteCollectionVideos(serverUrl, {
-          kind: "playlist",
-          id: playlist.playlistId,
-          title: playlist.title,
-          sourceId: playlist.channelId,
-          thumbnailUrl: playlist.thumbnailUrl,
-          thumbnailFallbackUrl: api.getPlaylistThumbnailUrl(
-            serverUrl,
-            playlist.playlistId,
-          ),
-          itemCount: playlist.itemCount,
-          videos,
-        });
-      } catch {
-        // Keep the cached row if this playlist's Videos fail to load.
-      }
-    }),
-  ]);
+  );
+
+  console.info(
+    `[PhoneCatalog] Refreshed ${stale.length}/${requests.length} collections, ${videoCount} Videos in ${Date.now() - startedAt} ms`,
+  );
 
   useSyncStore.setState((state) => ({
     browseCacheVersion: state.browseCacheVersion + 1,

@@ -14,6 +14,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useConnectionStore } from "../../../stores/connection";
 import { useOnDeviceSetStore } from "../../../stores/onDeviceSet";
+import { api } from "../../../services/api";
 import { playQueue } from "../../../services/play-queue";
 import { prefetchPhoneCatalog } from "../../../services/prefetchPhoneCatalog";
 import {
@@ -36,6 +37,15 @@ import type { RemoteVideoWithStatus } from "../../../types";
 
 const POSTER_WIDTH = 168;
 
+// Ask the desktop with the current Pairing code; a stored URL may carry an old one.
+function thumbnailFor(video: RemoteVideoWithStatus, serverUrl: string | null) {
+  const stored = video.thumbnailUrl;
+  if (serverUrl && stored && !stored.startsWith("data:")) {
+    return api.getThumbnailUrl(serverUrl, video.id);
+  }
+  return resolveRemoteAssetUrl(serverUrl, stored) ?? undefined;
+}
+
 function toStreaming(
   videos: RemoteVideoWithStatus[],
   serverUrl: string | null,
@@ -45,8 +55,7 @@ function toStreaming(
     title: video.title,
     channelTitle: video.channelTitle,
     duration: video.duration,
-    thumbnailUrl:
-      resolveRemoteAssetUrl(serverUrl, video.thumbnailUrl) ?? undefined,
+    thumbnailUrl: thumbnailFor(video, serverUrl),
   }));
 }
 

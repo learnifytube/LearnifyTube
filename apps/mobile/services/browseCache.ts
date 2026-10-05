@@ -63,16 +63,22 @@ async function getCachedThumbnailUrl(input: {
 async function normalizeRemoteVideo(
   serverUrl: string,
   video: RemoteVideoWithStatus,
-  cacheKey: string
+  cacheKey: string,
+  downloadThumbnail: boolean
 ): Promise<RemoteVideoWithStatus> {
   const existingVideo = videoRepo.getVideoById(video.id);
-  const normalizedThumbnailUrl = await getCachedThumbnailUrl({
-    serverUrl,
-    remoteUrl: video.thumbnailUrl,
-    fallbackUrl: api.getThumbnailUrl(serverUrl, video.id),
-    existingUrl: existingVideo?.thumbnailUrl ?? null,
-    cacheKey,
-  });
+  const existingUrl = existingVideo?.thumbnailUrl ?? null;
+  const normalizedThumbnailUrl = downloadThumbnail
+    ? await getCachedThumbnailUrl({
+        serverUrl,
+        remoteUrl: video.thumbnailUrl,
+        fallbackUrl: api.getThumbnailUrl(serverUrl, video.id),
+        existingUrl,
+        cacheKey,
+      })
+    : existingUrl?.startsWith("data:")
+      ? existingUrl
+      : (video.thumbnailUrl ?? existingUrl);
 
   videoRepo.upsertVideo({
     id: video.id,
@@ -240,8 +246,11 @@ export async function cacheRemoteCollectionVideos(
     thumbnailFallbackUrl?: string | null;
     itemCount?: number | null;
     videos: RemoteVideoWithStatus[];
-  }
+  },
+  // The phone keeps only the desktop's thumbnail URL; posters load as they appear.
+  options: { downloadThumbnails?: boolean } = {}
 ): Promise<RemoteVideoWithStatus[]> {
+  const downloadThumbnails = options.downloadThumbnails ?? true;
   const playlistId = buildCachedPlaylistId(input.kind, input.id);
   const detailHydratedAt = Date.now();
   const existingPlaylist = getSavedPlaylistById(playlistId, {
@@ -270,7 +279,8 @@ export async function cacheRemoteCollectionVideos(
       normalizeRemoteVideo(
         serverUrl,
         video,
-        `${input.kind}-${input.id}-${video.id}`
+        `${input.kind}-${input.id}-${video.id}`,
+        downloadThumbnails
       )
     )
   );

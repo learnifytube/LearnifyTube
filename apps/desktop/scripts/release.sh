@@ -147,8 +147,20 @@ TAG_MESSAGE=$'draft='${RELEASE_DRAFT}$'\nprerelease='${RELEASE_PRERELEASE}
 
 # Create and push tag
 git tag -a "v$NEW_VERSION" -m "$TAG_MESSAGE"
-git push origin main
-git push origin "v$NEW_VERSION"
+if ! git push origin main; then
+    echo "Error: pushing main failed. Tag v$NEW_VERSION exists locally only; release aborted."
+    exit 1
+fi
+
+# GitHub can reject a tag pushed right after its commit ("missing necessary objects"); retry once.
+if ! git push origin "v$NEW_VERSION"; then
+    echo "Tag push failed, retrying in 5s..."
+    sleep 5
+    if ! git push origin "v$NEW_VERSION"; then
+        echo "Error: pushing tag v$NEW_VERSION failed. Retry with: git push origin v$NEW_VERSION"
+        exit 1
+    fi
+fi
 
 echo "Version $NEW_VERSION has been tagged and pushed!"
 echo "Release metadata:"

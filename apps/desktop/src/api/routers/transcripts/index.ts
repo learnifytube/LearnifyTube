@@ -356,7 +356,9 @@ export async function downloadTranscript(
     "--skip-download",
     "--write-subs",
     "--write-auto-subs",
-    "--no-warnings",
+    // YouTube 429s some caption tracks (e.g. the translated "en" auto-caption track)
+    // while the "-orig" track still downloads; keep going instead of aborting the run.
+    "--ignore-errors",
     "--retries",
     "2",
     "--sleep-requests",
@@ -370,6 +372,7 @@ export async function downloadTranscript(
     url,
   ];
 
+  let ytDlpStderr = "";
   try {
     await new Promise<void>((resolve, reject) => {
       const proc = spawnYtDlpWithLogging(
@@ -383,11 +386,10 @@ export async function downloadTranscript(
           other: { language: effectiveLang },
         }
       );
-      let err = "";
-      proc.stderr?.on("data", (d: Buffer | string) => (err += d.toString()));
+      proc.stderr?.on("data", (d: Buffer | string) => (ytDlpStderr += d.toString()));
       proc.on("error", reject);
       proc.on("close", (code) =>
-        code === 0 ? resolve() : reject(new Error(err || `yt-dlp exited ${code}`))
+        code === 0 ? resolve() : reject(new Error(ytDlpStderr || `yt-dlp exited ${code}`))
       );
     });
   } catch (e) {
@@ -434,6 +436,14 @@ export async function downloadTranscript(
   }
 
   if (!vttPath || !fs.existsSync(vttPath)) {
+    if (/429|Too Many Requests/i.test(ytDlpStderr)) {
+      return {
+        success: false,
+        code: "RATE_LIMITED",
+        retryAfterMs: 15 * 60 * 1000,
+        message: ytDlpStderr,
+      };
+    }
     return {
       success: false,
       message: "Transcript file not found after yt-dlp",

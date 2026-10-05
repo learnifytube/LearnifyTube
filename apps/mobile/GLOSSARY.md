@@ -6,9 +6,17 @@ The phone and Android TV app. The phone is a family catalog of the desktop Libra
 
 ### Catalog
 
+**Continue watching**:
+The phone's first Home row: Videos in progress on any device (started but not yet watched), newest first. Playing one resumes from the most recent Watch progress on any device, but a mark made on the desktop always wins. A Video finished anywhere leaves the row.
+_Avoid_: history, recently watched
+
 **Caption**:
 Timed lines shown on the picture while a Video plays, for reading along. Off until the viewer turns them on. Not a scrolling study list, not word lookup, not flashcards.
 _Avoid_: subtitles, transcript (for this overlay)
+
+**Catalog snapshot**:
+The phone's last-known copy of the desktop's Home rows and the titles and pictures of their Videos. It lets Home appear instantly and stay browsable in Offline mode. It is not playable and holds no Offline copies.
+_Avoid_: cache, browse cache, cached videos
 
 ### Offline playback
 
@@ -33,7 +41,7 @@ Playing a Video straight from the desktop when the Device has no Offline copy. A
 _Avoid_: remote playback, desktop playback
 
 **Play queue**:
-The Videos the player moves through after the user presses play on a Home row (Continue watching, Sent to this phone, a Channel, or a List) or on On this phone, with the one playing now. It knows no desktop and no file: each Video's Offline copy or Stream is chosen when that Video starts. On the TV, starting a Play queue also puts it in History.
+The Videos the player moves through after the user presses play on a Home row (Continue watching, Sent to this phone, a Channel, or a List) or on On this phone, with the one playing now. It knows no desktop and no file: each Video's Offline copy or Stream is chosen when that Video starts. In Offline mode it skips Videos without an Offline copy. On the TV, starting a Play queue also puts it in History.
 _Avoid_: playlist (for this), streaming queue
 
 **On-device set**:
@@ -45,7 +53,7 @@ To bring this device in line with the On-device set on connect, on return to the
 _Avoid_: sync (for this act)
 
 **Offline mode**:
-The Device cannot reach the desktop, whether it was never paired, the desktop is off, or the connection dropped. The Device shows and plays only its Offline copies and keeps Watch progress for the next Device report. It is a normal way to use the app, not an error.
+The Device cannot reach the desktop, whether it was never paired, the desktop is off, or the connection dropped. It plays only its Offline copies and keeps Watch progress for the next Device report. The phone still shows its Catalog snapshot, marking Videos without an Offline copy as needing the desktop; the TV shows only what it holds. It is a normal way to use the app, not an error.
 _Avoid_: disconnected mode, no-server state
 
 **Download queue**:

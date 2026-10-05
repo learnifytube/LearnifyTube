@@ -7,3 +7,9 @@ Home rows, top to bottom: Continue watching, Sent to this phone, then a row per 
 Three tabs: Home, On this phone (Offline copies — tap to play, long-press to remove; Mirror may restore Sent-to-this-phone items), Settings (pairing, storage, Caption language). Pairing is not a cold-start gate once anything is on the phone or cached; an empty phone with no desktop gets one Pair with desktop path.
 
 Flashcards, word study, scrolling transcript, multi-select Download, and Save Playlist are out. Captions are on the picture, off until toggled. Share is not in the tabs. TV layout is a later pass.
+
+## Amendment (2026-10-06): Offline mode keeps the Catalog snapshot; Continue watching spans devices
+
+In Offline mode the phone now shows every Home row from its Catalog snapshot instead of hiding rows without Offline copies. Videos without an Offline copy are dimmed with "Needs the desktop" and do nothing but explain when tapped. The Play queue skips them, so playing a row never stops on one. Hiding them made the phone look emptied out whenever the desktop was off. Tapping does not queue a Download for later, so a child tapping around offline cannot fill the Download queue.
+
+Continue watching is now the Videos in progress on any device, merged from the desktop's Watch state and the phone's own unreported progress. Resume uses the most recent position, and a mark made on the desktop wins. This applies to the phone only; the TV keeps its History.

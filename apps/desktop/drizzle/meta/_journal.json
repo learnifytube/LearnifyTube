@@ -127,6 +127,13 @@
       "when": 1790424223911,
       "tag": "0017_auto_keep_remove_watched",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1791241217456,
+      "tag": "0018_remove_auto_keep",
+      "breakpoints": true
     }
   ]
 }

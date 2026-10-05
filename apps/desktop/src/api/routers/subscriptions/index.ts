@@ -6,8 +6,6 @@ import {
   loadSubscriptionVideos,
   setSubscribed,
 } from "@/api/library/subscriptions";
-import { getAutoKeep, setAutoKeep, takeAutoKeepBaseline } from "@/api/library/auto-keep";
-import { autoKeepDeps } from "@/services/auto-keep";
 
 export const subscriptionsRouter = t.router({
   // The Channels the user subscribed to
@@ -32,33 +30,5 @@ export const subscriptionsRouter = t.router({
       return found
         ? { success: true as const }
         : { success: false as const, message: "Channel not found" };
-    }),
-
-  // A Subscription's Auto-keep: on or off, target List, last check
-  autoKeep: publicProcedure
-    .input(z.object({ channelId: z.string() }))
-    .query(({ input, ctx }) => getAutoKeep(ctx.db ?? defaultDb, input.channelId)),
-
-  // Switch Auto-keep on or off, pick its target List (null: Library only) or switch "Remove
-  // from the List once watched". Switching on
-  // takes the baseline straight away, so it waits for YouTube.
-  setAutoKeep: publicProcedure
-    .input(
-      z.object({
-        channelId: z.string(),
-        enabled: z.boolean(),
-        listId: z.string().nullable().optional(),
-        removeWatched: z.boolean().optional(),
-      })
-    )
-    .mutation(async ({ input, ctx }) => {
-      const { channelId, ...settings } = input;
-      const db = ctx.db ?? defaultDb;
-      const outcome = await setAutoKeep(db, channelId, settings);
-      if (outcome === "not-subscribed") {
-        return { success: false as const, message: "Subscribe to the Channel first" };
-      }
-      if (outcome === "switched-on") await takeAutoKeepBaseline(db, channelId, autoKeepDeps(db));
-      return { success: true as const };
     }),
 });

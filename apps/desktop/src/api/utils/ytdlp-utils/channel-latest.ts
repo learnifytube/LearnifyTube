@@ -4,7 +4,6 @@ import crypto from "crypto";
 import type { Database } from "@/api/db";
 import { channels, youtubeVideos } from "@/api/db/schema";
 import { logger } from "@/helpers/logger";
-import type { LatestVideo } from "@/lib/auto-keep";
 import { extractChannelData } from "./metadata";
 import { upsertChannelData } from "./database";
 import { spawnYtDlpWithLogging } from "./ytdlp";
@@ -29,7 +28,6 @@ export const playlistResponseSchema = z
           uploader: z.string().nullish().catch(null),
           // Approximate ("3 hours ago"), only with the youtubetab:approximate_date extractor arg
           timestamp: z.number().nullish().catch(null),
-          live_status: z.string().nullish().catch(null),
           thumbnails: z
             .array(z.object({ url: z.string().optional().catch(undefined) }))
             .optional()
@@ -43,15 +41,6 @@ export const playlistResponseSchema = z
   .passthrough();
 
 type Entry = NonNullable<z.infer<typeof playlistResponseSchema>["entries"]>[number];
-
-// What Auto-keep needs from a flat-playlist entry. yt-dlp links Shorts as /shorts/<id>, and
-// gives only an approximate publish time: to the hour for Videos under a day old.
-const toLatestVideo = (entry: Entry & { id: string }): LatestVideo => ({
-  videoId: entry.id,
-  publishedAt: entry.timestamp ? entry.timestamp * 1000 : null,
-  isShort: entry.url?.includes("/shorts/") ?? false,
-  liveStatus: entry.live_status ?? null,
-});
 
 const runFlatListing = (binPath: string, url: string, channelId: string): Promise<string> =>
   new Promise<string>((resolve, reject) => {
@@ -76,14 +65,14 @@ const runFlatListing = (binPath: string, url: string, channelId: string): Promis
     );
   });
 
-// Fetch a Channel's latest Videos from YouTube (metadata only) and store them, newest first.
-// Throws when yt-dlp fails.
+// Fetch a Channel's latest Videos from YouTube (metadata only) and store them. Returns their
+// IDs, newest first. Throws when yt-dlp fails.
 export const fetchChannelLatest = async (
   db: Database,
   binPath: string,
   channelId: string,
   limit: number
-): Promise<LatestVideo[]> => {
+): Promise<string[]> => {
   const url = `https://www.youtube.com/channel/${channelId}/videos?view=0&sort=dd&flow=grid`;
   const listData = playlistResponseSchema.parse(
     JSON.parse(await runFlatListing(binPath, url, channelId))
@@ -156,8 +145,9 @@ export const fetchChannelLatest = async (
         likeCount: null,
         thumbnailUrl: entry.thumbnails?.[0]?.url ?? entry.thumbnail ?? null,
         thumbnailPath: thumbPath,
-        // A precise date from the full metadata beats the listing's approximate one
-        publishedAt: existing[0]?.publishedAt ?? toLatestVideo(entry).publishedAt,
+        // A precise date from the full metadata beats the listing's approximate one, which is
+        // to the hour for Videos under a day old
+        publishedAt: existing[0]?.publishedAt ?? (entry.timestamp ? entry.timestamp * 1000 : null),
         tags: null,
         raw: JSON.stringify(entry),
         updatedAt: now,
@@ -195,5 +185,5 @@ export const fetchChannelLatest = async (
     logger.error("[ytdlp] Failed to update lastLatestFetchedAt", { channelId, error: String(e) });
   }
 
-  return latest.map(toLatestVideo);
+  return latest.map((entry) => entry.id);
 };

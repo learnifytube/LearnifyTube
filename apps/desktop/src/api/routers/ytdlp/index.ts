@@ -1276,7 +1276,7 @@ export const ytdlpRouter = t.router({
 
       // Fetch and return full video data from DB (includes download status), in listing order
       if (latest.length === 0) return [];
-      const order = new Map(latest.map((v, i) => [v.videoId, i]));
+      const order = new Map(latest.map((videoId, i) => [videoId, i]));
       const videos = await db
         .select()
         .from(youtubeVideos)

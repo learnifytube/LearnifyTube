@@ -2,7 +2,6 @@ import { eq } from "drizzle-orm";
 import type { Database } from "@/api/db";
 import { videoWatchStats, youtubeVideos } from "@/api/db/schema";
 import { isPlayedEnough } from "@/lib/watch-state";
-import { removeWatchedAutoKept } from "./auto-keep-lists";
 
 // Record desktop playback: accumulated seconds and where it stopped. The Video becomes
 // watched once about 90% has played.
@@ -52,9 +51,6 @@ export const recordWatchProgress = async (
       })
       .where(eq(videoWatchStats.videoId, input.videoId));
   }
-  if (playedEnough && !prev?.watchedAt) {
-    await removeWatchedAutoKept(db, { videoIds: [input.videoId] });
-  }
 };
 
 // Mark a Video watched, or back to unwatched (which also forgets where playback stopped)
@@ -71,5 +67,4 @@ export const setWatched = async (
     .insert(videoWatchStats)
     .values({ id: crypto.randomUUID(), videoId, createdAt: now, ...changes })
     .onConflictDoUpdate({ target: videoWatchStats.videoId, set: changes });
-  if (watched) await removeWatchedAutoKept(db, { videoIds: [videoId] });
 };

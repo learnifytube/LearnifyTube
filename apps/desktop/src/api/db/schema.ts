@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index, unique, primaryKey } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, index, unique } from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
 
 export const channels = sqliteTable(
@@ -26,51 +26,12 @@ export const channels = sqliteTable(
     // Set while the Channel is a Subscription; null for a Channel the user only visited
     subscribedAt: integer("subscribed_at"),
 
-    // Auto-keep: on while autoKeepSince is set (when it was switched on). The target List may
-    // since have been deleted. The last check's time and whether it failed, for the Channel page.
-    autoKeepSince: integer("auto_keep_since"),
-    autoKeepListId: text("auto_keep_list_id"),
-    autoKeepCheckedAt: integer("auto_keep_checked_at"),
-    autoKeepCheckFailed: integer("auto_keep_check_failed", { mode: "boolean" }),
-    // Remove a Video Auto-keep put into a List from that List once it is watched
-    autoKeepRemoveWatched: integer("auto_keep_remove_watched", { mode: "boolean" })
-      .notNull()
-      .default(false),
-
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at"),
   },
   (table) => [
     index("channels_channel_id_idx").on(table.channelId),
     index("channels_updated_at_idx").on(table.updatedAt),
-  ]
-);
-
-// Every Video a Subscription's Auto-keep has considered (kept or skipped), so it never
-// auto-keeps the same Video twice.
-export const autoKeepConsidered = sqliteTable(
-  "auto_keep_considered",
-  {
-    channelId: text("channel_id").notNull(),
-    videoId: text("video_id").notNull(),
-    consideredAt: integer("considered_at").notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.channelId, table.videoId] })]
-);
-
-// List entries a Subscription's Auto-keep added, with the entry's own added time, so they can
-// be told apart from Videos the user put in the same List (or put back after removing them).
-export const autoKeepListItems = sqliteTable(
-  "auto_keep_list_items",
-  {
-    listId: text("list_id").notNull(),
-    videoId: text("video_id").notNull(),
-    channelId: text("channel_id").notNull(),
-    addedAt: integer("added_at").notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.listId, table.videoId] }),
-    index("auto_keep_list_items_video_id_idx").on(table.videoId),
   ]
 );
 

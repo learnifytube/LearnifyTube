@@ -42,7 +42,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: apps/desktop
-        run: npm install
+        run: npm ci
 
       - name: Build app
         working-directory: apps/desktop

@@ -44,7 +44,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: apps/desktop
-        run: npm install
+        run: npm ci
 
       - name: Install Rosetta 2 (for x64 builds)
         if: matrix.arch == 'x64'

@@ -1183,7 +1183,7 @@ const createQueueManager = (
         })
         .from(youtubeVideos)
         .where(eq(youtubeVideos.downloadStatus, "failed"))
-        .orderBy(youtubeVideos.updatedAt)
+        .orderBy(desc(youtubeVideos.updatedAt))
         .limit(10)
         .execute();
 

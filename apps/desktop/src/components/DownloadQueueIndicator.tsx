@@ -192,6 +192,10 @@ function DownloadItem({
   );
 }
 
+// When a download last changed: finished, failed, started or added
+const lastActivityAt = (download: QueuedDownload): number =>
+  download.completedAt ?? download.updatedAt ?? download.startedAt ?? download.addedAt;
+
 export function DownloadQueueIndicator(): React.JSX.Element | null {
   const [isOpen, setIsOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -219,8 +223,10 @@ export function DownloadQueueIndicator(): React.JSX.Element | null {
     });
   };
 
-  // Combine all items for display
-  const allItems = [...downloading, ...queued, ...paused, ...failed, ...completed];
+  // Every download, most recent first, whatever its status
+  const allItems = [...downloading, ...queued, ...paused, ...failed, ...completed].sort(
+    (a, b) => lastActivityAt(b) - lastActivityAt(a)
+  );
 
   // Don't render if no items at all
   if (allItems.length === 0) {
@@ -282,7 +288,7 @@ export function DownloadQueueIndicator(): React.JSX.Element | null {
             </div>
 
             <div className="max-h-80 divide-y overflow-y-auto">
-              {downloading.map((item) => (
+              {allItems.map((item) => (
                 <DownloadItem
                   key={item.id}
                   download={item}
@@ -290,47 +296,11 @@ export function DownloadQueueIndicator(): React.JSX.Element | null {
                   onResume={() => resumeDownload(item.id)}
                   onCancel={() => cancelDownload(item.id)}
                   onRetry={() => retryDownload(item.id)}
-                />
-              ))}
-              {queued.map((item) => (
-                <DownloadItem
-                  key={item.id}
-                  download={item}
-                  onPause={() => pauseDownload(item.id)}
-                  onResume={() => resumeDownload(item.id)}
-                  onCancel={() => cancelDownload(item.id)}
-                  onRetry={() => retryDownload(item.id)}
-                />
-              ))}
-              {paused.map((item) => (
-                <DownloadItem
-                  key={item.id}
-                  download={item}
-                  onPause={() => pauseDownload(item.id)}
-                  onResume={() => resumeDownload(item.id)}
-                  onCancel={() => cancelDownload(item.id)}
-                  onRetry={() => retryDownload(item.id)}
-                />
-              ))}
-              {failed.map((item) => (
-                <DownloadItem
-                  key={item.id}
-                  download={item}
-                  onPause={() => pauseDownload(item.id)}
-                  onResume={() => resumeDownload(item.id)}
-                  onCancel={() => cancelDownload(item.id)}
-                  onRetry={() => retryDownload(item.id)}
-                />
-              ))}
-              {completed.map((item) => (
-                <DownloadItem
-                  key={item.id}
-                  download={item}
-                  onPause={() => pauseDownload(item.id)}
-                  onResume={() => resumeDownload(item.id)}
-                  onCancel={() => cancelDownload(item.id)}
-                  onRetry={() => retryDownload(item.id)}
-                  onPlay={item.videoId ? () => handlePlayVideo(item.videoId!) : undefined}
+                  onPlay={
+                    item.status === "completed" && item.videoId
+                      ? () => handlePlayVideo(item.videoId!)
+                      : undefined
+                  }
                 />
               ))}
             </div>

@@ -9,13 +9,14 @@ AVD: `LearnifyPhone` (Pixel 7, API 34). `npm run verify -- up phone` boots it, p
 | Flow | What it does |
 | --- | --- |
 | `phone-pair` | Cold-launches into `learnify://connect`, connects with the prefilled address and code, ends on Home ("Little Science Lab" visible). |
+| `phone-player` | Needs a paired phone. Captions on, controls auto-hide, full screen (landscape) and pause. Screenshots `phone-player-portrait-*`, `phone-player-landscape-*`. Taps through Android's one-time "Viewing full screen" hint. |
 | `phone-browse` | Needs a paired phone. See all + hardware Back, play, skip next/previous, Back to Home, On this phone. Screenshots `phone-see-all`, `phone-player-start`, `phone-player-next`, `phone-on-this-phone`. |
 
 The pairing UI is `app/(mobile)/connect.tsx` (modal). Settings only discovers an IP; it does **not** collect the pairing code. After connect, Home opens (Continue watching / Sent to this phone / channel and list rows). There is no Download confirm.
 
 ## testIDs
 
-`connect-submit`, `row-see-all-<row id>` (e.g. `row-see-all-channel-UCverifyScience01`), `row-grid-back`, `player-back`, `next-video`, `previous-video`, `captions-toggle`. Prefer them over titles: the Magnets title truncates.
+`connect-submit`, `row-see-all-<row id>` (e.g. `row-see-all-channel-UCverifyScience01`), `row-grid-back`, `player-back`, `next-video`, `previous-video`, `captions-toggle`, `play-pause`, `full-screen-toggle`, `player-surface` (tap toggles the controls; they hide 3 s after the last touch while playing). Prefer them over titles: the Magnets title truncates.
 
 ## What to look at
 

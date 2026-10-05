@@ -1,0 +1,62 @@
+appId: com.learnifytube.mobile
+---
+# Run after phone-pair.yaml. Covers the player's auto-hiding controls, Captions,
+# and full screen (forced landscape and back).
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: row-see-all-channel-UCverifyScience01
+    timeout: 60000
+- tapOn:
+    id: row-see-all-channel-UCverifyScience01
+- tapOn: "Floating and sinking"
+- extendedWaitUntil:
+    visible:
+      id: captions-toggle
+    timeout: 20000
+- tapOn:
+    id: captions-toggle
+- takeScreenshot: phone-player-portrait-controls
+# Controls hide 3 s after the last touch while playing; Captions drop low.
+- extendedWaitUntil:
+    notVisible:
+      id: player-back
+    timeout: 6000
+- takeScreenshot: phone-player-portrait-hidden
+# A tap on the picture brings them back.
+- tapOn:
+    point: "50%,40%"
+- extendedWaitUntil:
+    visible:
+      id: full-screen-toggle
+    timeout: 3000
+- tapOn:
+    id: full-screen-toggle
+# Android's one-time "Viewing full screen" hint covers the app the first time.
+- tapOn:
+    text: "Got it"
+    optional: true
+- tapOn:
+    point: "50%,40%"
+- extendedWaitUntil:
+    visible:
+      id: full-screen-toggle
+    timeout: 5000
+- takeScreenshot: phone-player-landscape-controls
+- extendedWaitUntil:
+    notVisible:
+      id: player-back
+    timeout: 6000
+- takeScreenshot: phone-player-landscape-hidden
+# Pause keeps the controls up.
+- tapOn:
+    point: "50%,40%"
+- tapOn:
+    id: play-pause
+- waitForAnimationToEnd:
+    timeout: 4000
+- assertVisible:
+    id: player-back
+- takeScreenshot: phone-player-landscape-paused
+- tapOn:
+    id: play-pause

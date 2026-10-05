@@ -35,10 +35,15 @@ fi
 
 if [[ "$run_mobile" == true ]]; then
   mobile_lint_files=()
+  mobile_needs_type_check=false
   for file in "${mobile_staged[@]}"; do
     case "$file" in
       *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs)
         mobile_lint_files+=("${file#apps/mobile/}")
+        mobile_needs_type_check=true
+        ;;
+      *.json)
+        mobile_needs_type_check=true
         ;;
     esac
   done
@@ -51,16 +56,23 @@ if [[ "$run_mobile" == true ]]; then
     )
   fi
 
-  echo "Running mobile type-check..."
-  npm run mobile:type-check
+  if [[ "$mobile_needs_type_check" == true ]]; then
+    echo "Running mobile type-check..."
+    npm run mobile:type-check
+  fi
 fi
 
 if [[ "$run_desktop" == true ]]; then
   desktop_lint_files=()
+  desktop_needs_type_check=false
   for file in "${desktop_staged[@]}"; do
     case "$file" in
       *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs)
         desktop_lint_files+=("${file#apps/desktop/}")
+        desktop_needs_type_check=true
+        ;;
+      *.json)
+        desktop_needs_type_check=true
         ;;
     esac
   done
@@ -73,6 +85,8 @@ if [[ "$run_desktop" == true ]]; then
     )
   fi
 
-  echo "Running desktop type-check..."
-  npm run desktop:type-check
+  if [[ "$desktop_needs_type_check" == true ]]; then
+    echo "Running desktop type-check..."
+    npm run desktop:type-check
+  fi
 fi

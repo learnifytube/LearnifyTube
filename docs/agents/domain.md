@@ -21,7 +21,7 @@ Read the files relevant to your topic before exploring:
         └── docs/adr/          ← mobile/TV decisions
 ```
 
-These files are created lazily by `/domain-modeling` as terms and decisions get resolved. Where one is missing, carry on with the code as the source of truth.
+The per-app `docs/adr/` folders are created lazily by `/domain-modeling` the first time a decision scoped to one app gets recorded. Until one exists, check the root `docs/adr/` for decisions that touch that app.
 
 ## Use the glossary's vocabulary
 

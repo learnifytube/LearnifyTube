@@ -55,6 +55,31 @@ function toStreaming(
   }));
 }
 
+function readContinueWatching() {
+  return watchHistoryRepo.getWatchHistory(20).map((item) => ({
+    id: item.videoId,
+    title: item.title,
+    channelTitle: item.channelTitle,
+    duration: item.duration,
+    thumbnailUrl: item.thumbnailUrl ?? undefined,
+    lastPositionSeconds: item.lastPositionSeconds,
+    lastWatchedAt: item.lastWatchedAt,
+  }));
+}
+
+type ContinueWatchingItem = ReturnType<typeof readContinueWatching>[number];
+
+// Every progress save moves lastWatchedAt, so id + lastWatchedAt spots any change.
+function sameHistory(a: ContinueWatchingItem[], b: ContinueWatchingItem[]) {
+  return (
+    a.length === b.length &&
+    a.every(
+      (item, i) =>
+        item.id === b[i].id && item.lastWatchedAt === b[i].lastWatchedAt,
+    )
+  );
+}
+
 function playRow(row: PhoneHomeRow, startIndex: number) {
   const video = playQueue.start({
     id: row.id,
@@ -77,11 +102,18 @@ export default function HomeScreen() {
   const getStoredThumbnail = videoThumbnails.useLookup();
   const [openRow, setOpenRow] = useState<PhoneHomeRow | null>(null);
   const [loading, setLoading] = useState(false);
-  const [historyTick, setHistoryTick] = useState(0);
+  const [continueWatching, setContinueWatching] =
+    useState(readContinueWatching);
 
+  // Home stays mounted behind the other tabs and the player, so it rereads
+  // Continue watching on focus. Keep the old array when nothing changed:
+  // a new one rebuilds every row and stalls the JS thread on each tab switch.
   useFocusEffect(
     useCallback(() => {
-      setHistoryTick((tick) => tick + 1);
+      const next = readContinueWatching();
+      setContinueWatching((current) =>
+        sameHistory(current, next) ? current : next,
+      );
     }, []),
   );
 
@@ -112,20 +144,6 @@ export default function HomeScreen() {
       cancelled = true;
     };
   }, [serverUrl]);
-
-  const continueWatching = useMemo(
-    () =>
-      watchHistoryRepo.getWatchHistory(20).map((item) => ({
-        id: item.videoId,
-        title: item.title,
-        channelTitle: item.channelTitle,
-        duration: item.duration,
-        thumbnailUrl: item.thumbnailUrl ?? undefined,
-        lastPositionSeconds: item.lastPositionSeconds,
-        lastWatchedAt: item.lastWatchedAt,
-      })),
-    [historyTick],
-  );
 
   const rows = useMemo(
     () =>

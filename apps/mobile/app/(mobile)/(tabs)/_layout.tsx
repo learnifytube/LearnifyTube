@@ -2,11 +2,13 @@ import { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "../../../theme";
 import { Home, Smartphone, Settings } from "../../../theme/icons";
+import { useAppUpdateStore } from "../../../stores/appUpdate";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const tabBarBottomPadding = Math.max(insets.bottom, 8);
   const tabBarHeight = 56 + 8 + tabBarBottomPadding;
+  const hasUpdate = useAppUpdateStore((s) => !!s.availability?.hasUpdate);
 
   return (
     <Tabs
@@ -51,6 +53,13 @@ export default function TabsLayout() {
         name="settings"
         options={{
           title: "Settings",
+          tabBarBadge: hasUpdate ? "" : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: colors.primary,
+            minWidth: 10,
+            height: 10,
+            borderRadius: 5,
+          },
           tabBarIcon: ({ focused, color }) => (
             <Settings size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),

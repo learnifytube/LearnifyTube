@@ -28,10 +28,9 @@ import {
 } from "../../../services/sync-compatibility";
 import {
   checkForAndroidApkUpdate,
-  getAndroidApkUpdateAvailability,
   getInstalledApp,
-  type AndroidApkUpdateAvailability,
 } from "../../../services/app-update";
+import { useAppUpdateStore } from "../../../stores/appUpdate";
 import { ensureDiscoveryPermissions } from "../../../services/discovery-permissions";
 import { logger, type AppLogEntry } from "../../../services/logger";
 import { verifyDesktopUrl } from "../../../services/verify-desktop";
@@ -135,10 +134,9 @@ export default function SettingsScreen() {
   const [showLangPicker, setShowLangPicker] = useState(false);
   const [showLogViewer, setShowLogViewer] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [isLoadingUpdateAvailability, setIsLoadingUpdateAvailability] =
-    useState(false);
-  const [updateAvailability, setUpdateAvailability] =
-    useState<AndroidApkUpdateAvailability | null>(null);
+  const isLoadingUpdateAvailability = useAppUpdateStore((s) => s.isLoading);
+  const updateAvailability = useAppUpdateStore((s) => s.availability);
+  const refreshUpdateAvailability = useAppUpdateStore((s) => s.refresh);
   const [logEntries, setLogEntries] = useState<AppLogEntry[]>(() =>
     logger.getEntries()
   );
@@ -329,17 +327,9 @@ export default function SettingsScreen() {
     setScanAttempt((prev) => prev + 1);
   }, [scanAttempt]);
 
-  const refreshUpdateAvailability = useCallback(async () => {
-    setIsLoadingUpdateAvailability(true);
-    try {
-      const availability = await getAndroidApkUpdateAvailability();
-      setUpdateAvailability(availability);
-    } finally {
-      setIsLoadingUpdateAvailability(false);
-    }
-  }, []);
-
+  // The launch check usually got here first.
   useEffect(() => {
+    if (useAppUpdateStore.getState().availability) return;
     void refreshUpdateAvailability();
   }, [refreshUpdateAvailability]);
 

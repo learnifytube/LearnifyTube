@@ -5,8 +5,8 @@ import {
   type UpdateMessenger,
 } from "../services/app-update";
 
-/** Checks for an update once on launch, asking through `messenger` (system alerts by default). */
-export function useSelfUpdateCheck(messenger?: UpdateMessenger) {
+/** Checks for an update once on launch, asking through `messenger`. */
+export function useSelfUpdateCheck(messenger: UpdateMessenger) {
   useEffect(() => {
     if (!shouldCheckForUpdatesOnLaunch()) {
       return;

@@ -20,7 +20,8 @@ import { useOfflineCopyScans } from "../hooks/useOfflineCopyScans";
 import { useLibraryStore } from "../stores/library";
 import { useNavigationLogger } from "../hooks/useNavigationLogger";
 import { usePresencePublisher } from "../hooks/usePresencePublisher";
-import { useSelfUpdateCheck } from "../hooks/useSelfUpdateCheck";
+import { shouldCheckForUpdatesOnLaunch } from "../services/app-update";
+import { useAppUpdateStore } from "../stores/appUpdate";
 import { usePhoneDesktopHealth } from "../hooks/usePhoneDesktopHealth";
 import { verifyDesktopUrl } from "../services/verify-desktop";
 import { colors } from "../theme";
@@ -63,9 +64,14 @@ function PresencePublisher() {
   return null;
 }
 
-// The TV checks from its own layout, with TV messages.
+// The TV checks from its own layout, with TV messages. The phone only records
+// the result: a dialog at launch can land on a tap and swallow it, so Settings
+// shows the update instead.
 function PhoneSelfUpdateChecker() {
-  useSelfUpdateCheck();
+  useEffect(() => {
+    if (!shouldCheckForUpdatesOnLaunch()) return;
+    void useAppUpdateStore.getState().refresh();
+  }, []);
   return null;
 }
 

@@ -1,5 +1,5 @@
 import { and, desc, eq } from "drizzle-orm";
-import { getDb, savedPlaylists, savedPlaylistItems } from "../index";
+import { getDb, getExpoDb, savedPlaylists, savedPlaylistItems } from "../index";
 import { offlineCopy } from "../../services/offline-copy";
 import type {
   SavedPlaylist,
@@ -63,6 +63,22 @@ function getPlaylistVisibilityCondition(
   }
 
   return and(eq(savedPlaylists.id, id), eq(savedPlaylists.isPinned, true));
+}
+
+// Every playlist's items in one query, each list in playlist order.
+function getItemsByPlaylist(): Map<string, SavedPlaylistItem[]> {
+  const byPlaylist = new Map<string, SavedPlaylistItem[]>();
+  const items = getDb()
+    .select()
+    .from(savedPlaylistItems)
+    .orderBy(savedPlaylistItems.playlistId, savedPlaylistItems.position)
+    .all();
+  for (const item of items) {
+    const playlistItems = byPlaylist.get(item.playlistId);
+    if (playlistItems) playlistItems.push(item);
+    else byPlaylist.set(item.playlistId, [item]);
+  }
+  return byPlaylist;
 }
 
 function getPlaylistItemsInternal(playlistId: string): SavedPlaylistItem[] {
@@ -254,36 +270,73 @@ export function getSavedPlaylistWithItems(
 export function getAllSavedPlaylistsWithItems(
   options?: SavedPlaylistQueryOptions
 ) {
+  const itemsByPlaylist = getItemsByPlaylist();
   return getAllSavedPlaylists(options).map((playlist) => ({
     ...playlist,
-    items: getPlaylistItemsInternal(playlist.id),
+    items: itemsByPlaylist.get(playlist.id) ?? [],
   }));
 }
 
-// Get all saved playlists with item counts and download progress
+function withProgress<T extends SavedPlaylist>(playlist: T, videoIds: string[]) {
+  return {
+    ...playlist,
+    downloadedCount: videoIds.filter(
+      (videoId) => offlineCopy.getUri(videoId) !== null
+    ).length,
+    totalCount: Math.max(playlist.itemCount ?? 0, videoIds.length),
+  };
+}
+
+// Get all saved playlists with item counts and download progress. Reads only
+// each item's Video id: item rows can be large.
 export function getAllSavedPlaylistsWithProgress(
   options?: SavedPlaylistQueryOptions
-): Array<
-  SavedPlaylist & {
-    downloadedCount: number;
-    totalCount: number;
+) {
+  const videoIdsByPlaylist = new Map<string, string[]>();
+  const items = getDb()
+    .select({
+      playlistId: savedPlaylistItems.playlistId,
+      videoId: savedPlaylistItems.videoId,
+    })
+    .from(savedPlaylistItems)
+    .all();
+  for (const { playlistId, videoId } of items) {
+    const videoIds = videoIdsByPlaylist.get(playlistId);
+    if (videoIds) videoIds.push(videoId);
+    else videoIdsByPlaylist.set(playlistId, [videoId]);
   }
-> {
-  const playlists = getAllSavedPlaylists(options);
 
-  return playlists.map((playlist) => {
-    const items = getPlaylistItemsInternal(playlist.id);
+  return getAllSavedPlaylists(options).map((playlist) =>
+    withProgress(playlist, videoIdsByPlaylist.get(playlist.id) ?? [])
+  );
+}
 
-    const downloadedCount = items.filter(
-      (item) => offlineCopy.getUri(item.videoId) !== null
-    ).length;
+// Get all saved playlists with their items, item counts and download progress,
+// in two queries however many playlists there are.
+export function getAllSavedPlaylistsWithItemsAndProgress(
+  options?: SavedPlaylistQueryOptions
+) {
+  return getAllSavedPlaylistsWithItems(options).map((playlist) =>
+    withProgress(
+      {
+        ...playlist,
+        items: playlist.items.map((item) => ({
+          ...item,
+          isDownloaded: offlineCopy.getUri(item.videoId) !== null,
+        })),
+      },
+      playlist.items.map((item) => item.videoId)
+    )
+  );
+}
 
-    return {
-      ...playlist,
-      downloadedCount,
-      totalCount: Math.max(playlist.itemCount ?? 0, items.length),
-    };
-  });
+// The phone keeps only the desktop's thumbnail URL for catalog items; older
+// versions stored each as base64, which made every catalog read move megabytes.
+// Runs on SQLite's own thread.
+export async function dropInlineItemThumbnails() {
+  await getExpoDb().execAsync(
+    "UPDATE saved_playlist_items SET thumbnail_url = NULL WHERE thumbnail_url LIKE 'data:%'"
+  );
 }
 
 // Save a playlist with its videos

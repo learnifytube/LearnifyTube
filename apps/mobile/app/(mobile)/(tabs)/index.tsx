@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   FlatList,
   Pressable,
   ActivityIndicator,
@@ -17,10 +16,7 @@ import { useOnDeviceSetStore } from "../../../stores/onDeviceSet";
 import { api } from "../../../services/api";
 import { playQueue } from "../../../services/play-queue";
 import { prefetchPhoneCatalog } from "../../../services/prefetchPhoneCatalog";
-import {
-  getCachedCollectionVideos,
-  resolveRemoteAssetUrl,
-} from "../../../services/browseCache";
+import { resolveRemoteAssetUrl } from "../../../services/browseCache";
 import { useBrowseCatalog } from "../../../core/hooks/useBrowseCatalog";
 import { VideoGridCard } from "../../../components/VideoGridCard";
 import {
@@ -40,7 +36,7 @@ const POSTER_WIDTH = 168;
 // Ask the desktop with the current Pairing code; a stored URL may carry an old one.
 function thumbnailFor(video: RemoteVideoWithStatus, serverUrl: string | null) {
   const stored = video.thumbnailUrl;
-  if (serverUrl && stored && !stored.startsWith("data:")) {
+  if (serverUrl && !stored?.startsWith("data:")) {
     return api.getThumbnailUrl(serverUrl, video.id);
   }
   return resolveRemoteAssetUrl(serverUrl, stored) ?? undefined;
@@ -74,7 +70,8 @@ export default function HomeScreen() {
   const serverUrl = useConnectionStore((state) => state.serverUrl);
   const savedUrl = useConnectionStore((state) => state.savedUrl);
   const connected = !!serverUrl;
-  const { channels, playlists, myLists } = useBrowseCatalog();
+  const { channels, playlists, myLists, getCollectionVideos } =
+    useBrowseCatalog();
   const onDeviceSet = useOnDeviceSetStore((state) => state.videos);
   const getOfflineUri = offlineCopy.useLookup();
   const getStoredThumbnail = videoThumbnails.useLookup();
@@ -143,21 +140,21 @@ export default function HomeScreen() {
         channels: channels.map((channel) => ({
           channel,
           videos: toStreaming(
-            getCachedCollectionVideos("channel", channel.channelId),
+            getCollectionVideos("channel", channel.channelId),
             serverUrl,
           ),
         })),
         lists: myLists.map((list) => ({
           list,
           videos: toStreaming(
-            getCachedCollectionVideos("mylist", list.id),
+            getCollectionVideos("mylist", list.id),
             serverUrl,
           ),
         })),
         playlists: playlists.map((playlist) => ({
           playlist,
           videos: toStreaming(
-            getCachedCollectionVideos("playlist", playlist.playlistId),
+            getCollectionVideos("playlist", playlist.playlistId),
             serverUrl,
           ),
         })),
@@ -172,6 +169,7 @@ export default function HomeScreen() {
       channels,
       myLists,
       playlists,
+      getCollectionVideos,
     ],
   );
 
@@ -233,21 +231,35 @@ export default function HomeScreen() {
     );
   }
 
+  // Rows and their posters are virtualized: a collection can hold hundreds of
+  // Videos, and mounting every poster at once stalls the UI thread.
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.screenTitle}>Home</Text>
-        {loading && rows.length === 0 ? (
-          <ActivityIndicator color={colors.primary} style={styles.spinner} />
-        ) : null}
-        {empty && !loading ? (
-          <Text style={styles.emptyText}>
-            Nothing to play on this phone yet. Open a video while the desktop is
-            connected and it stays here.
-          </Text>
-        ) : null}
-        {rows.map((row) => (
-          <View key={row.id} style={styles.rowBlock}>
+      <FlatList
+        data={rows}
+        keyExtractor={(row) => row.id}
+        contentContainerStyle={styles.scroll}
+        initialNumToRender={3}
+        windowSize={5}
+        ListHeaderComponent={
+          <>
+            <Text style={styles.screenTitle}>Home</Text>
+            {loading && rows.length === 0 ? (
+              <ActivityIndicator
+                color={colors.primary}
+                style={styles.spinner}
+              />
+            ) : null}
+            {empty && !loading ? (
+              <Text style={styles.emptyText}>
+                Nothing to play on this phone yet. Open a video while the
+                desktop is connected and it stays here.
+              </Text>
+            ) : null}
+          </>
+        }
+        renderItem={({ item: row }) => (
+          <View style={styles.rowBlock}>
             <Pressable
               testID={`row-see-all-${row.id}`}
               onPress={() => setOpenRow(row)}
@@ -256,23 +268,27 @@ export default function HomeScreen() {
               <Text style={styles.rowTitle}>{row.title}</Text>
               <Text style={styles.rowMore}>See all</Text>
             </Pressable>
-            <ScrollView
+            <FlatList
               horizontal
+              data={row.videos}
+              keyExtractor={(video) => video.id}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.rowScroll}
-            >
-              {row.videos.map((video, index) => (
-                <View key={video.id} style={styles.poster}>
+              initialNumToRender={3}
+              maxToRenderPerBatch={4}
+              windowSize={3}
+              renderItem={({ item: video, index }) => (
+                <View style={styles.poster}>
                   <VideoGridCard
                     video={video}
                     onPress={() => playRow(row, index)}
                   />
                 </View>
-              ))}
-            </ScrollView>
+              )}
+            />
           </View>
-        ))}
-      </ScrollView>
+        )}
+      />
     </SafeAreaView>
   );
 }

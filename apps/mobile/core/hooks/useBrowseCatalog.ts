@@ -2,10 +2,8 @@ import { useMemo } from "react";
 import type { BrowseCachePlaylistKind } from "../../db/repositories/playlists";
 import type { RemoteVideoWithStatus } from "../../types";
 import {
-  getCachedChannels,
   getCachedCollectionVideos,
-  getCachedMyLists,
-  getCachedPlaylists,
+  getCatalogSnapshot,
 } from "../../services/browseCache";
 import { useLibraryStore } from "../../stores/library";
 import { useSyncStore } from "../../stores/sync";
@@ -15,11 +13,7 @@ export function useBrowseCatalog() {
   const libraryVideos = useLibraryStore((state) => state.videos);
 
   return useMemo(
-    () => ({
-      channels: getCachedChannels(),
-      playlists: getCachedPlaylists(),
-      myLists: getCachedMyLists(),
-    }),
+    () => getCatalogSnapshot(),
     [browseCacheVersion, libraryVideos]
   );
 }

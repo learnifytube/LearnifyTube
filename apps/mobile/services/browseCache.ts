@@ -9,6 +9,7 @@ import { cacheThumbnail } from "./thumbnailCache";
 import { resolveRemoteAssetUrl } from "./remoteAssetUrl";
 import {
   buildCachedPlaylistId,
+  getAllSavedPlaylistsWithItemsAndProgress,
   getAllSavedPlaylistsWithProgress,
   getSavedPlaylistById,
   getSavedPlaylistWithItems,
@@ -17,6 +18,7 @@ import {
   upsertBrowseCachePlaylist,
   type BrowseCachePlaylistKind,
   type PlaylistVideoInfo,
+  type SavedPlaylistWithItems,
 } from "../db/repositories/playlists";
 import * as videoRepo from "../db/repositories/videos";
 
@@ -76,9 +78,7 @@ async function normalizeRemoteVideo(
         existingUrl,
         cacheKey,
       })
-    : existingUrl?.startsWith("data:")
-      ? existingUrl
-      : (video.thumbnailUrl ?? existingUrl);
+    : (video.thumbnailUrl ?? existingUrl);
 
   videoRepo.upsertVideo({
     id: video.id,
@@ -296,8 +296,14 @@ export async function cacheRemoteCollectionVideos(
   return normalizedVideos;
 }
 
-export function getCachedChannels(): RemoteChannel[] {
-  return getAllSavedPlaylistsWithProgress({ includeUnpinned: true })
+type CachedPlaylist = ReturnType<typeof getAllSavedPlaylistsWithProgress>[number];
+
+function getAllCachedPlaylists() {
+  return getAllSavedPlaylistsWithProgress({ includeUnpinned: true });
+}
+
+function toChannels(cached: CachedPlaylist[]): RemoteChannel[] {
+  return cached
     .filter((playlist) => playlist.type === "channel")
     .map((playlist) => ({
       channelId:
@@ -309,8 +315,8 @@ export function getCachedChannels(): RemoteChannel[] {
     }));
 }
 
-export function getCachedPlaylists(): RemotePlaylist[] {
-  return getAllSavedPlaylistsWithProgress({ includeUnpinned: true })
+function toPlaylists(cached: CachedPlaylist[]): RemotePlaylist[] {
+  return cached
     .filter((playlist) => playlist.type === "playlist")
     .map((playlist) => ({
       playlistId: stripCachedPlaylistPrefix("playlist", playlist.id),
@@ -323,8 +329,8 @@ export function getCachedPlaylists(): RemotePlaylist[] {
     }));
 }
 
-export function getCachedMyLists(): RemoteMyList[] {
-  return getAllSavedPlaylistsWithProgress({ includeUnpinned: true })
+function toMyLists(cached: CachedPlaylist[]): RemoteMyList[] {
+  return cached
     .filter((playlist) => playlist.type === "mylist")
     .map((playlist) => ({
       id: playlist.sourceId ?? stripCachedPlaylistPrefix("mylist", playlist.id),
@@ -337,18 +343,10 @@ export function getCachedMyLists(): RemoteMyList[] {
     }));
 }
 
-export function getCachedCollectionVideos(
-  kind: BrowseCachePlaylistKind,
-  id: string
+function toCollectionVideos(
+  items: SavedPlaylistWithItems["items"]
 ): RemoteVideoWithStatus[] {
-  const savedPlaylist = getSavedPlaylistWithItems(buildCachedPlaylistId(kind, id), {
-    includeUnpinned: true,
-  });
-  if (!savedPlaylist) {
-    return [];
-  }
-
-  return savedPlaylist.items.map((item) => ({
+  return items.map((item) => ({
     id: item.videoId,
     title: item.title,
     channelTitle: item.channelTitle,
@@ -361,6 +359,65 @@ export function getCachedCollectionVideos(
     downloadProgress: item.downloadProgress ?? null,
     fileSize: item.fileSize ?? null,
   }));
+}
+
+export function getCachedChannels(): RemoteChannel[] {
+  return toChannels(getAllCachedPlaylists());
+}
+
+export function getCachedPlaylists(): RemotePlaylist[] {
+  return toPlaylists(getAllCachedPlaylists());
+}
+
+export function getCachedMyLists(): RemoteMyList[] {
+  return toMyLists(getAllCachedPlaylists());
+}
+
+export function getCachedCollectionVideos(
+  kind: BrowseCachePlaylistKind,
+  id: string
+): RemoteVideoWithStatus[] {
+  const savedPlaylist = getSavedPlaylistWithItems(buildCachedPlaylistId(kind, id), {
+    includeUnpinned: true,
+  });
+  return savedPlaylist ? toCollectionVideos(savedPlaylist.items) : [];
+}
+
+export interface CatalogSnapshot {
+  channels: RemoteChannel[];
+  playlists: RemotePlaylist[];
+  myLists: RemoteMyList[];
+  getCollectionVideos: (
+    kind: BrowseCachePlaylistKind,
+    id: string
+  ) => RemoteVideoWithStatus[];
+}
+
+/**
+ * The whole Catalog snapshot from two queries, for screens that show many
+ * collections at once; reading each collection on its own is a query apiece.
+ */
+export function getCatalogSnapshot(): CatalogSnapshot {
+  const cached = getAllSavedPlaylistsWithItemsAndProgress({
+    includeUnpinned: true,
+  });
+  const byId = new Map(cached.map((playlist) => [playlist.id, playlist]));
+  const videosById = new Map<string, RemoteVideoWithStatus[]>();
+
+  return {
+    channels: toChannels(cached),
+    playlists: toPlaylists(cached),
+    myLists: toMyLists(cached),
+    getCollectionVideos: (kind, id) => {
+      const playlistId = buildCachedPlaylistId(kind, id);
+      let videos = videosById.get(playlistId);
+      if (!videos) {
+        videos = toCollectionVideos(byId.get(playlistId)?.items ?? []);
+        videosById.set(playlistId, videos);
+      }
+      return videos;
+    },
+  };
 }
 
 const COLLECTION_DETAIL_REFRESH_MS = 15 * 60 * 1000;

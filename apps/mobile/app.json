@@ -2,7 +2,7 @@
   "expo": {
     "name": "LearnifyTube",
     "slug": "learnify-mobile",
-    "version": "1.0.38",
+    "version": "1.0.39",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "scheme": "learnify",
@@ -34,7 +34,7 @@
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "android.permission.REQUEST_INSTALL_PACKAGES"
       ],
-      "versionCode": 38
+      "versionCode": 39
     },
     "web": {
       "favicon": "./assets/favicon.png",

@@ -8,7 +8,7 @@ import {
 } from "./browseCache";
 import type { BrowseCachePlaylistKind } from "../db/repositories/playlists";
 import type { RemoteVideoWithStatus } from "../types";
-import { useSyncStore } from "../stores/sync";
+import { markBrowseCacheChanged, useSyncStore } from "../stores/sync";
 
 type CollectionRequest = {
   kind: BrowseCachePlaylistKind;
@@ -91,7 +91,5 @@ export async function prefetchPhoneCatalog(serverUrl: string): Promise<void> {
     `[PhoneCatalog] Refreshed ${stale.length}/${requests.length} collections, ${videoCount} Videos in ${Date.now() - startedAt} ms`,
   );
 
-  useSyncStore.setState((state) => ({
-    browseCacheVersion: state.browseCacheVersion + 1,
-  }));
+  markBrowseCacheChanged();
 }

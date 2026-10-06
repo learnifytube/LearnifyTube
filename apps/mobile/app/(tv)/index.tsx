@@ -33,17 +33,15 @@ import {
 import {
   cacheRemoteChannels,
   cacheRemoteCollectionVideos,
-  getCachedChannels,
-  getCachedMyLists,
-  getCachedPlaylists,
   cacheRemoteMyLists,
   cacheRemotePlaylists,
+  getCatalogSnapshot,
   resolveRemoteAssetUrl,
+  type CatalogSnapshot,
 } from "../../services/browseCache";
-import {
-  buildCachedPlaylistId,
-  getAllSavedPlaylistsWithItems,
-} from "../../db/repositories/playlists";
+import { buildCachedPlaylistId } from "../../db/repositories/playlists";
+import { useBrowseCatalog } from "../../core/hooks/useBrowseCatalog";
+import { markBrowseCacheChanged } from "../../stores/sync";
 import {
   TVFocusPressable,
   type TVFocusPressableHandle,
@@ -152,31 +150,17 @@ function toStreamingVideos(
   }));
 }
 
-function getCachedCollections() {
-  return getAllSavedPlaylistsWithItems({
-    includeUnpinned: true,
-  }).flatMap<CachedCollection>((playlist) =>
-    playlist.type === "playlist" ||
-    playlist.type === "mylist" ||
-    playlist.type === "channel"
-      ? [
-          {
-            id: playlist.id,
-            type: playlist.type,
-            title: playlist.title,
-            sourceId: playlist.sourceId,
-            thumbnailUrl: playlist.thumbnailUrl,
-            items: playlist.items.map((item) => ({
-              id: item.videoId,
-              title: item.title,
-              channelTitle: item.channelTitle,
-              duration: item.duration,
-              thumbnailUrl: item.thumbnailUrl ?? undefined,
-            })),
-          },
-        ]
-      : [],
-  );
+function toCachedCollections(snapshot: CatalogSnapshot) {
+  return snapshot.collections.map<CachedCollection>((collection) => ({
+    ...collection,
+    items: snapshot.getSavedCollectionVideos(collection.id).map((item) => ({
+      id: item.id,
+      title: item.title,
+      channelTitle: item.channelTitle,
+      duration: item.duration,
+      thumbnailUrl: item.thumbnailUrl ?? undefined,
+    })),
+  }));
 }
 
 export default function TVHomeScreen() {
@@ -197,13 +181,22 @@ export default function TVHomeScreen() {
 
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
-  // Start from the cached catalog, so connecting doesn't blank the grid while it reloads.
-  const [playlists, setPlaylists] =
-    useState<RemotePlaylist[]>(getCachedPlaylists);
-  const [myLists, setMyLists] = useState<RemoteMyList[]>(getCachedMyLists);
-  const [channels, setChannels] = useState<RemoteChannel[]>(getCachedChannels);
-  const [cachedCollections, setCachedCollections] =
-    useState(getCachedCollections);
+  // Start from the Catalog snapshot, so connecting doesn't blank the grid while it reloads.
+  const catalogSnapshot = useBrowseCatalog();
+  const [playlists, setPlaylists] = useState<RemotePlaylist[]>(
+    catalogSnapshot.playlists,
+  );
+  const [myLists, setMyLists] = useState<RemoteMyList[]>(
+    catalogSnapshot.myLists,
+  );
+  const [channels, setChannels] = useState<RemoteChannel[]>(
+    catalogSnapshot.channels,
+  );
+  // Memoized: the catalog input below keys off its identity.
+  const cachedCollections = useMemo(
+    () => toCachedCollections(catalogSnapshot),
+    [catalogSnapshot],
+  );
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
 
   const [pageOffsets, setPageOffsets] = useState<Record<TVBrowseMode, number>>({
@@ -291,16 +284,6 @@ export default function TVHomeScreen() {
     [gridCardHeight, gridCardWidth],
   );
 
-  const refreshCachedCollections = useCallback(() => {
-    setCachedCollections(getCachedCollections());
-  }, []);
-
-  useEffect(() => {
-    refreshCachedCollections();
-  }, [refreshCachedCollections, videos]);
-
-  useFocusEffect(refreshCachedCollections);
-
   // A collection still opening when the viewer opens another or leaves is dropped.
   const [openingId, setOpeningId] = useState<string | null>(null);
   const openRequest = useRef(0);
@@ -326,9 +309,10 @@ export default function TVHomeScreen() {
           api.getMyLists(serverUrl),
           api.getChannels(serverUrl),
         ]);
-      let nextPlaylists = getCachedPlaylists();
-      let nextMyLists = getCachedMyLists();
-      let nextChannels = getCachedChannels();
+      const cached = getCatalogSnapshot();
+      let nextPlaylists = cached.playlists;
+      let nextMyLists = cached.myLists;
+      let nextChannels = cached.channels;
       let failed = false;
 
       if (playlistResult.status === "fulfilled") {
@@ -361,20 +345,21 @@ export default function TVHomeScreen() {
       setPlaylists(nextPlaylists);
       setMyLists(nextMyLists);
       setChannels(nextChannels);
-      refreshCachedCollections();
+      markBrowseCacheChanged();
       // A failed catalog request only affects this screen; the connection's health check
       // decides whether the desktop is gone.
       setCatalogError(failed ? CATALOG_ERROR : null);
     } catch {
-      setPlaylists(getCachedPlaylists());
-      setMyLists(getCachedMyLists());
-      setChannels(getCachedChannels());
-      refreshCachedCollections();
+      const cached = getCatalogSnapshot();
+      setPlaylists(cached.playlists);
+      setMyLists(cached.myLists);
+      setChannels(cached.channels);
+      markBrowseCacheChanged();
       setCatalogError(CATALOG_ERROR);
     } finally {
       setIsLoadingCatalog(false);
     }
-  }, [refreshCachedCollections, serverUrl]);
+  }, [serverUrl]);
 
   // Reconnecting refreshes the tabs in place; focus and paging stay where they are.
   useEffect(() => {
@@ -463,7 +448,7 @@ export default function TVHomeScreen() {
           kind === "playlist" ? playlistMeta?.itemCount : myListMeta?.itemCount,
         videos: response.videos,
       });
-      refreshCachedCollections();
+      markBrowseCacheChanged();
       if (request !== openRequest.current) return;
 
       const streamingVideos = toStreamingVideos(normalizedVideos, serverUrl);
@@ -479,8 +464,7 @@ export default function TVHomeScreen() {
       if (request !== openRequest.current) return;
       // The desktop may still be fetching this collection; the connection stays as it is.
       // Fall back to what the TV holds from it.
-      const collections = getCachedCollections();
-      setCachedCollections(collections);
+      const collections = toCachedCollections(getCatalogSnapshot());
       const cached = collections.find(
         (item) => item.id === buildCachedPlaylistId(kind, id),
       );

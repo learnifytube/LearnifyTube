@@ -356,15 +356,30 @@ export function getCachedCollectionVideos(
   return savedPlaylist ? toCollectionVideos(savedPlaylist.items) : [];
 }
 
+/** A collection in the Catalog snapshot, by its saved id (e.g. `playlist_<id>`). */
+export interface CatalogCollection {
+  id: string;
+  type: BrowseCachePlaylistKind;
+  title: string;
+  sourceId: string | null;
+  thumbnailUrl: string | null;
+}
+
 export interface CatalogSnapshot {
   channels: RemoteChannel[];
   playlists: RemotePlaylist[];
   myLists: RemoteMyList[];
+  collections: CatalogCollection[];
   getCollectionVideos: (
     kind: BrowseCachePlaylistKind,
     id: string
   ) => RemoteVideoWithStatus[];
+  /** A collection's Videos by its saved id. */
+  getSavedCollectionVideos: (savedId: string) => RemoteVideoWithStatus[];
 }
+
+const isCollectionKind = (type: string): type is BrowseCachePlaylistKind =>
+  type === "channel" || type === "playlist" || type === "mylist";
 
 /**
  * The whole Catalog snapshot from two queries, for screens that show many
@@ -376,20 +391,35 @@ export function getCatalogSnapshot(): CatalogSnapshot {
   });
   const byId = new Map(cached.map((playlist) => [playlist.id, playlist]));
   const videosById = new Map<string, RemoteVideoWithStatus[]>();
+  const getSavedCollectionVideos = (savedId: string) => {
+    let videos = videosById.get(savedId);
+    if (!videos) {
+      videos = toCollectionVideos(byId.get(savedId)?.items ?? []);
+      videosById.set(savedId, videos);
+    }
+    return videos;
+  };
 
   return {
     channels: toChannels(cached),
     playlists: toPlaylists(cached),
     myLists: toMyLists(cached),
-    getCollectionVideos: (kind, id) => {
-      const playlistId = buildCachedPlaylistId(kind, id);
-      let videos = videosById.get(playlistId);
-      if (!videos) {
-        videos = toCollectionVideos(byId.get(playlistId)?.items ?? []);
-        videosById.set(playlistId, videos);
-      }
-      return videos;
-    },
+    collections: cached.flatMap((playlist) =>
+      isCollectionKind(playlist.type)
+        ? [
+            {
+              id: playlist.id,
+              type: playlist.type,
+              title: playlist.title,
+              sourceId: playlist.sourceId ?? null,
+              thumbnailUrl: playlist.thumbnailUrl ?? null,
+            },
+          ]
+        : []
+    ),
+    getCollectionVideos: (kind, id) =>
+      getSavedCollectionVideos(buildCachedPlaylistId(kind, id)),
+    getSavedCollectionVideos,
   };
 }
 

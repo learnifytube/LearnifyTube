@@ -27,6 +27,7 @@ import {
   cacheRemotePlaylists,
   resolveRemoteAssetUrl,
 } from "../../../services/browseCache";
+import { markBrowseCacheChanged } from "../../../stores/sync";
 import {
   buildCachedPlaylistId,
   getAllSavedPlaylistsWithProgress,
@@ -196,6 +197,7 @@ export default function TVChannelDetailScreen() {
               videos: channelVideosResult.value.videos,
             })
           : held.videos;
+      markBrowseCacheChanged();
       setContents({
         from: "desktop",
         playlists: nextPlaylists,
@@ -270,6 +272,7 @@ export default function TVChannelDetailScreen() {
         itemCount: playlistMeta?.itemCount,
         videos: response.videos,
       });
+      markBrowseCacheChanged();
       showPlaylist({
         id: playlistId,
         title: playlistTitle,

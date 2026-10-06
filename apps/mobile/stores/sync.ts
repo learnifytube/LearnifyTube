@@ -610,3 +610,10 @@ export const useSyncStore = create<SyncStore>()(
     }
   )
 );
+
+/** Screens reading the Catalog snapshot read it again after a write outside this store. */
+export function markBrowseCacheChanged() {
+  useSyncStore.setState((state) => ({
+    browseCacheVersion: state.browseCacheVersion + 1,
+  }));
+}

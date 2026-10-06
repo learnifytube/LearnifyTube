@@ -15,7 +15,7 @@ Timed lines shown on the picture while a Video plays, for reading along. Off unt
 _Avoid_: subtitles, transcript (for this overlay)
 
 **Catalog snapshot**:
-The phone's last-known copy of the desktop's Home rows and the titles and pictures of their Videos. It lets Home appear instantly and stay browsable in Offline mode. It is not playable and holds no Offline copies.
+A Device's last-known copy of the desktop's Home rows and the titles and pictures of their Videos. It lets Home appear instantly. In Offline mode the phone browses it; the TV only uses it to group the Videos it holds into their collections. It is not playable and holds no Offline copies.
 _Avoid_: cache, browse cache, cached videos
 
 ### Offline playback

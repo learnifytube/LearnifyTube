@@ -28,17 +28,42 @@ appId: com.learnifytube.mobile
       id: player-back
     timeout: 20000
 - takeScreenshot: phone-player-start
+# While a video plays, the controls (and title) hide 3 s after a touch, and on
+# the emulator one Maestro tap takes about that long, so it can land on the
+# picture instead. Once playback has hidden them, pause and bring them back:
+# paused controls stay up.
+- extendedWaitUntil:
+    notVisible:
+      id: player-back
+    timeout: 20000
+- pressKey: Remote Media Play Pause
+- tapOn:
+    point: "50%,40%"
 - tapOn:
     id: next-video
 - extendedWaitUntil:
-    visible: "Rainbows"
+    notVisible:
+      id: player-back
     timeout: 20000
+- pressKey: Remote Media Play Pause
+- tapOn:
+    point: "50%,40%"
+- extendedWaitUntil:
+    visible: "Rainbows"
+    timeout: 5000
 - takeScreenshot: phone-player-next
 - tapOn:
     id: previous-video
 - extendedWaitUntil:
-    visible: "Floating and sinking"
+    notVisible:
+      id: player-back
     timeout: 20000
+- pressKey: Remote Media Play Pause
+- tapOn:
+    point: "50%,40%"
+- extendedWaitUntil:
+    visible: "Floating and sinking"
+    timeout: 5000
 # Back from the player lands on the grid it was opened from, then Home.
 - back
 - extendedWaitUntil:

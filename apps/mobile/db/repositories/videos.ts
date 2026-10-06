@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { getDb, videos, transcripts } from "../index";
+import { getDb, getExpoDb, videos, transcripts } from "../index";
 import type { Video, NewVideo, Transcript, NewTranscript } from "../schema";
 import { z } from "zod";
 
@@ -154,6 +154,14 @@ export function getOfflineCopyRecords() {
     .from(videos)
     .all()
     .filter((row): row is { videoId: string; uri: string } => !!row.uri);
+}
+
+// Inline (base64) thumbnails of Videos with an Offline copy record, read on
+// SQLite's own thread.
+export function getHeldInlineThumbnails() {
+  return getExpoDb().getAllAsync<{ id: string; thumbnailUrl: string }>(
+    "SELECT id, thumbnail_url AS thumbnailUrl FROM videos WHERE local_path IS NOT NULL AND thumbnail_url LIKE 'data:%'"
+  );
 }
 
 // Update video local path

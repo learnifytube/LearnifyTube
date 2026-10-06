@@ -330,12 +330,13 @@ export function getAllSavedPlaylistsWithItemsAndProgress(
   );
 }
 
-// The phone keeps only the desktop's thumbnail URL for catalog items; older
-// versions stored each as base64, which made every catalog read move megabytes.
-// Runs on SQLite's own thread.
-export async function dropInlineItemThumbnails() {
+// Catalog items and Videos keep only the desktop's thumbnail URL; older
+// versions stored each as base64, which made every catalog and Library read
+// move megabytes. Runs on SQLite's own thread.
+export async function dropInlineThumbnails() {
   await getExpoDb().execAsync(
-    "UPDATE saved_playlist_items SET thumbnail_url = NULL WHERE thumbnail_url LIKE 'data:%'"
+    "UPDATE saved_playlist_items SET thumbnail_url = NULL WHERE thumbnail_url LIKE 'data:%';" +
+      "UPDATE videos SET thumbnail_url = NULL WHERE thumbnail_url LIKE 'data:%';"
   );
 }
 

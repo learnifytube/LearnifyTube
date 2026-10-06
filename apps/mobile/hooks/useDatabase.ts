@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { runMigrations } from "../db/migrate";
-import { dropInlineItemThumbnails } from "../db/repositories/playlists";
-import { getAppSurface } from "../core/hooks/useAppSurface";
+import { dropInlineThumbnails } from "../db/repositories/playlists";
+import { storeHeldInlineThumbnails } from "../services/video-thumbnails";
 
 export function useDatabase() {
   const [isReady, setIsReady] = useState(false);
@@ -11,15 +11,15 @@ export function useDatabase() {
     async function init() {
       try {
         await runMigrations();
-        // Before Home's first catalog read; the TV keeps its inline posters for Offline mode.
-        if (getAppSurface() !== "tv") {
-          await dropInlineItemThumbnails().catch((err) => {
+        // Before the first catalog and Library reads.
+        await storeHeldInlineThumbnails()
+          .then(dropInlineThumbnails)
+          .catch((err) => {
             console.warn(
               "[useDatabase] Failed to drop inline thumbnails:",
               err,
             );
           });
-        }
         setIsReady(true);
       } catch (err) {
         console.error("[useDatabase] Failed to initialize database:", err);

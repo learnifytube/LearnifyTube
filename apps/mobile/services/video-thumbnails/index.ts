@@ -1,4 +1,5 @@
 import { Directory, File, Paths } from "expo-file-system";
+import { getHeldInlineThumbnails } from "../../db/repositories/videos";
 import { api } from "../api";
 import { resolveRemoteAssetUrl } from "../browseCache";
 import { fetchThumbnail } from "../thumbnailCache";
@@ -36,4 +37,17 @@ const platform: VideoThumbnailsPlatform = {
 };
 
 export const videoThumbnails = createVideoThumbnails(platform);
+
+/**
+ * Stores each held Video's inline thumbnail as a file, unless it has one, so
+ * it still shows in Offline mode once SQLite drops inline thumbnails.
+ */
+export async function storeHeldInlineThumbnails() {
+  for (const { id, thumbnailUrl } of await getHeldInlineThumbnails()) {
+    if (videoThumbnails.getUri(id)) continue;
+    await videoThumbnails.store("", id, thumbnailUrl).catch((error) => {
+      console.warn("[VideoThumbnails] Failed to store inline thumbnail", error);
+    });
+  }
+}
 export type { VideoThumbnails } from "./createVideoThumbnails";

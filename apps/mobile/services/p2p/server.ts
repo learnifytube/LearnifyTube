@@ -1,6 +1,10 @@
 import TcpSocket from "react-native-tcp-socket";
 import { getDeviceName } from "./discovery";
 import { offlineCopy } from "../offline-copy";
+import {
+  getPrimaryTranscript,
+  getVideoIdsWithTranscript,
+} from "../../db/repositories/videos";
 import type { Video, PeerVideo } from "../../types";
 
 const DEFAULT_PORT = 53319;
@@ -83,12 +87,13 @@ async function handleRequest(path: string, method: string): Promise<{ statusCode
 
   // GET /videos
   if (method === "GET" && path === "/videos") {
+    const withTranscript = getVideoIdsWithTranscript();
     const videos: PeerVideo[] = sharedVideos.map((v) => ({
       id: v.id,
       title: v.title,
       channelTitle: v.channelTitle,
       duration: v.duration,
-      hasTranscript: !!v.transcript,
+      hasTranscript: withTranscript.has(v.id),
     }));
     return {
       statusCode: 200,
@@ -116,7 +121,7 @@ async function handleRequest(path: string, method: string): Promise<{ statusCode
       title: video.title,
       channelTitle: video.channelTitle,
       duration: video.duration,
-      transcript: video.transcript,
+      transcript: getPrimaryTranscript(video.id),
     };
     return {
       statusCode: 200,

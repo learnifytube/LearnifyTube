@@ -1,8 +1,9 @@
-import Constants, { ExecutionEnvironment } from "expo-constants";
+import Constants from "expo-constants";
 import { Directory, File, Paths } from "expo-file-system";
 import * as FileSystemLegacy from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
 import { Alert, Platform } from "react-native";
+import { describeInstalledApp } from "./installed-app";
 import { logger } from "./logger";
 
 const DEFAULT_UPDATE_CHECK_TIMEOUT_MS = 10_000;
@@ -168,56 +169,18 @@ const getUpdateConfig = (): ApkUpdateConfig => {
   return extra.apkUpdate ?? {};
 };
 
-const getCurrentVersionCode = (): number | null => {
-  return parsePositiveInt(Constants.nativeBuildVersion);
-};
-
-const getCurrentVersionName = (): string | null => {
-  const nativeAppVersion = Constants.nativeAppVersion;
-  if (typeof nativeAppVersion === "string" && nativeAppVersion.trim().length > 0) {
-    return normalizeVersionName(nativeAppVersion);
-  }
-
-  const appVersion = Constants.expoConfig?.version;
-  if (typeof appVersion === "string" && appVersion.trim().length > 0) {
-    return normalizeVersionName(appVersion);
-  }
-
-  return null;
-};
-
-const hasNativeBuildVersion = (): boolean => {
-  const nativeBuildVersion = Constants.nativeBuildVersion;
-  if (typeof nativeBuildVersion === "number") {
-    return Number.isFinite(nativeBuildVersion);
-  }
-  return (
-    typeof nativeBuildVersion === "string" &&
-    nativeBuildVersion.trim().length > 0
-  );
-};
+/** The running build, read from the app config embedded at build time. */
+export const getInstalledApp = () =>
+  describeInstalledApp({
+    os: Platform.OS,
+    isDev: __DEV__,
+    executionEnvironment: Constants.executionEnvironment,
+    appConfig: Constants.expoConfig ?? null,
+  });
 
 const getAndroidApkUpdateUnsupportedReason = (): string | null => {
-  if (Platform.OS !== "android") {
-    return "APK self-update is only available on Android.";
-  }
-
-  if (__DEV__) {
-    return "APK self-update is unavailable in development builds.";
-  }
-
-  if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) {
-    return "APK self-update is unavailable in Expo Go or development clients.";
-  }
-
-  if (
-    !hasNativeBuildVersion() &&
-    Constants.executionEnvironment !== ExecutionEnvironment.Standalone
-  ) {
-    return "APK self-update requires a packaged Android build.";
-  }
-
-  return null;
+  const installed = getInstalledApp();
+  return installed.canSelfUpdate ? null : installed.reason;
 };
 
 const canUseAndroidApkUpdates = (): boolean =>
@@ -678,10 +641,11 @@ export const getAndroidApkUpdateAvailability =
       return { configured: true, hasUpdate: false };
     }
 
+    const installed = getInstalledApp();
     const comparison = compareRemoteVersion(
       manifest,
-      getCurrentVersionCode(),
-      getCurrentVersionName()
+      installed.versionCode ?? null,
+      installed.versionName ? normalizeVersionName(installed.versionName) : null
     );
 
     if (!comparison) {
@@ -722,8 +686,11 @@ export const checkForAndroidApkUpdate = async (options?: {
     return;
   }
 
-  const currentVersionCode = getCurrentVersionCode();
-  const currentVersionName = getCurrentVersionName();
+  const installed = getInstalledApp();
+  const currentVersionCode = installed.versionCode ?? null;
+  const currentVersionName = installed.versionName
+    ? normalizeVersionName(installed.versionName)
+    : null;
 
   const timeoutMs =
     parsePositiveInt(config.requestTimeoutMs) ?? DEFAULT_UPDATE_CHECK_TIMEOUT_MS;

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Constants from "expo-constants";
 import {
   ActivityIndicator,
   Platform,
@@ -18,6 +17,7 @@ import { logger, type AppLogEntry } from "../../services/logger";
 import {
   checkForAndroidApkUpdate,
   getAndroidApkUpdateAvailability,
+  getInstalledApp,
   type AndroidApkUpdateAvailability,
 } from "../../services/app-update";
 import {
@@ -67,9 +67,9 @@ export default function TVSettingsScreen() {
     useState<VideoStorageLocation | null>(null);
   const [isSelectingStorage, setIsSelectingStorage] = useState(false);
 
-  const appVersion =
-    Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? "unknown";
-  const appBuild = Constants.nativeBuildVersion ?? "-";
+  const installedApp = getInstalledApp();
+  const appVersion = installedApp.versionName ?? "unknown";
+  const appBuild = installedApp.versionCode ?? "-";
   const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
   const [logEntries, setLogEntries] = useState<AppLogEntry[]>(() =>
     logger.getEntries(),

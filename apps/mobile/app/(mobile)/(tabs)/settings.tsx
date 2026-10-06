@@ -1,4 +1,3 @@
-import Constants from "expo-constants";
 import {
   useState,
   useEffect,
@@ -30,6 +29,7 @@ import {
 import {
   checkForAndroidApkUpdate,
   getAndroidApkUpdateAvailability,
+  getInstalledApp,
   type AndroidApkUpdateAvailability,
 } from "../../../services/app-update";
 import { ensureDiscoveryPermissions } from "../../../services/discovery-permissions";
@@ -164,9 +164,9 @@ export default function SettingsScreen() {
   const selectedLang =
     LANGUAGES.find((l) => l.code === targetLang) ?? LANGUAGES[0];
 
-  const appVersion =
-    Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? "unknown";
-  const appBuild = Constants.nativeBuildVersion ?? "-";
+  const installedApp = getInstalledApp();
+  const appVersion = installedApp.versionName ?? "unknown";
+  const appBuild = installedApp.versionCode ?? "-";
   const reversedLogs = useMemo(() => [...logEntries].reverse(), [logEntries]);
   const totalLogPages = Math.max(1, Math.ceil(reversedLogs.length / LOG_PAGE_SIZE));
   const clampedLogPage = Math.min(logPage, totalLogPages - 1);

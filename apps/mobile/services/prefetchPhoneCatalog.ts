@@ -76,11 +76,10 @@ export async function prefetchPhoneCatalog(serverUrl: string): Promise<void> {
     stale.map(async ({ load, ...collection }) => {
       try {
         const { videos } = await load();
-        await cacheRemoteCollectionVideos(
-          serverUrl,
-          { ...collection, videos },
-          { downloadThumbnails: false },
-        );
+        await cacheRemoteCollectionVideos(serverUrl, {
+          ...collection,
+          videos,
+        });
         videoCount += videos.length;
       } catch {
         // Keep the cached row if this collection's Videos fail to load.

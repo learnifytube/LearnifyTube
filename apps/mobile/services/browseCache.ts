@@ -62,36 +62,21 @@ async function getCachedThumbnailUrl(input: {
   return cachedUrl ?? input.existingUrl ?? remoteUrl;
 }
 
-async function normalizeRemoteVideo(
-  serverUrl: string,
-  video: RemoteVideoWithStatus,
-  cacheKey: string,
-  downloadThumbnail: boolean
-): Promise<RemoteVideoWithStatus> {
-  const existingVideo = videoRepo.getVideoById(video.id);
-  const existingUrl = existingVideo?.thumbnailUrl ?? null;
-  const normalizedThumbnailUrl = downloadThumbnail
-    ? await getCachedThumbnailUrl({
-        serverUrl,
-        remoteUrl: video.thumbnailUrl,
-        fallbackUrl: api.getThumbnailUrl(serverUrl, video.id),
-        existingUrl,
-        cacheKey,
-      })
-    : (video.thumbnailUrl ?? existingUrl);
+// Keeps only the desktop's thumbnail URL; posters load as they appear, and held
+// Videos show their stored thumbnail file.
+function normalizeRemoteVideo(video: RemoteVideoWithStatus): RemoteVideoWithStatus {
+  const thumbnailUrl =
+    video.thumbnailUrl ?? videoRepo.getVideoById(video.id)?.thumbnailUrl ?? null;
 
   videoRepo.upsertVideo({
     id: video.id,
     title: video.title,
     channelTitle: video.channelTitle,
     duration: video.duration,
-    thumbnailUrl: normalizedThumbnailUrl ?? null,
+    thumbnailUrl,
   });
 
-  return {
-    ...video,
-    thumbnailUrl: normalizedThumbnailUrl,
-  };
+  return { ...video, thumbnailUrl };
 }
 
 function toPlaylistItemVideoInfo(video: RemoteVideoWithStatus): PlaylistVideoInfo {
@@ -246,11 +231,8 @@ export async function cacheRemoteCollectionVideos(
     thumbnailFallbackUrl?: string | null;
     itemCount?: number | null;
     videos: RemoteVideoWithStatus[];
-  },
-  // The phone keeps only the desktop's thumbnail URL; posters load as they appear.
-  options: { downloadThumbnails?: boolean } = {}
+  }
 ): Promise<RemoteVideoWithStatus[]> {
-  const downloadThumbnails = options.downloadThumbnails ?? true;
   const playlistId = buildCachedPlaylistId(input.kind, input.id);
   const detailHydratedAt = Date.now();
   const existingPlaylist = getSavedPlaylistById(playlistId, {
@@ -274,16 +256,7 @@ export async function cacheRemoteCollectionVideos(
     detailHydratedAt,
   });
 
-  const normalizedVideos = await Promise.all(
-    input.videos.map((video) =>
-      normalizeRemoteVideo(
-        serverUrl,
-        video,
-        `${input.kind}-${input.id}-${video.id}`,
-        downloadThumbnails
-      )
-    )
-  );
+  const normalizedVideos = input.videos.map(normalizeRemoteVideo);
 
   mergeBrowseCachePlaylistItems(
     playlistId,

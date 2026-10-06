@@ -47,3 +47,6 @@ local.db*
 .DS_Store
 Thumbs.db
 .claude/
+
+# /pre-merge review notes
+.scratch/review/

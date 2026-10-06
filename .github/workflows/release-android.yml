@@ -43,11 +43,39 @@ jobs:
         run: |
           npx expo prebuild --platform android --clean --non-interactive
 
+      # Release APKs must carry our own key, never the template debug key.
+      # See apps/mobile/docs/adr/0001-release-apk-signed-with-own-key.md.
+      - name: Decode release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [[ -z "$ANDROID_KEYSTORE_BASE64" ]]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is missing; refusing to build a debug-signed release."
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/learnify-release.keystore"
+
       - name: Build Release APK
         working-directory: apps/mobile/android
         env:
           GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+          ORG_GRADLE_PROJECT_LEARNIFY_RELEASE_STORE_FILE: ${{ runner.temp }}/learnify-release.keystore
+          ORG_GRADLE_PROJECT_LEARNIFY_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_LEARNIFY_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_LEARNIFY_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew --no-daemon -PreactNativeArchitectures=armeabi-v7a,arm64-v8a assembleRelease
+
+      - name: Verify APK is not debug-signed
+        working-directory: apps/mobile
+        run: |
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)"
+          APK="$(ls android/app/build/outputs/apk/release/*.apk | head -n 1)"
+          CERTS="$("$APKSIGNER" verify --print-certs "$APK")"
+          echo "$CERTS"
+          if grep -q "CN=Android Debug" <<<"$CERTS"; then
+            echo "::error::Release APK is signed with the debug key."
+            exit 1
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

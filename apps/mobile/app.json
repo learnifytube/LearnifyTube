@@ -49,6 +49,7 @@
         }
       ],
       "./plugins/withAndroidCleartextNetwork",
+      "./plugins/withReleaseSigning",
       [
         "expo-video",
         {

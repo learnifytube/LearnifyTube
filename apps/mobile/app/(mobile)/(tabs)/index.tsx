@@ -7,17 +7,22 @@ import {
   Pressable,
   ActivityIndicator,
   BackHandler,
+  RefreshControl,
 } from "react-native";
 import { router } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useConnectionStore } from "../../../stores/connection";
-import { useOnDeviceSetStore } from "../../../stores/onDeviceSet";
 import { api } from "../../../services/api";
 import { playQueue } from "../../../services/play-queue";
 import { prefetchPhoneCatalog } from "../../../services/prefetchPhoneCatalog";
-import { resolveRemoteAssetUrl } from "../../../services/browseCache";
-import { useBrowseCatalog } from "../../../core/hooks/useBrowseCatalog";
+import {
+  cacheRecentlyAddedVideos,
+  resolveRemoteAssetUrl,
+} from "../../../services/browseCache";
+import { markBrowseCacheChanged } from "../../../stores/sync";
+import { deviceMirror } from "../../../services/device-mirror";
+import { useRecentlyAddedVideos } from "../../../core/hooks/useBrowseCatalog";
 import { VideoGridCard } from "../../../components/VideoGridCard";
 import {
   buildPhoneHome,
@@ -95,13 +100,12 @@ export default function HomeScreen() {
   const serverUrl = useConnectionStore((state) => state.serverUrl);
   const savedUrl = useConnectionStore((state) => state.savedUrl);
   const connected = !!serverUrl;
-  const { channels, playlists, myLists, getCollectionVideos } =
-    useBrowseCatalog();
-  const onDeviceSet = useOnDeviceSetStore((state) => state.videos);
+  const recentlyAddedVideos = useRecentlyAddedVideos();
   const getOfflineUri = offlineCopy.useLookup();
   const getStoredThumbnail = videoThumbnails.useLookup();
   const [openRow, setOpenRow] = useState<PhoneHomeRow | null>(null);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [continueWatching, setContinueWatching] =
     useState(readContinueWatching);
 
@@ -145,6 +149,24 @@ export default function HomeScreen() {
     };
   }, [serverUrl]);
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const next = readContinueWatching();
+      setContinueWatching(next);
+      if (serverUrl) {
+        await deviceMirror.syncNow();
+        const { videos: remoteVideos } = await api.getVideos(serverUrl);
+        await cacheRecentlyAddedVideos(serverUrl, remoteVideos);
+        markBrowseCacheChanged();
+      }
+    } catch (err) {
+      console.warn("[HomeScreen] Refresh failed:", err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [serverUrl]);
+
   const rows = useMemo(
     () =>
       buildPhoneHome({
@@ -154,28 +176,7 @@ export default function HomeScreen() {
         resolveAssetUrl: (assetUrl) =>
           resolveRemoteAssetUrl(serverUrl, assetUrl),
         continueWatching,
-        onDeviceSet,
-        channels: channels.map((channel) => ({
-          channel,
-          videos: toStreaming(
-            getCollectionVideos("channel", channel.channelId),
-            serverUrl,
-          ),
-        })),
-        lists: myLists.map((list) => ({
-          list,
-          videos: toStreaming(
-            getCollectionVideos("mylist", list.id),
-            serverUrl,
-          ),
-        })),
-        playlists: playlists.map((playlist) => ({
-          playlist,
-          videos: toStreaming(
-            getCollectionVideos("playlist", playlist.playlistId),
-            serverUrl,
-          ),
-        })),
+        recentlyAdded: toStreaming(recentlyAddedVideos, serverUrl),
       }),
     [
       connected,
@@ -183,11 +184,7 @@ export default function HomeScreen() {
       getStoredThumbnail,
       serverUrl,
       continueWatching,
-      onDeviceSet,
-      channels,
-      myLists,
-      playlists,
-      getCollectionVideos,
+      recentlyAddedVideos,
     ],
   );
 
@@ -259,6 +256,13 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scroll}
         initialNumToRender={3}
         windowSize={5}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
         ListHeaderComponent={
           <>
             <Text style={styles.screenTitle}>Home</Text>

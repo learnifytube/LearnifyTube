@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Rewind, FastForward, ListPlus, MoreVertical, Download, Trash2, Music } from "lucide-react";
+import { Rewind, FastForward, ListPlus, MoreVertical, Download, Trash2, Music, MonitorSmartphone } from "lucide-react";
 import { toast } from "sonner";
 import { AddToPlaylistDialog } from "@/components/playlists/AddToPlaylistDialog";
 import { useWatchProgress } from "./hooks/useWatchProgress";
@@ -136,6 +136,32 @@ export default function PlayerPage(): React.JSX.Element {
       return await trpcClient.preferences.ensureDownloadDirectoryAccess.mutate({
         filePath: targetFile,
       });
+    },
+  });
+
+  const { data: phoneList = [] } = useQuery({
+    queryKey: ["onDevices", "phoneList"],
+    queryFn: () => trpcClient.onDevices.listPhoneList.query(),
+  });
+
+  const isOnDevices = !!videoId && phoneList.some((item) => item.videoId === videoId);
+
+  const toggleOnDevicesMutation = useMutation({
+    mutationFn: async (on: boolean) => {
+      if (!videoId) throw new Error("Missing videoId");
+      return await trpcClient.onDevices.setOnPhoneList.mutate({ videoId, on });
+    },
+    onSuccess: (_result, on) => {
+      queryClient.invalidateQueries({ queryKey: ["onDevices"] });
+      queryClient.invalidateQueries({ queryKey: ["library"] });
+      toast.success(on ? "Sent to Devices" : "Removed from Devices", {
+        description: on
+          ? "Your phone and TV will download it now."
+          : "Devices remove it the next time they connect, unless another List holds it.",
+      });
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to update devices");
     },
   });
 
@@ -556,6 +582,18 @@ export default function PlayerPage(): React.JSX.Element {
                         variant="ghost"
                       />
                     )}
+                    {videoId && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={isOnDevices ? "text-primary" : "text-muted-foreground"}
+                        onClick={() => toggleOnDevicesMutation.mutate(!isOnDevices)}
+                        disabled={toggleOnDevicesMutation.isPending}
+                        title={isOnDevices ? "Remove from Devices" : "Send to Devices"}
+                      >
+                        <MonitorSmartphone className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                   {videoId && (
                     <DropdownMenu>
@@ -568,6 +606,10 @@ export default function PlayerPage(): React.JSX.Element {
                         <DropdownMenuItem onClick={() => setShowAddToPlaylistDialog(true)}>
                           <ListPlus className="mr-2 h-4 w-4" />
                           Add to Mylist
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => toggleOnDevicesMutation.mutate(!isOnDevices)}>
+                          <MonitorSmartphone className="mr-2 h-4 w-4" />
+                          {isOnDevices ? "Remove from Devices" : "Send to Devices"}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem

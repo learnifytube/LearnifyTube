@@ -41,11 +41,12 @@ A paired phone or Android TV running the mobile app.
 _Avoid_: client, mobile (as a noun)
 
 **On-device set**:
-The Videos the desktop wants every Device to hold: the Videos in each List switched on for devices, plus those in the built-in Phone List. Devices mirror it: a Video that leaves the set loses its Offline copy on each Device at the next connection.
+The Videos the desktop wants every Device to hold: the Videos in each List switched on for devices, plus those sent individually as Sent to Devices. Devices mirror it: a Video that leaves the set loses its Offline copy on each Device at the next connection.
 _Avoid_: synced videos, phone list
 
-**Phone List**:
-A built-in List for single Videos the user wants On device without switching on a whole List. Always part of the On-device set.
+**Sent to Devices**:
+The built-in collection of single Videos the user chose to send to their paired Devices without switching on a whole List. Always part of the On-device set.
+_Avoid_: phone list, device queue
 
 **Device report**:
 What a Device tells the desktop each time it mirrors: which Videos it holds and how far each was watched. Watch progress from a Device only counts when it is newer than the desktop's last change to that Video, so marking a Video on the desktop wins.

@@ -2,6 +2,7 @@ import type {
   RemoteChannel,
   RemoteMyList,
   RemotePlaylist,
+  RemoteVideo,
   RemoteVideoWithStatus,
 } from "../types";
 import { api } from "./api";
@@ -356,10 +357,12 @@ export function getCachedCollectionVideos(
   return savedPlaylist ? toCollectionVideos(savedPlaylist.items) : [];
 }
 
+export type CollectionKind = "channel" | "playlist" | "mylist";
+
 /** A collection in the Catalog snapshot, by its saved id (e.g. `playlist_<id>`). */
 export interface CatalogCollection {
   id: string;
-  type: BrowseCachePlaylistKind;
+  type: CollectionKind;
   title: string;
   sourceId: string | null;
   thumbnailUrl: string | null;
@@ -378,7 +381,7 @@ export interface CatalogSnapshot {
   getSavedCollectionVideos: (savedId: string) => RemoteVideoWithStatus[];
 }
 
-const isCollectionKind = (type: string): type is BrowseCachePlaylistKind =>
+const isCollectionKind = (type: string): type is CollectionKind =>
   type === "channel" || type === "playlist" || type === "mylist";
 
 /**
@@ -468,4 +471,31 @@ export function hasCachedCollectionVideos(
     getCachedCollectionVideos(kind, id).length > 0 ||
     hasHydratedPlaylistDetails(playlistId, { includeUnpinned: true })
   );
+}
+
+export async function cacheRecentlyAddedVideos(
+  serverUrl: string,
+  videos: RemoteVideo[]
+): Promise<RemoteVideoWithStatus[]> {
+  const videosWithStatus: RemoteVideoWithStatus[] = videos.map((v) => ({
+    id: v.id,
+    title: v.title,
+    channelTitle: v.channelTitle,
+    duration: v.duration,
+    thumbnailUrl: v.thumbnailUrl ?? null,
+    downloadStatus: "completed",
+    downloadProgress: 100,
+    fileSize: v.fileSize ?? null,
+  }));
+
+  return cacheRemoteCollectionVideos(serverUrl, {
+    kind: "recent",
+    id: "recently-added",
+    title: "Recently added",
+    videos: videosWithStatus,
+  });
+}
+
+export function getRecentlyAddedVideos(): RemoteVideoWithStatus[] {
+  return getCachedCollectionVideos("recent", "recently-added");
 }

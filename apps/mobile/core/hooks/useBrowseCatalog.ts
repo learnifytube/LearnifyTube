@@ -4,6 +4,7 @@ import type { RemoteVideoWithStatus } from "../../types";
 import {
   getCachedCollectionVideos,
   getCatalogSnapshot,
+  getRecentlyAddedVideos,
 } from "../../services/browseCache";
 import { useLibraryStore } from "../../stores/library";
 import { useSyncStore } from "../../stores/sync";
@@ -32,4 +33,14 @@ export function useBrowseCollectionVideos(
 
     return getCachedCollectionVideos(kind, id);
   }, [kind, id, browseCacheVersion, libraryVideos]);
+}
+
+export function useRecentlyAddedVideos(): RemoteVideoWithStatus[] {
+  const browseCacheVersion = useSyncStore((state) => state.browseCacheVersion);
+  const libraryVideos = useLibraryStore((state) => state.videos);
+
+  return useMemo(
+    () => getRecentlyAddedVideos(),
+    [browseCacheVersion, libraryVideos]
+  );
 }

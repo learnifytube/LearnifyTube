@@ -13,6 +13,12 @@ export default function MobileLayout() {
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen
+        name="collection"
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
         name="player/[id]"
         options={{
           headerShown: false,

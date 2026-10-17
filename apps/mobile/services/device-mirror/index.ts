@@ -95,6 +95,7 @@ const platform: DeviceMirrorPlatform = {
   saveMirroredIds: (videoIds) =>
     AsyncStorage.setItem(MIRRORED_IDS_KEY, JSON.stringify(videoIds)),
   saveOnDeviceSet: (videos) => useOnDeviceSetStore.setState({ videos }),
+  getEventsUrl: (serverUrl) => api.getEventsUrl(serverUrl),
 };
 
 export const deviceMirror = createDeviceMirror(platform);

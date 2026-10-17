@@ -10,6 +10,14 @@ The phone and Android TV app. The phone is a family catalog of the desktop Libra
 The phone's first Home row: Videos in progress on any device (started but not yet watched), newest first. Playing one resumes from the most recent Watch progress on any device, but a mark made on the desktop always wins. A Video finished anywhere leaves the row.
 _Avoid_: history, recently watched
 
+**Recently added**:
+The phone's second Home row: Videos available in the desktop Library, newest first. Playing one starts a Stream and Download; in Offline mode, it displays only Videos holding an Offline copy on this phone.
+_Avoid_: recently downloaded, latest downloads, desktop downloads
+
+**Discover**:
+The phone's catalog exploration tab. Organizes Channels, YouTube playlists, and My Lists into segmented views. Opening a collection loads its Videos on demand rather than prefetching all collection contents during Home launch.
+_Avoid_: explore tab, channel page, sync tab
+
 **Caption**:
 Timed lines shown on the picture while a Video plays, for reading along. Off until the viewer turns them on. Not a scrolling study list, not word lookup, not flashcards.
 _Avoid_: subtitles, transcript (for this overlay)

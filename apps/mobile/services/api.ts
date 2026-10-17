@@ -248,6 +248,10 @@ export const api = {
     return withPairingToken(`${serverUrl}/api/video/${videoId}/file`);
   },
 
+  getEventsUrl(serverUrl: string): string {
+    return withPairingToken(`${serverUrl}/api/events`);
+  },
+
   getTranscriptUrl(serverUrl: string, videoId: string): string {
     return withPairingToken(`${serverUrl}/api/video/${videoId}/transcript`);
   },

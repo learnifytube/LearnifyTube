@@ -228,4 +228,35 @@ describe("device mirror", () => {
     await mirror.syncNow();
     expect(state.requested).toEqual([]);
   });
+
+  it("subscribes to SSE events on start when EventSource is available", async () => {
+    const listeners: Record<string, () => void> = {};
+    class FakeEventSource {
+      url: string;
+      constructor(url: string) {
+        this.url = url;
+      }
+      addEventListener(event: string, cb: () => void) {
+        listeners[event] = cb;
+      }
+      close() {}
+    }
+    const originalEventSource = globalThis.EventSource;
+    // @ts-expect-error test mock
+    globalThis.EventSource = FakeEventSource;
+
+    try {
+      const { state, mirror } = createHarness({ set: ["a"] });
+      const stop = mirror.start();
+      expect(typeof listeners["sync:on-device-set"]).toBe("function");
+
+      listeners["sync:on-device-set"]();
+      // Allow async syncNow promise to finish
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(state.requested).toEqual(["a"]);
+      stop();
+    } finally {
+      globalThis.EventSource = originalEventSource;
+    }
+  });
 });

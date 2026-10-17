@@ -55,6 +55,12 @@ export const onDevicesRouter = t.router({
     .input(z.object({ listId: z.string(), on: z.boolean() }))
     .mutation(async ({ input, ctx }) => {
       await setListOnDevices(ctx.db ?? defaultDb, input.listId, input.on);
+      try {
+        const { getMobileSyncServer } = await import("@/main/mobileSyncServer");
+        getMobileSyncServer().broadcastOnDeviceSetChanged();
+      } catch (err) {
+        // Ignored if sync server is not running or running in a different environment
+      }
       return { success: true };
     }),
 
@@ -79,6 +85,30 @@ export const onDevicesRouter = t.router({
     .mutation(async ({ input, ctx }) => {
       const db = ctx.db ?? defaultDb;
       await (input.on ? addToPhoneList(db, input.videoId) : removeFromPhoneList(db, input.videoId));
+      if (input.on) {
+        // Auto-Keep: if the desktop doesn't have the video completed, queue it to fetch
+        try {
+          const videoRows = await db
+            .select({ downloadStatus: youtubeVideos.downloadStatus })
+            .from(youtubeVideos)
+            .where(eq(youtubeVideos.videoId, input.videoId))
+            .limit(1);
+          const status = videoRows[0]?.downloadStatus;
+          if (status !== "completed") {
+            const { getQueueManager } = await import("@/services/download-queue/queue-manager");
+            const queueManager = getQueueManager(db);
+            await queueManager.addToQueue([`https://www.youtube.com/watch?v=${input.videoId}`]);
+          }
+        } catch (err) {
+          // Log and continue, adding to on-device set still succeeded
+        }
+      }
+      try {
+        const { getMobileSyncServer } = await import("@/main/mobileSyncServer");
+        getMobileSyncServer().broadcastOnDeviceSetChanged();
+      } catch (err) {
+        // Ignored if sync server is not running
+      }
       return { success: true };
     }),
 });

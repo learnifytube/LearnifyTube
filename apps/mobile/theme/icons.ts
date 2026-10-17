@@ -12,6 +12,8 @@ export {
   ChevronRight,
   ChevronDown,
   ChevronUp,
+  Compass,
+  Tv,
   X,
   Plus,
   Minus,

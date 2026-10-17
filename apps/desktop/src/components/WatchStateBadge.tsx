@@ -1,6 +1,6 @@
 import React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Circle, CircleDot, MoreVertical, Smartphone } from "lucide-react";
+import { CheckCircle2, Circle, CircleDot, MonitorSmartphone, MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import { trpcClient } from "@/utils/trpc";
 import { cn } from "@/lib/utils";
@@ -62,9 +62,9 @@ export function VideoActionsMenu({
     onSuccess: (_result, on) => {
       queryClient.invalidateQueries({ queryKey: ["library"] });
       queryClient.invalidateQueries({ queryKey: ["onDevices"] });
-      toast.success(on ? "Added to the Phone List" : "Removed from the Phone List", {
+      toast.success(on ? "Sent to Devices" : "Removed from Devices", {
         description: on
-          ? "Your Devices fetch it the next time they connect."
+          ? "Your phone and TV will download it now."
           : "Devices remove it the next time they connect, unless another List holds it.",
       });
     },
@@ -98,8 +98,8 @@ export function VideoActionsMenu({
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => setOnPhoneList.mutate(!onPhoneList)}>
-          <Smartphone className="mr-2 h-4 w-4" />
-          {onPhoneList ? "Remove from Phone" : "Add to Phone"}
+          <MonitorSmartphone className="mr-2 h-4 w-4" />
+          {onPhoneList ? "Remove from Devices" : "Send to Devices"}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

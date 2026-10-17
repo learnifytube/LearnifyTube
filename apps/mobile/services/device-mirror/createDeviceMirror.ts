@@ -37,6 +37,7 @@ export type DeviceMirrorPlatform = {
   saveMirroredIds: (videoIds: string[]) => Promise<void>;
   /** Keeps the latest On-device set, which the TV shows as "Sent to this TV" in Offline mode too. */
   saveOnDeviceSet: (videos: SetVideo[]) => void;
+  getEventsUrl?: (serverUrl: string) => string;
 };
 
 const SYNC_INTERVAL_MS = 2 * 60_000;
@@ -138,9 +139,54 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
     const unsubscribe = platform.onConditionsChange(syncIfConnected);
     const interval = setInterval(syncIfConnected, SYNC_INTERVAL_MS);
     syncIfConnected();
+
+    // Listen to real-time SSE push from desktop
+    let eventSource: EventSource | null = null;
+    let sseServerUrl: string | null = null;
+
+    const setupSSE = () => {
+      const serverUrl = platform.getServerUrl();
+      if (!serverUrl || !platform.isForeground()) {
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+          sseServerUrl = null;
+        }
+        return;
+      }
+      if (eventSource && sseServerUrl === serverUrl) return;
+
+      if (eventSource) eventSource.close();
+      sseServerUrl = serverUrl;
+
+      if (typeof EventSource !== "undefined") {
+        try {
+          const eventsUrl = platform.getEventsUrl ? platform.getEventsUrl(serverUrl) : `${serverUrl}/api/events`;
+          const es = new EventSource(eventsUrl);
+          eventSource = es;
+          es.addEventListener("sync:on-device-set", () => {
+            void syncNow();
+          });
+          es.onerror = () => {
+            // Falls back safely to normal interval polling
+          };
+        } catch {
+          // EventSource unavailable in some environments
+        }
+      }
+    };
+
+    const unsubscribeSSE = platform.onConditionsChange(setupSSE);
+    setupSSE();
+
     return () => {
       unsubscribe();
+      unsubscribeSSE();
       clearInterval(interval);
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
     };
   };
 

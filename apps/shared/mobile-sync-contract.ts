@@ -49,3 +49,6 @@ export const deviceReportSchema = z.object({
 });
 
 export type DeviceReport = z.infer<typeof deviceReportSchema>;
+
+/** Server-Sent Events emitted by GET /api/events */
+export const SYNC_SSE_EVENT_ON_DEVICE_SET = "sync:on-device-set";

@@ -33,6 +33,7 @@ import { createPairingStore, type PairingStore } from "./security/pairing-store"
 import {
   MOBILE_SYNC_PROTOCOL_VERSION,
   MIN_SUPPORTED_MOBILE_SYNC_PROTOCOL_VERSION,
+  SYNC_SSE_EVENT_ON_DEVICE_SET,
   type SyncServerInfo,
   type OnDeviceSet,
   deviceReportSchema,
@@ -237,6 +238,7 @@ type MobileSyncServer = {
   getPort: () => number;
   isRunning: () => boolean;
   getConnectedDevices: () => ConnectedDevice[];
+  broadcastOnDeviceSetChanged: () => void;
 };
 
 /**
@@ -363,6 +365,32 @@ const createMobileSyncServer = (): MobileSyncServer => {
 
     // Cleanup stale devices periodically
     cleanupStaleDevices();
+  };
+
+  // Active SSE client connections
+  const sseClients = new Set<http.ServerResponse>();
+
+  const broadcastOnDeviceSetChanged = (): void => {
+    logger.info(`[MobileSyncServer] Broadcasting ${SYNC_SSE_EVENT_ON_DEVICE_SET} to ${sseClients.size} clients`);
+    const message = `event: ${SYNC_SSE_EVENT_ON_DEVICE_SET}\ndata: {}\n\n`;
+    for (const client of sseClients) {
+      client.write(message);
+    }
+  };
+
+  const handleEventsStream = (res: http.ServerResponse): void => {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+    // Initial comment to confirm connection
+    res.write(": connected\n\n");
+    sseClients.add(res);
+
+    res.on("close", () => {
+      sseClients.delete(res);
+    });
   };
 
   // Absolute URL for an image the mobile app loads natively (no headers), so it carries the pairing code.
@@ -513,7 +541,8 @@ const createMobileSyncServer = (): MobileSyncServer => {
       const videos = await defaultDb
         .select()
         .from(youtubeVideos)
-        .where(eq(youtubeVideos.downloadStatus, "completed"));
+        .where(eq(youtubeVideos.downloadStatus, "completed"))
+        .orderBy(desc(youtubeVideos.lastDownloadedAt), desc(youtubeVideos.createdAt));
 
       // Check which videos have transcripts
       const transcripts = await defaultDb.select().from(videoTranscripts);
@@ -2628,6 +2657,12 @@ const createMobileSyncServer = (): MobileSyncServer => {
       return;
     }
 
+    // GET /api/events (SSE real-time push)
+    if ((url === "/api/events" || url === "/events") && method === "GET") {
+      handleEventsStream(res);
+      return;
+    }
+
     // GET /api/on-device-set
     if (url === "/api/on-device-set" && method === "GET") {
       await handleOnDeviceSet(res);
@@ -2803,6 +2838,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
     getPort,
     isRunning,
     getConnectedDevices,
+    broadcastOnDeviceSetChanged,
   };
 };
 

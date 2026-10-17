@@ -35,7 +35,7 @@ export interface SavedPlaylistWithItems extends SavedPlaylist {
   >;
 }
 
-export type BrowseCachePlaylistKind = "channel" | "playlist" | "mylist";
+export type BrowseCachePlaylistKind = "channel" | "playlist" | "mylist" | "recent";
 
 interface UpsertSavedPlaylistInput {
   id: string;

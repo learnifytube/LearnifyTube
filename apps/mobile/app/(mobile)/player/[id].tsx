@@ -34,6 +34,7 @@ import {
 import {
   ArrowLeft,
   Captions,
+  Headphones,
   Maximize,
   Minimize,
   Pause,
@@ -41,6 +42,9 @@ import {
   SkipBack,
   SkipForward,
 } from "../../../theme/icons";
+import { PlayerProgressBar } from "../../../components/phone/PlayerProgressBar";
+import { ListeningModeView } from "../../../components/phone/ListeningModeView";
+import { resolveListeningDisplay } from "../../../components/phone/listeningMode";
 import type { Transcript } from "../../../types";
 
 const CONTROLS_HIDE_MS = 3000;
@@ -74,6 +78,9 @@ export default function PlayerScreen() {
   const playlistVideo = playlistVideos.find((item) => item.id === id);
   const video = libraryVideo ?? playlistVideo;
   const positionRef = useRef(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(video?.duration ?? 0);
+  const [listeningMode, setListeningMode] = useState(false);
   const [captionsOn, setCaptionsOn] = useState(false);
   const [captionText, setCaptionText] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<Transcript | null>(null);
@@ -179,9 +186,19 @@ export default function PlayerScreen() {
   }, [player, start, id]);
 
   useEffect(() => {
+    if (video?.duration) {
+      setDuration(video.duration);
+    }
+  }, [video?.duration]);
+
+  useEffect(() => {
     if (!player) return;
     const timeSub = player.addListener("timeUpdate", (event) => {
       positionRef.current = event.currentTime;
+      setCurrentTime(event.currentTime);
+      if (player.duration > 0) {
+        setDuration(player.duration);
+      }
       setCaptionText(
         currentCaption(transcript?.segments, event.currentTime, captionMaxChars),
       );
@@ -244,12 +261,12 @@ export default function PlayerScreen() {
     if (next) router.replace(`/player/${next.id}`);
   }, [playback.source, playlistVideos]);
 
-  // While playing, the controls hide a few seconds after the last touch.
+  // While playing, the controls hide a few seconds after the last touch (kept visible in listening mode).
   useEffect(() => {
-    if (!controlsVisible || !isPlaying) return;
+    if (!controlsVisible || !isPlaying || listeningMode) return;
     const timeout = setTimeout(() => setControlsVisible(false), CONTROLS_HIDE_MS);
     return () => clearTimeout(timeout);
-  }, [controlsVisible, isPlaying, interactions]);
+  }, [controlsVisible, isPlaying, interactions, listeningMode]);
 
   const touched = () => {
     setControlsVisible(true);
@@ -259,6 +276,31 @@ export default function PlayerScreen() {
   const toggleControls = () => {
     setControlsVisible((visible) => !visible);
     setInteractions((count) => count + 1);
+  };
+
+  const toggleListeningMode = () => {
+    touched();
+    setListeningMode((value) => {
+      const next = !value;
+      if (next) setControlsVisible(true);
+      return next;
+    });
+  };
+
+  const handleSeek = (seconds: number) => {
+    touched();
+    if (!player) return;
+    player.currentTime = seconds;
+    setCurrentTime(seconds);
+    positionRef.current = seconds;
+  };
+
+  const handleReplaySentence = (sentenceStart: number) => {
+    touched();
+    if (!player) return;
+    player.currentTime = sentenceStart;
+    setCurrentTime(sentenceStart);
+    positionRef.current = sentenceStart;
   };
 
   const goBack = useCallback(() => {
@@ -271,6 +313,12 @@ export default function PlayerScreen() {
   const captionBottom = controlsVisible
     ? chromeHeight + spacing.sm
     : bottomInset + spacing.md;
+
+  const listeningDisplay = resolveListeningDisplay(
+    transcript?.segments,
+    currentTime,
+    captionMaxChars,
+  );
 
   return (
     <View style={styles.container}>
@@ -318,7 +366,17 @@ export default function PlayerScreen() {
         </View>
       ) : null}
 
-      {captionsOn && captionText ? (
+      {listeningMode ? (
+        <ListeningModeView
+          isLandscape={isLandscape}
+          videoTitle={video?.title ?? ""}
+          displayState={listeningDisplay}
+          onReplaySentence={handleReplaySentence}
+          onTouched={touched}
+        />
+      ) : null}
+
+      {!listeningMode && captionsOn && captionText ? (
         <View
           style={[styles.caption, { bottom: captionBottom }]}
           pointerEvents="none"
@@ -369,6 +427,15 @@ export default function PlayerScreen() {
             <Text style={styles.title} numberOfLines={isLandscape ? 1 : 2}>
               {video?.title ?? ""}
             </Text>
+
+            <PlayerProgressBar
+              currentTime={currentTime}
+              duration={duration}
+              onSeek={handleSeek}
+              onScrubStart={touched}
+              onScrubEnd={touched}
+            />
+
             <View style={styles.actions}>
               <Pressable
                 testID="captions-toggle"
@@ -382,6 +449,19 @@ export default function PlayerScreen() {
                 <Captions
                   size={26}
                   color={captionsOn ? colors.primary : colors.foreground}
+                />
+              </Pressable>
+              <Pressable
+                testID="listening-mode-toggle"
+                onPress={toggleListeningMode}
+                accessibilityLabel={
+                  listeningMode ? "Exit listening mode" : "Listening mode"
+                }
+                hitSlop={8}
+              >
+                <Headphones
+                  size={26}
+                  color={listeningMode ? colors.primary : colors.foreground}
                 />
               </Pressable>
               <Pressable

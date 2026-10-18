@@ -22,6 +22,11 @@ _Avoid_: explore tab, channel page, sync tab
 Timed lines shown on the picture while a Video plays, for reading along. Off until the viewer turns them on. Not a scrolling study list, not word lookup, not flashcards.
 _Avoid_: subtitles, transcript (for this overlay)
 
+**Listening mode**:
+A distraction-free playback state on the phone that hides the video image and displays caption text prominently on a dark surface to focus on listening comprehension.
+_Avoid_: audio mode, transcript mode, podcast view
+
+
 **Catalog snapshot**:
 A Device's last-known copy of the desktop's Home rows and the titles and pictures of their Videos. It lets Home appear instantly. In Offline mode the phone browses it; the TV only uses it to group the Videos it holds into their collections. It is not playable and holds no Offline copies.
 _Avoid_: cache, browse cache, cached videos

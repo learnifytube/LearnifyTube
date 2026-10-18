@@ -34,6 +34,7 @@ export {
   Minimize,
   Volume2,
   VolumeX,
+  Headphones,
   Film,
   Video,
   Download,

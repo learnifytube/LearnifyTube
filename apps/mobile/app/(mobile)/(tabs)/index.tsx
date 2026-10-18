@@ -8,11 +8,13 @@ import {
   ActivityIndicator,
   BackHandler,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useConnectionStore } from "../../../stores/connection";
+import { useLibraryStore } from "../../../stores/library";
 import { api } from "../../../services/api";
 import { playQueue } from "../../../services/play-queue";
 import { prefetchPhoneCatalog } from "../../../services/prefetchPhoneCatalog";
@@ -23,10 +25,12 @@ import {
 import { markBrowseCacheChanged } from "../../../stores/sync";
 import { deviceMirror } from "../../../services/device-mirror";
 import { useRecentlyAddedVideos } from "../../../core/hooks/useBrowseCatalog";
+import { useLibraryCatalog } from "../../../core/hooks/useLibraryCatalog";
 import { VideoGridCard } from "../../../components/VideoGridCard";
 import {
   buildPhoneHome,
   type PhoneHomeRow,
+  ON_THIS_PHONE_ID,
 } from "../../../components/phone/phoneCatalog";
 import { videoThumbnails } from "../../../services/video-thumbnails";
 import { offlineCopy } from "../../../services/offline-copy";
@@ -101,6 +105,8 @@ export default function HomeScreen() {
   const savedUrl = useConnectionStore((state) => state.savedUrl);
   const connected = !!serverUrl;
   const recentlyAddedVideos = useRecentlyAddedVideos();
+  const { offlineVideos } = useLibraryCatalog();
+  const removeVideo = useLibraryStore((state) => state.removeVideo);
   const getOfflineUri = offlineCopy.useLookup();
   const getStoredThumbnail = videoThumbnails.useLookup();
   const [openRow, setOpenRow] = useState<PhoneHomeRow | null>(null);
@@ -108,6 +114,32 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [continueWatching, setContinueWatching] =
     useState(readContinueWatching);
+
+  const confirmRemove = useCallback(
+    (videoId: string, title: string) => {
+      Alert.alert("Remove from this phone?", title, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => removeVideo(videoId),
+        },
+      ]);
+    },
+    [removeVideo],
+  );
+
+  const onThisPhoneVideos = useMemo(
+    () =>
+      offlineVideos.map((item) => ({
+        id: item.id,
+        title: item.title,
+        channelTitle: item.channelTitle,
+        duration: item.duration,
+        thumbnailUrl: item.thumbnailUrl ?? undefined,
+      })),
+    [offlineVideos],
+  );
 
   // Home stays mounted behind the other tabs and the player, so it rereads
   // Continue watching on focus. Keep the old array when nothing changed:
@@ -176,6 +208,7 @@ export default function HomeScreen() {
         resolveAssetUrl: (assetUrl) =>
           resolveRemoteAssetUrl(serverUrl, assetUrl),
         continueWatching,
+        onThisPhone: onThisPhoneVideos,
         recentlyAdded: toStreaming(recentlyAddedVideos, serverUrl),
       }),
     [
@@ -184,14 +217,26 @@ export default function HomeScreen() {
       getStoredThumbnail,
       serverUrl,
       continueWatching,
+      onThisPhoneVideos,
       recentlyAddedVideos,
     ],
   );
 
+  const activeRow = useMemo(() => {
+    if (!openRow) return null;
+    return rows.find((r) => r.id === openRow.id) ?? null;
+  }, [openRow, rows]);
+
+  useEffect(() => {
+    if (openRow && !rows.some((r) => r.id === openRow.id)) {
+      setOpenRow(null);
+    }
+  }, [openRow, rows]);
+
   const empty = rows.length === 0;
   const needsPairing = empty && !connected && !savedUrl;
 
-  if (openRow) {
+  if (activeRow) {
     return (
       <SafeAreaView style={styles.container} edges={["top"]}>
         <View style={styles.header}>
@@ -204,11 +249,11 @@ export default function HomeScreen() {
             <ArrowLeft size={20} color={colors.foreground} />
           </Pressable>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {openRow.title}
+            {activeRow.title}
           </Text>
         </View>
         <FlatList
-          data={openRow.videos}
+          data={activeRow.videos}
           keyExtractor={(item) => item.id}
           numColumns={2}
           contentContainerStyle={styles.grid}
@@ -216,7 +261,12 @@ export default function HomeScreen() {
             <View style={styles.gridItem}>
               <VideoGridCard
                 video={item}
-                onPress={() => playRow(openRow, index)}
+                onPress={() => playRow(activeRow, index)}
+                onLongPress={
+                  activeRow.id === ON_THIS_PHONE_ID
+                    ? () => confirmRemove(item.id, item.title)
+                    : undefined
+                }
               />
             </View>
           )}
@@ -304,6 +354,11 @@ export default function HomeScreen() {
                   <VideoGridCard
                     video={video}
                     onPress={() => playRow(row, index)}
+                    onLongPress={
+                      row.id === ON_THIS_PHONE_ID
+                        ? () => confirmRemove(video.id, video.title)
+                        : undefined
+                    }
                   />
                 </View>
               )}

@@ -10,8 +10,12 @@ The phone and Android TV app. The phone is a family catalog of the desktop Libra
 The phone's first Home row: Videos in progress on any device (started but not yet watched), newest first. Playing one resumes from the most recent Watch progress on any device, but a mark made on the desktop always wins. A Video finished anywhere leaves the row.
 _Avoid_: history, recently watched
 
+**On this phone**:
+The phone's second Home row: Videos that hold an Offline copy on this phone, newest first. Shown only when the phone has at least one Offline copy. Long-pressing a video gives the option to remove it from this phone.
+_Avoid_: downloads, downloaded videos, local files
+
 **Recently added**:
-The phone's second Home row: Videos available in the desktop Library, newest first. Playing one starts a Stream and Download; in Offline mode, it displays only Videos holding an Offline copy on this phone.
+The phone's third Home row (or second when On this phone is empty): Videos available in the desktop Library, newest first. Playing one starts a Stream and Download; in Offline mode, it displays only Videos holding an Offline copy on this phone.
 _Avoid_: recently downloaded, latest downloads, desktop downloads
 
 **Discover**:
@@ -34,7 +38,7 @@ _Avoid_: cache, browse cache, cached videos
 ### Offline playback
 
 **Offline copy**:
-The single playable file of a Video on this device, wherever it is stored. An Offline copy on a removed USB drive still exists but is unreachable until the drive returns. Viewers see a Video with an Offline copy as "on this TV" (or "on this phone"). The phone's **On this phone** screen is exactly those Videos — not the On-device set.
+The single playable file of a Video on this device, wherever it is stored. An Offline copy on a removed USB drive still exists but is unreachable until the drive returns. Viewers see a Video with an Offline copy as "on this TV" (or "on this phone"). The phone's **On this phone** row is exactly those Videos — not the On-device set.
 _Avoid_: local file, local path, downloaded video, ready, offline (for the copy; Offline mode is the connection)
 
 **Storage location**:
@@ -54,7 +58,7 @@ Playing a Video straight from the desktop when the Device has no Offline copy. A
 _Avoid_: remote playback, desktop playback
 
 **Play queue**:
-The Videos the player moves through after the user presses play on a Home row (Continue watching, Sent to this phone, a Channel, or a List) or on On this phone, with the one playing now. It knows no desktop and no file: each Video's Offline copy or Stream is chosen when that Video starts. In Offline mode it skips Videos without an Offline copy. On the TV, starting a Play queue also puts it in History.
+The Videos the player moves through after the user presses play on a Home row (Continue watching, On this phone, Recently added, a Channel, or a List), with the one playing now. It knows no desktop and no file: each Video's Offline copy or Stream is chosen when that Video starts. In Offline mode it skips Videos without an Offline copy. On the TV, starting a Play queue also puts it in History.
 _Avoid_: playlist (for this), streaming queue
 
 **On-device set**:

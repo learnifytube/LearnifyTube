@@ -1,7 +1,7 @@
 import { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "../../../theme";
-import { Home, Compass, Smartphone, Settings } from "../../../theme/icons";
+import { Home, Compass, Settings } from "../../../theme/icons";
 import { useAppUpdateStore } from "../../../stores/appUpdate";
 
 export default function TabsLayout() {
@@ -46,15 +46,6 @@ export default function TabsLayout() {
           title: "Discover",
           tabBarIcon: ({ focused, color }) => (
             <Compass size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="library"
-        options={{
-          title: "On this phone",
-          tabBarIcon: ({ focused, color }) => (
-            <Smartphone size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),
         }}
       />

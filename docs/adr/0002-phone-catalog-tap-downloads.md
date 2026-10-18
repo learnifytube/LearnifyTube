@@ -13,3 +13,7 @@ Flashcards, word study, scrolling transcript, multi-select Download, and Save Pl
 In Offline mode the phone now shows every Home row from its Catalog snapshot instead of hiding rows without Offline copies. Videos without an Offline copy are dimmed with "Needs the desktop" and do nothing but explain when tapped. The Play queue skips them, so playing a row never stops on one. Hiding them made the phone look emptied out whenever the desktop was off. Tapping does not queue a Download for later, so a child tapping around offline cannot fill the Download queue.
 
 Continue watching is now the Videos in progress on any device, merged from the desktop's Watch state and the phone's own unreported progress. Resume uses the most recent position, and a mark made on the desktop wins. This applies to the phone only; the TV keeps its History.
+
+## Amendment (2026-10-18): Three tabs; "On this phone" moves to Home row
+
+The dedicated "On this phone" tab is removed, reducing the tab bar to three tabs: Home, Discover, and Settings. Local offline copies are now browsed directly on Home as the "On this phone" row (between Continue watching and Recently added), hidden when no offline copies exist. Long-pressing a video on the Home row or in its "See all" grid prompts to remove the offline copy from device storage.

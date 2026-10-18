@@ -1,6 +1,7 @@
 import {
   buildPhoneHome,
   CONTINUE_WATCHING_ID,
+  ON_THIS_PHONE_ID,
   RECENTLY_ADDED_ID,
   type PhoneHomeInput,
 } from "./phoneCatalog";
@@ -20,27 +21,44 @@ const base = (overrides: Partial<PhoneHomeInput> = {}): PhoneHomeInput => ({
   getStoredThumbnail: () => null,
   resolveAssetUrl: (url) => url ?? null,
   continueWatching: [],
+  onThisPhone: [],
   recentlyAdded: [],
   ...overrides,
 });
 
 describe("buildPhoneHome", () => {
-  it("orders Continue watching then Recently added", () => {
+  it("orders Continue watching, then On this phone, then Recently added", () => {
     const rows = buildPhoneHome(
       base({
+        hasOfflineCopy: (id) => id === "off1",
         continueWatching: [
           { ...video("c1"), lastPositionSeconds: 10, lastWatchedAt: 1 },
         ],
+        onThisPhone: [video("off1")],
         recentlyAdded: [video("v1"), video("v2")],
       }),
     );
 
     expect(rows.map((row) => row.id)).toEqual([
       CONTINUE_WATCHING_ID,
+      ON_THIS_PHONE_ID,
       RECENTLY_ADDED_ID,
     ]);
     expect(rows[0].videos.map((item) => item.id)).toEqual(["c1"]);
-    expect(rows[1].videos.map((item) => item.id)).toEqual(["v1", "v2"]);
+    expect(rows[1].videos.map((item) => item.id)).toEqual(["off1"]);
+    expect(rows[2].videos.map((item) => item.id)).toEqual(["v1", "v2"]);
+  });
+
+  it("omits On this phone row when empty or when no videos have an offline copy", () => {
+    const rows = buildPhoneHome(
+      base({
+        hasOfflineCopy: () => false,
+        onThisPhone: [video("not-held")],
+        recentlyAdded: [video("v1")],
+      }),
+    );
+
+    expect(rows.map((row) => row.id)).toEqual([RECENTLY_ADDED_ID]);
   });
 
   it("keeps only Offline copies when not connected", () => {
@@ -48,13 +66,16 @@ describe("buildPhoneHome", () => {
       base({
         connected: false,
         hasOfflineCopy: (id) => id === "held",
+        onThisPhone: [video("held")],
         recentlyAdded: [video("held"), video("stream-only")],
       }),
     );
 
-    expect(rows).toHaveLength(1);
-    expect(rows[0].id).toBe(RECENTLY_ADDED_ID);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].id).toBe(ON_THIS_PHONE_ID);
     expect(rows[0].videos.map((item) => item.id)).toEqual(["held"]);
+    expect(rows[1].id).toBe(RECENTLY_ADDED_ID);
+    expect(rows[1].videos.map((item) => item.id)).toEqual(["held"]);
   });
 
   it("omits empty rows", () => {

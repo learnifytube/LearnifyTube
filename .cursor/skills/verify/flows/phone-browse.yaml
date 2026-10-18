@@ -1,7 +1,7 @@
 appId: com.learnifytube.mobile
 ---
 # Run after phone-pair.yaml. Covers See all + hardware Back, skipping through a
-# row in the player, and the On this phone tab.
+# row in the player, and the On this phone row on Home.
 - launchApp
 - extendedWaitUntil:
     visible:
@@ -75,7 +75,8 @@ appId: com.learnifytube.mobile
     visible:
       id: row-see-all-channel-UCverifyScience01
     timeout: 5000
-- tapOn: "On this phone"
+- tapOn:
+    id: row-see-all-on-this-phone
 - extendedWaitUntil:
     visible: "Floating and sinking"
     timeout: 10000

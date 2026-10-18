@@ -20,6 +20,6 @@ The pairing UI is `app/(mobile)/connect.tsx` (modal). Settings only discovers an
 
 ## What to look at
 
-Tabs: Home, On this phone, Settings. Player is a full-screen modal. Tap a poster to play; a Download starts in the background.
+Tabs: Home, Discover, Settings. Player is a full-screen modal. Tap a poster to play; a Download starts in the background. Offline copies are browsed in the "On this phone" row on Home.
 
 Offline: `npm run verify -- down desktop` stops only the isolated desktop; `up` brings it back. Home should keep rows that still have Offline copies; streaming a video without an Offline copy should explain itself.

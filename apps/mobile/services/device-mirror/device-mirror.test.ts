@@ -118,6 +118,15 @@ function createHarness({
       }
       state.thumbnails.add(video.id);
     },
+    getListening: () => [
+      {
+        audiobookId: "frankl",
+        trackId: "cd3",
+        seconds: 754,
+        updatedAt: 20,
+        finished: false,
+      },
+    ],
     getWatchProgress: () => [
       { videoId: "a", lastPositionSeconds: 60, lastWatchedAt: 10 },
     ],
@@ -177,7 +186,7 @@ describe("device mirror", () => {
     expect([...state.library]).toEqual(["pulled"]);
   });
 
-  it("reports what the Device holds and its watch progress", async () => {
+  it("reports what the Device holds, its watch progress and Listening positions", async () => {
     const { state, mirror } = createHarness({ set: [], library: ["x"] });
     await mirror.syncNow();
     expect(state.reports).toEqual([
@@ -187,6 +196,15 @@ describe("device mirror", () => {
         kind: "phone",
         offlineVideoIds: ["x"],
         watch: [{ videoId: "a", lastPositionSeconds: 60, lastWatchedAt: 10 }],
+        listening: [
+          {
+            audiobookId: "frankl",
+            trackId: "cd3",
+            seconds: 754,
+            updatedAt: 20,
+            finished: false,
+          },
+        ],
       },
     ]);
   });

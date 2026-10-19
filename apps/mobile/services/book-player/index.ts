@@ -14,6 +14,7 @@ import {
   type NowPlaying,
 } from "./createBookPlayer";
 import { createExpoAudioStatusReader } from "./expoAudioStatus";
+import { keepListeningPosition } from "./keepListeningPosition";
 
 // One expo-audio player for every book, made on first use so importing this
 // module never touches the native module.
@@ -24,6 +25,8 @@ const failedListeners = new Set<() => void>();
 const playingListeners = new Set<(playing: boolean) => void>();
 const statusReader = createExpoAudioStatusReader();
 let lockScreenActive = false;
+// The time a seek is heading to, while expo-audio still reports the old time.
+let seekingTo: number | null = null;
 
 const emit = (listeners: Set<() => void>) => {
   for (const listener of listeners) listener();
@@ -37,6 +40,13 @@ const subscribe =
       listeners.delete(listener);
     };
   };
+
+const seek = (player: AudioPlayer, target: number) => {
+  seekingTo = target;
+  void player.seekTo(target).finally(() => {
+    if (seekingTo === target) seekingTo = null;
+  });
+};
 
 const getAudio = () => {
   if (audio) return audio;
@@ -94,7 +104,8 @@ const expoAudioPlatform: BookAudioPlatform = {
     const player = getAudio();
     statusReader.loading();
     player.replace({ uri });
-    if (startAt > 0) void player.seekTo(startAt);
+    seekingTo = null;
+    if (startAt > 0) seek(player, startAt);
     showOnLockScreen(player, nowPlaying);
   },
   play: () => {
@@ -113,10 +124,9 @@ const expoAudioPlatform: BookAudioPlatform = {
     if (lockScreenActive) player.clearLockScreenControls();
     lockScreenActive = false;
   },
-  currentTime: () => audio?.currentTime ?? 0,
-  seekTo: (seconds) => {
-    void getAudio().seekTo(seconds);
-  },
+  // Until a seek lands, the Track is where it is about to be.
+  currentTime: () => seekingTo ?? audio?.currentTime ?? 0,
+  seekTo: (seconds) => seek(getAudio(), seconds),
   setRate: (rate) => getAudio().setPlaybackRate(rate),
   onEnded: (listener) => {
     endedListeners.add(listener);
@@ -134,6 +144,7 @@ export const bookPlayer = createBookPlayer(expoAudioPlatform, {
     set: (speed) => useBookSpeedStore.getState().setSpeed(speed),
   },
 });
+keepListeningPosition(bookPlayer);
 
 /** The book speed, for screens. */
 export function useBookSpeed() {
@@ -148,4 +159,5 @@ export type {
   Book,
   BookPlayer,
   BookPlayerState,
+  ListeningPoint,
 } from "./createBookPlayer";

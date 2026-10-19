@@ -36,6 +36,30 @@ export function planSeek({
   return seek;
 }
 
+/** The seconds shown on a seek button, adding up taps in the same direction. */
+export type SeekNudge = { amount: number; at: number };
+
+export function addSeekNudge(
+  previous: SeekNudge | null,
+  direction: 1 | -1,
+  now: number,
+) {
+  const step = direction * SEEK_STEP_SECONDS;
+  const continues =
+    previous !== null &&
+    now - previous.at < PENDING_SEEK_MS &&
+    Math.sign(previous.amount) === direction;
+  const nudge: SeekNudge = {
+    amount: continues ? previous.amount + step : step,
+    at: now,
+  };
+  return nudge;
+}
+
+export function formatSeekNudge(amount: number) {
+  return `${amount > 0 ? "+" : "−"}${Math.abs(amount)}s`;
+}
+
 export function formatPlaybackTime(seconds: number) {
   const total =
     Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;

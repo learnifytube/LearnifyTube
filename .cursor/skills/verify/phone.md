@@ -16,7 +16,7 @@ The pairing UI is `app/(mobile)/connect.tsx` (modal). Settings only discovers an
 
 ## testIDs
 
-`connect-submit`, `row-see-all-<row id>` (e.g. `row-see-all-channel-UCverifyScience01`), `row-grid-back`, `player-back`, `next-video`, `previous-video`, `captions-toggle`, `play-pause`, `full-screen-toggle`, `player-surface` (tap toggles the controls; they hide 3 s after the last touch while playing). Prefer them over titles: the Magnets title truncates.
+`connect-submit`, `row-see-all-<row id>` (e.g. `row-see-all-channel-UCverifyScience01`), `row-grid-back`, `player-back`, `next-video`, `previous-video`, `captions-toggle`, `listening-mode-toggle`, `seek-back`, `seek-forward`, `play-pause`, `full-screen-toggle`, `player-surface` (tap toggles the controls; they hide 3 s after the last touch while playing). Prefer them over titles: the Magnets title truncates.
 
 ## What to look at
 

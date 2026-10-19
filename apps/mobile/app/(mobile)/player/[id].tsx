@@ -44,6 +44,17 @@ import {
 } from "../../../theme/icons";
 import { PlayerProgressBar } from "../../../components/phone/PlayerProgressBar";
 import { ListeningModeView } from "../../../components/phone/ListeningModeView";
+import {
+  SeekButton,
+  SEEK_BUTTON_SIZE,
+} from "../../../components/phone/SeekButton";
+import {
+  addSeekNudge,
+  isSeekPending,
+  planSeek,
+  type PendingSeek,
+  type SeekNudge,
+} from "../../../components/playerSeek";
 import { resolveListeningDisplay } from "../../../components/phone/listeningMode";
 import type { Transcript } from "../../../types";
 
@@ -78,6 +89,8 @@ export default function PlayerScreen() {
   const playlistVideo = playlistVideos.find((item) => item.id === id);
   const video = libraryVideo ?? playlistVideo;
   const positionRef = useRef(0);
+  const pendingSeekRef = useRef<PendingSeek | null>(null);
+  const [seekNudge, setSeekNudge] = useState<SeekNudge | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(video?.duration ?? 0);
   const [listeningMode, setListeningMode] = useState(false);
@@ -195,7 +208,10 @@ export default function PlayerScreen() {
     if (!player) return;
     const timeSub = player.addListener("timeUpdate", (event) => {
       positionRef.current = event.currentTime;
-      setCurrentTime(event.currentTime);
+      // Until the player catches up, keep showing where the seek is heading.
+      if (!isSeekPending(pendingSeekRef.current, Date.now())) {
+        setCurrentTime(event.currentTime);
+      }
       if (player.duration > 0) {
         setDuration(player.duration);
       }
@@ -295,6 +311,26 @@ export default function PlayerScreen() {
     positionRef.current = seconds;
   };
 
+  const seekBy = (direction: 1 | -1) => {
+    touched();
+    if (!player) return;
+    const now = Date.now();
+    // A Video that played to its end still wants to play; a seek mustn't resume it.
+    if (!isPlaying) player.pause();
+    const next = planSeek({
+      currentTime: player.currentTime,
+      duration: player.duration,
+      pending: pendingSeekRef.current,
+      now,
+      direction,
+    });
+    pendingSeekRef.current = next;
+    player.currentTime = next.target;
+    setCurrentTime(next.target);
+    positionRef.current = next.target;
+    setSeekNudge((previous) => addSeekNudge(previous, direction, now));
+  };
+
   const handleReplaySentence = (sentenceStart: number) => {
     touched();
     if (!player) return;
@@ -313,6 +349,15 @@ export default function PlayerScreen() {
   const captionBottom = controlsVisible
     ? chromeHeight + spacing.sm
     : bottomInset + spacing.md;
+
+  // Over the picture: mid-height above the controls, a quarter in from each side.
+  // In Listening mode: just above the controls, leaving the caption its width.
+  const seekSideOffset = listeningMode
+    ? sideInset + spacing.lg
+    : sideInset + (width - 2 * sideInset) / 4 - SEEK_BUTTON_SIZE / 2;
+  const seekPosition = listeningMode
+    ? { bottom: chromeHeight + spacing.md }
+    : { top: (height - chromeHeight - SEEK_BUTTON_SIZE) / 2 };
 
   const listeningDisplay = resolveListeningDisplay(
     transcript?.segments,
@@ -413,6 +458,23 @@ export default function PlayerScreen() {
           >
             <ArrowLeft size={22} color={colors.foreground} />
           </Pressable>
+
+          {sourceUri ? (
+            <>
+              <SeekButton
+                direction={-1}
+                nudge={seekNudge}
+                onPress={() => seekBy(-1)}
+                style={[seekPosition, { left: seekSideOffset }]}
+              />
+              <SeekButton
+                direction={1}
+                nudge={seekNudge}
+                onPress={() => seekBy(1)}
+                style={[seekPosition, { right: seekSideOffset }]}
+              />
+            </>
+          ) : null}
 
           <View
             style={[

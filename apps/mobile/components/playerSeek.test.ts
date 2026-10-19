@@ -1,5 +1,7 @@
 import {
+  addSeekNudge,
   formatPlaybackTime,
+  formatSeekNudge,
   isSeekPending,
   planSeek,
   SEEK_STEP_SECONDS,
@@ -138,5 +140,25 @@ describe("isSeekPending", () => {
     expect(isSeekPending(seek, 500)).toBe(true);
     expect(isSeekPending(seek, 5000)).toBe(false);
     expect(isSeekPending(null, 0)).toBe(false);
+  });
+});
+
+describe("addSeekNudge", () => {
+  it("adds up quick taps in the same direction", () => {
+    const first = addSeekNudge(null, 1, 0);
+    const second = addSeekNudge(first, 1, 400);
+    const third = addSeekNudge(second, 1, 800);
+
+    expect(first.amount).toBe(SEEK_STEP_SECONDS);
+    expect(third.amount).toBe(3 * SEEK_STEP_SECONDS);
+    expect(formatSeekNudge(third.amount)).toBe("+30s");
+  });
+
+  it("starts over when the direction flips or taps pause", () => {
+    const forward = addSeekNudge(null, 1, 0);
+
+    expect(addSeekNudge(forward, -1, 400).amount).toBe(-SEEK_STEP_SECONDS);
+    expect(addSeekNudge(forward, 1, 5000).amount).toBe(SEEK_STEP_SECONDS);
+    expect(formatSeekNudge(-SEEK_STEP_SECONDS)).toBe("−10s");
   });
 });

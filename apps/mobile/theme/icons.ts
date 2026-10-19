@@ -30,6 +30,8 @@ export {
   Pause,
   SkipBack,
   SkipForward,
+  RotateCcw,
+  RotateCw,
   Maximize,
   Minimize,
   Volume2,

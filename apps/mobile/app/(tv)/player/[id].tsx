@@ -28,7 +28,7 @@ import {
   isSeekPending,
   planSeek,
   type PendingSeek,
-} from "../../../components/tv/playerSeek";
+} from "../../../components/playerSeek";
 import {
   TVMessageButton,
   TVMessageCard,

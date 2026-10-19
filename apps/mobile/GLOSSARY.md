@@ -35,6 +35,14 @@ _Avoid_: audio mode, transcript mode, podcast view
 A Device's last-known copy of the desktop's Home rows and the titles and pictures of their Videos. It lets Home appear instantly. In Offline mode the phone browses it; the TV only uses it to group the Videos it holds into their collections. It is not playable and holds no Offline copies.
 _Avoid_: cache, browse cache, cached videos
 
+**Continue listening**:
+A phone Home row of Audiobooks started but not finished on any device, newest first. Playing one resumes from its Listening position. Kept apart from Continue watching, which holds only Videos.
+_Avoid_: continue watching (for Audiobooks), recently played
+
+**Audiobooks**:
+A phone Home row of every Audiobook imported on the desktop (see the desktop glossary for Audiobook, Track and Listening position). Playing one Streams it when the desktop is reachable and fetches the whole Audiobook onto the phone. An Audiobook the desktop sent is held as a whole and Mirrored like the On-device set; one the user pulled by playing it stays until the user removes it on the phone. Sent Audiobooks show here, never in Sent to this phone, which holds only Videos. Tapping an Audiobook plays it at once from its Listening position; its Tracks are one step away for jumping, starting over, or removing it from this phone.
+_Avoid_: books tab, audio, podcasts
+
 ### Offline playback
 
 **Offline copy**:

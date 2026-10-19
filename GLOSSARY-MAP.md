@@ -7,4 +7,4 @@
 
 ## Relationships
 
-- **Desktop → Mobile**: Desktop serves Videos, Lists, Channels and Captions over the sync contract in `apps/shared`. The phone browses that catalog; a Device Downloads an Offline copy when the user plays a Video, and also Mirrors the On-device set.
+- **Desktop → Mobile**: Desktop serves Videos, Lists, Channels and Captions over the sync contract in `apps/shared`. The phone browses that catalog; a Device Downloads an Offline copy when the user plays a Video, and also Mirrors the On-device set. Desktop also serves the Audiobooks the user Imported; they travel as whole books and are never Videos.

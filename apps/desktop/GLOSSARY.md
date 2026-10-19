@@ -67,3 +67,29 @@ _Avoid_: playlist (unqualified)
 **Subscription**:
 A Channel the user chose to subscribe to, so its new Videos show up for them to consider keeping. A Channel the user has only visited is not a Subscription.
 _Avoid_: followed channel
+
+### Audiobooks
+
+**Audiobook**:
+One book the user imported from audio files on their computer, defined once at Import and handled as a whole from then on. It is the unit the user sends to Devices: sending an Audiobook sends all of it, never a chosen part. It is not a Video and has nothing to do with YouTube: it is never in the Library, a List, or the On-device set of Videos.
+_Avoid_: imported video, local video, album
+
+**Import**:
+To turn a folder on the computer into one or more Audiobooks. The user picks a folder and then says, before anything is saved, whether the folder is one Audiobook or each of its subfolders is one. Import is to Audiobooks what Keep is to Videos.
+_Avoid_: add files, upload, keep (for Audiobooks)
+
+**Track**:
+One audio file in an Audiobook. An Audiobook plays its Tracks in its Track order from the first to the last. A Track is not necessarily a chapter: it may be a disc track, or the whole book in one file.
+_Avoid_: chapter, part, episode
+
+**Track order**:
+The order an Audiobook plays its Tracks in. Import sets it by subfolder and then by file name, reading numbers as numbers (Track 2 before Track 10); the user can rearrange it at Import or any time later.
+_Avoid_: playlist order
+
+**Rescan**:
+Looking at an Audiobook's folder again after Import. New files join at the end of the Track order and files that are gone show as missing; nothing already there is reordered. The user's files are only ever read: forgetting an Audiobook never deletes them.
+_Avoid_: re-import, refresh
+
+**Listening position**:
+Where the user is in an Audiobook: one Track and a time inside it, the same on every Device. Playing an Audiobook always resumes from it and carries on to the end. The newest position wins. An Audiobook is finished when its last Track ends.
+_Avoid_: watch state, progress (for Audiobooks)

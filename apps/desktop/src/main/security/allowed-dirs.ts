@@ -7,6 +7,7 @@ import defaultDb from "../../api/db";
 import { userPreferences } from "../../api/db/schema";
 import { logger } from "../../helpers/logger";
 import { thumbnailsDir } from "../../api/utils/ytdlp-utils/thumbnails-dir";
+import { audiobookCoversDir } from "../../api/audiobooks/covers-dir";
 
 /**
  * Base directories from which the app is allowed to serve files to the renderer
@@ -28,6 +29,7 @@ const getStaticBaseDirs = (): string[] => [
   getDefaultDownloadDir(),
   getCacheDir(),
   getThumbnailsDir(),
+  audiobookCoversDir(app.getPath("userData")),
 ];
 
 let cachedAllowedDirs: string[] | null = null;

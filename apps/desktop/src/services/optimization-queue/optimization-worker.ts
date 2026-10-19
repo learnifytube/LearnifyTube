@@ -40,7 +40,7 @@ type CompletionCallback = (
 /**
  * Get FFmpeg binary path
  */
-const getFfmpegPath = (): string | null => {
+export const getFfmpegPath = (): string | null => {
   const platform = process.platform;
   const isDev = !app.isPackaged;
 

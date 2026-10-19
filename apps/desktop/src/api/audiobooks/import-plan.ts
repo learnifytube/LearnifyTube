@@ -42,7 +42,7 @@ const AUDIO_EXTENSIONS = new Set(["mp3", "m4a", "m4b", "aac", "flac", "ogg", "op
 
 const extensionOf = (path: string): string => path.split(".").pop()?.toLowerCase() ?? "";
 
-const isAudio = (path: string): boolean => AUDIO_EXTENSIONS.has(extensionOf(path));
+export const isAudioPath = (path: string): boolean => AUDIO_EXTENSIONS.has(extensionOf(path));
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif", "bmp"]);
 
@@ -111,7 +111,7 @@ const agreedArtist = (audioFiles: ListedFile[]): string | null => {
 
 const proposeBook = (folder: string, title: string, files: ListedFile[]): ProposedAudiobook => {
   const audioFiles = files
-    .filter((file) => isAudio(file.path))
+    .filter((file) => isAudioPath(file.path))
     .sort((a, b) => compareTrackPaths(a.path, b.path));
   return {
     folder,
@@ -139,7 +139,7 @@ const groupBySubfolder = (listing: FolderListing): ProposedAudiobook[] => {
 };
 
 export const planImport = (listing: FolderListing, mode?: ImportMode): ImportPlan => {
-  const suggestedMode = suggestMode(listing.files.filter((file) => isAudio(file.path)));
+  const suggestedMode = suggestMode(listing.files.filter((file) => isAudioPath(file.path)));
   const books =
     (mode ?? suggestedMode) === "one-book"
       ? [proposeBook("", listing.name, listing.files)]

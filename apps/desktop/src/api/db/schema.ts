@@ -603,3 +603,43 @@ export const syncDevices = sqliteTable("sync_devices", {
   offlineVideoIdsJson: text("offline_video_ids_json").notNull(),
   lastSeenAt: integer("last_seen_at").notNull(),
 });
+
+// Audiobooks (ADR-0004): imported from audio files on the computer, never Videos.
+// Track files are referenced in place; the app only reads them.
+export const audiobooks = sqliteTable("audiobooks", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  author: text("author"),
+  // The folder the Audiobook was imported from (absolute).
+  sourceFolder: text("source_folder").notNull(),
+  // App-owned copy of the cover image, or null for the placeholder.
+  coverPath: text("cover_path"),
+  sentToDevices: integer("sent_to_devices", { mode: "boolean" }).notNull().default(false),
+  // Listening position: one Track and a time inside it.
+  listeningTrackId: text("listening_track_id"),
+  listeningSeconds: integer("listening_seconds"),
+  listeningUpdatedAt: integer("listening_updated_at"),
+  finished: integer("finished", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at"),
+});
+
+export const audiobookTracks = sqliteTable(
+  "audiobook_tracks",
+  {
+    id: text("id").primaryKey(),
+    audiobookId: text("audiobook_id")
+      .notNull()
+      .references(() => audiobooks.id, { onDelete: "cascade" }),
+    // Absolute path of the user's audio file.
+    filePath: text("file_path").notNull(),
+    // Place in the Track order, from 0.
+    position: integer("position").notNull(),
+    durationSeconds: integer("duration_seconds"),
+    missing: integer("missing", { mode: "boolean" }).notNull().default(false),
+  },
+  (table) => [index("audiobook_tracks_book_position_idx").on(table.audiobookId, table.position)]
+);
+
+export type Audiobook = typeof audiobooks.$inferSelect;
+export type AudiobookTrack = typeof audiobookTracks.$inferSelect;

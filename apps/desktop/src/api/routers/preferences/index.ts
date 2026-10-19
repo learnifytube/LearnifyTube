@@ -507,6 +507,7 @@ export const preferencesRouter = t.router({
                   "flashcards",
                   "analytics",
                   "storage",
+                  "audiobooks",
                   "mobile-sync",
                   "logs",
                   "settings",

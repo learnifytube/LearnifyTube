@@ -18,6 +18,7 @@ export type SidebarItem =
   | "flashcards"
   | "analytics"
   | "storage"
+  | "audiobooks"
   | "mobile-sync"
   | "logs"
   | "settings";
@@ -106,6 +107,7 @@ export const DEFAULT_SIDEBAR_PREFERENCES: SidebarPreferences = {
     "flashcards",
     "analytics",
     "storage",
+    "audiobooks",
     "mobile-sync",
     "logs",
     "settings",
@@ -206,6 +208,7 @@ const isSidebarItem = (value: unknown): value is SidebarItem =>
     "flashcards",
     "analytics",
     "storage",
+    "audiobooks",
     "mobile-sync",
     "logs",
     "settings",

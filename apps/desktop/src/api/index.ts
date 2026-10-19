@@ -21,6 +21,7 @@ import { syncRouter } from "@/api/routers/sync";
 import { libraryRouter } from "@/api/routers/library";
 import { onDevicesRouter } from "@/api/routers/on-devices";
 import { subscriptionsRouter } from "@/api/routers/subscriptions";
+import { audiobooksRouter } from "@/api/routers/audiobooks";
 
 // Create the root router
 export const router = t.router({
@@ -46,6 +47,7 @@ export const router = t.router({
   library: libraryRouter,
   onDevices: onDevicesRouter,
   subscriptions: subscriptionsRouter,
+  audiobooks: audiobooksRouter,
 });
 
 // Export type router type signature

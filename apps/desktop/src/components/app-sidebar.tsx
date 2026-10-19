@@ -11,6 +11,7 @@ import {
   Smartphone,
   Library,
   Plus,
+  BookAudio,
 } from "lucide-react";
 import { Link, useMatches } from "@tanstack/react-router";
 import { logger } from "@/helpers/logger";
@@ -91,6 +92,10 @@ const SIDEBAR_GROUPS: Array<{
     addUrl: true,
   },
   {
+    label: "AUDIOBOOKS",
+    items: [{ id: "audiobooks", title: "Audiobooks", icon: BookAudio, url: "/audiobooks" }],
+  },
+  {
     items: [{ id: "mobile-sync", title: "Devices", icon: Smartphone, url: "/mobile-sync" }],
   },
   {
@@ -107,6 +112,7 @@ const ALWAYS_VISIBLE: SidebarItem[] = [
   "home",
   "library",
   "my-playlists",
+  "audiobooks",
   "mobile-sync",
   "settings",
 ];

@@ -1,4 +1,4 @@
-import { planImport, type FolderListing } from "./import-plan";
+import { planImport, withTrackOrder, type FolderListing } from "./import-plan";
 
 const audio = (path: string, extra: Partial<FolderListing["files"][number]> = {}) => ({
   path,
@@ -171,5 +171,19 @@ describe("planImport", () => {
 
   it("proposes nothing for a folder without audio", () => {
     expect(planImport({ name: "photos", files: [{ path: "a.jpg" }] }).books).toEqual([]);
+  });
+});
+
+describe("withTrackOrder", () => {
+  const [orwellBook] = planImport(orwell).books;
+  const intro = "George Orwell Collection - Stephen Fry Intro.mp3";
+  const book = "George Orwell Collection - Animal Farm Audiobook.mp3";
+
+  it("puts Tracks in the order the user dragged them into in the preview", () => {
+    expect(trackPaths(withTrackOrder(orwellBook, [intro, book]))).toEqual([intro, book]);
+  });
+
+  it("keeps Tracks the order leaves out after the ordered ones", () => {
+    expect(trackPaths(withTrackOrder(orwellBook, [intro, "gone.mp3"]))).toEqual([intro, book]);
   });
 });

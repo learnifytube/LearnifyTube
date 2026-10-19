@@ -16,9 +16,12 @@ import {
 } from "@/components/ui/dialog";
 import type { ImportMode } from "@/api/audiobooks/import-plan";
 import { AudiobookCover } from "./AudiobookCover";
+import { SortableTrackList } from "./SortableTrackList";
 import { formatListeningTime } from "../format";
 
 type ImportPreview = Awaited<ReturnType<typeof trpcClient.audiobooks.previewImport.mutate>>;
+type PreviewBook = ImportPreview["plans"][ImportMode][number];
+type PreviewTrack = PreviewBook["tracks"][number];
 
 // A Track's path shown from its book's folder, e.g. "CD 1/Track 01.mp3".
 const insideBook = (folder: string, path: string): string =>
@@ -36,7 +39,25 @@ export function ImportPreviewDialog({
   const [mode, setMode] = useState<ImportMode>(preview.suggestedMode);
   // Edited titles by book folder; untouched books keep their folder name.
   const [titles, setTitles] = useState<Record<string, string>>({});
+  // Track paths the user dragged into a new order, by mode and then book folder.
+  const [trackOrders, setTrackOrders] = useState<Record<ImportMode, Record<string, string[]>>>({
+    "one-book": {},
+    "each-subfolder": {},
+  });
   const books = preview.plans[mode];
+
+  const tracksOf = (book: PreviewBook): PreviewTrack[] => {
+    const order = trackOrders[mode][book.folder];
+    if (!order) return book.tracks;
+    const byPath = new Map(book.tracks.map((track) => [track.path, track]));
+    return order.flatMap((path) => byPath.get(path) ?? []);
+  };
+
+  const reorder = (book: PreviewBook, tracks: PreviewTrack[]): void =>
+    setTrackOrders((current) => ({
+      ...current,
+      [mode]: { ...current[mode], [book.folder]: tracks.map((track) => track.path) },
+    }));
 
   const confirm = useMutation({
     mutationFn: () =>
@@ -44,6 +65,7 @@ export function ImportPreviewDialog({
         folderPath: preview.folderPath,
         mode,
         titles,
+        trackOrders: trackOrders[mode],
       }),
     onSuccess: async ({ ids }) => {
       await queryClient.invalidateQueries({ queryKey: ["audiobooks"] });
@@ -100,13 +122,18 @@ export function ImportPreviewDialog({
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
-                <ol className="max-h-32 list-decimal overflow-y-auto pl-6 text-xs text-muted-foreground">
-                  {book.tracks.map((track) => (
-                    <li key={track.path} className="truncate" title={track.path}>
-                      {insideBook(book.folder, track.path)}
-                    </li>
-                  ))}
-                </ol>
+                <SortableTrackList
+                  items={tracksOf(book)}
+                  getKey={(track) => track.path}
+                  onReorder={(tracks) => reorder(book, tracks)}
+                  className="max-h-40 overflow-y-auto text-xs text-muted-foreground"
+                  itemClassName="rounded px-1 py-0.5"
+                  renderItem={(track, index) => (
+                    <span className="min-w-0 flex-1 truncate" title={track.path}>
+                      {index + 1}. {insideBook(book.folder, track.path)}
+                    </span>
+                  )}
+                />
               </div>
             </div>
           ))}

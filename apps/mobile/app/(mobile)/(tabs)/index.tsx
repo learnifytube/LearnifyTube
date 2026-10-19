@@ -28,7 +28,12 @@ import { bookPlayer } from "../../../services/book-player";
 import { useRecentlyAddedVideos } from "../../../core/hooks/useBrowseCatalog";
 import { useLibraryCatalog } from "../../../core/hooks/useLibraryCatalog";
 import { VideoGridCard } from "../../../components/VideoGridCard";
-import { AudiobooksRow } from "../../../components/phone/AudiobooksRow";
+import {
+  AudiobooksRow,
+  ContinueListeningRow,
+} from "../../../components/phone/AudiobooksRow";
+import { resumePoint } from "../../../services/listening-position/listeningPosition";
+import { useListeningPositionsStore } from "../../../stores/listeningPositions";
 import {
   buildPhoneHome,
   type PhoneHomeRow,
@@ -103,10 +108,15 @@ function playRow(row: PhoneHomeRow, startIndex: number) {
   router.push(`/player/${video.id}`);
 }
 
-// Tapping an Audiobook plays it at once, from its first Track.
+// Tapping an Audiobook plays it at once, from its Listening position.
 function playAudiobook(book: Audiobook) {
-  void bookPlayer.play(book);
+  const kept = useListeningPositionsStore.getState().positions[book.id];
+  void bookPlayer.play(book, resumePoint(book, kept));
   router.push("/book-player");
+}
+
+function openAudiobook(book: Audiobook) {
+  router.push({ pathname: "/audiobook", params: { id: book.id } });
 }
 
 export default function HomeScreen() {
@@ -337,7 +347,16 @@ export default function HomeScreen() {
                 desktop is connected and it stays here.
               </Text>
             ) : null}
-            <AudiobooksRow serverUrl={serverUrl} onPlay={playAudiobook} />
+            <ContinueListeningRow
+              serverUrl={serverUrl}
+              onPlay={playAudiobook}
+              onOpen={openAudiobook}
+            />
+            <AudiobooksRow
+              serverUrl={serverUrl}
+              onPlay={playAudiobook}
+              onOpen={openAudiobook}
+            />
           </>
         }
         renderItem={({ item: row }) => (

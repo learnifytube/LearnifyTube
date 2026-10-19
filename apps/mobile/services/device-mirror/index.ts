@@ -8,6 +8,7 @@ import { getAppSurface } from "../../core/hooks/useAppSurface";
 import { useConnectionStore } from "../../stores/connection";
 import { useLibraryStore } from "../../stores/library";
 import { useOnDeviceSetStore } from "../../stores/onDeviceSet";
+import { useListeningPositionsStore } from "../../stores/listeningPositions";
 import { getWatchHistory } from "../../db/repositories/watchHistory";
 import {
   createDeviceMirror,
@@ -87,6 +88,10 @@ const platform: DeviceMirrorPlatform = {
             },
           ]
         : [],
+    ),
+  getListening: () =>
+    Object.values(useListeningPositionsStore.getState().positions).flatMap(
+      (listening) => (listening ? [listening] : []),
     ),
   loadMirroredIds: async () => {
     const raw = await AsyncStorage.getItem(MIRRORED_IDS_KEY);

@@ -16,7 +16,9 @@ const frankl: Book = {
   tracks: [track("cd1-01"), track("cd1-02"), track("cd3-01")],
 };
 
-function createHarness(options?: Parameters<typeof createFakeBookAudioPlatform>[0]) {
+function createHarness(
+  options?: Parameters<typeof createFakeBookAudioPlatform>[0],
+) {
   const audio = createFakeBookAudioPlatform(options);
   const player = createBookPlayer(audio.platform);
   return { audio, player };
@@ -129,11 +131,17 @@ describe("Book player", () => {
 
     player.pause();
     expect(audio.isPlaying()).toBe(false);
-    expect(player.getState()).toMatchObject({ status: "paused", trackIndex: 0 });
+    expect(player.getState()).toMatchObject({
+      status: "paused",
+      trackIndex: 0,
+    });
 
     player.resume();
     expect(audio.isPlaying()).toBe(true);
-    expect(player.getState()).toMatchObject({ status: "playing", trackIndex: 0 });
+    expect(player.getState()).toMatchObject({
+      status: "playing",
+      trackIndex: 0,
+    });
     expect(audio.loadedUris()).toEqual(["stream://cd1-01"]);
   });
 
@@ -179,6 +187,124 @@ describe("Book player", () => {
       "playing",
       "finished",
     ]);
+  });
+
+  it("resumes mid-Track from a Listening position, then carries on to the end", async () => {
+    const { audio, player } = createHarness();
+
+    await player.play(frankl, { trackId: "cd1-02", seconds: 754 });
+
+    expect(audio.current()).toMatchObject({
+      uri: "stream://cd1-02",
+      startAt: 754,
+    });
+    expect(player.getState()).toMatchObject({
+      status: "playing",
+      trackIndex: 1,
+    });
+
+    audio.finishTrack();
+    await player.settled();
+    expect(audio.current()).toMatchObject({
+      uri: "stream://cd3-01",
+      startAt: 0,
+    });
+  });
+
+  it("starts at Track 1 when the Listening position's Track is no longer in the book", async () => {
+    const { audio, player } = createHarness();
+
+    await player.play(frankl, { trackId: "gone", seconds: 754 });
+
+    expect(audio.current()).toMatchObject({
+      uri: "stream://cd1-01",
+      startAt: 0,
+    });
+  });
+
+  it("resumes at the next Track when the Listening position's Track went missing", async () => {
+    const book: Book = {
+      ...frankl,
+      tracks: [track("a"), track("b", true), track("c")],
+    };
+    const { audio, player } = createHarness();
+
+    await player.play(book, { trackId: "b", seconds: 754 });
+
+    expect(audio.current()).toMatchObject({ uri: "stream://c", startAt: 0 });
+  });
+
+  it("jumps to a chosen Track from its start", async () => {
+    const { audio, player } = createHarness();
+    await player.play(frankl, { trackId: "cd1-02", seconds: 754 });
+
+    await player.jumpTo(frankl, 2);
+
+    expect(audio.current()).toMatchObject({
+      uri: "stream://cd3-01",
+      startAt: 0,
+    });
+    expect(player.getState()).toMatchObject({
+      status: "playing",
+      trackIndex: 2,
+    });
+  });
+
+  it("starts over at Track 1, 0:00", async () => {
+    const { audio, player } = createHarness();
+    await player.play(frankl, { trackId: "cd3-01", seconds: 100 });
+
+    await player.startOver(frankl);
+
+    expect(audio.current()).toMatchObject({
+      uri: "stream://cd1-01",
+      startAt: 0,
+    });
+    expect(player.getState()).toMatchObject({
+      status: "playing",
+      trackIndex: 0,
+    });
+  });
+
+  it("tells where in the book the listener is, to keep as the Listening position", async () => {
+    const { audio, player } = createHarness();
+    expect(player.listeningPosition()).toBeNull();
+
+    await player.play(frankl, { trackId: "cd1-02", seconds: 754 });
+    audio.setTime(800);
+    player.pause();
+
+    expect(player.listeningPosition()).toEqual({
+      audiobookId: "frankl",
+      trackId: "cd1-02",
+      seconds: 800,
+      finished: false,
+    });
+  });
+
+  it("is finished at the end of the last Track", async () => {
+    const { audio, player } = createHarness();
+    await player.play(frankl, { trackId: "cd3-01", seconds: 100 });
+
+    audio.finishTrack();
+    await player.settled();
+
+    expect(player.getState()).toEqual({ status: "finished", book: frankl });
+    expect(player.listeningPosition()).toEqual({
+      audiobookId: "frankl",
+      trackId: "cd3-01",
+      seconds: 300,
+      finished: true,
+    });
+  });
+
+  it("has no Listening position to keep while a Track can't play", async () => {
+    const { player } = createHarness({ unavailableTrackIds: ["cd1-02"] });
+
+    await player.play(frankl, { trackId: "cd1-02", seconds: 754 });
+
+    expect(player.getState()).toMatchObject({ status: "unavailable" });
+    expect(player.listeningPosition()).toBeNull();
   });
 
   it("plays only the book tapped last when a Track is slow to resolve", async () => {

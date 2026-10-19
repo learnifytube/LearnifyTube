@@ -28,6 +28,9 @@ export type BookAudioPlatform = {
   onEnded: (listener: () => void) => () => void;
 };
 
+/** A Track and a time inside it to start a book from. */
+export type ListeningPoint = { trackId: string; seconds: number };
+
 export type BookPlayerState =
   | { status: "idle" }
   | {
@@ -49,6 +52,8 @@ export function createBookPlayer(platform: BookAudioPlatform) {
   // Each Track change takes a ticket; a slower, older one gives way.
   let ticket = 0;
   let pending: Promise<void> = Promise.resolve();
+  // The Track a finished book ended on, kept for its Listening position.
+  let lastTrack: BookTrack | null = null;
 
   const setState = (next: BookPlayerState) => {
     state = next;
@@ -67,6 +72,10 @@ export function createBookPlayer(platform: BookAudioPlatform) {
     );
     const track = book.tracks[trackIndex];
     if (!track) {
+      lastTrack =
+        "trackIndex" in state && state.book.id === book.id
+          ? (book.tracks[state.trackIndex] ?? null)
+          : null;
       platform.stop();
       setState({ status: "finished", book });
       return;
@@ -99,8 +108,44 @@ export function createBookPlayer(platform: BookAudioPlatform) {
   });
 
   return {
-    /** Starts a book at its first Track. */
-    play: (book: Book) => goTo(book, 0, 0),
+    /**
+     * Starts a book from a Listening position, or at its first Track. A position
+     * in a Track that went missing resumes at the next Track; one in a Track no
+     * longer in the book starts over.
+     */
+    play: (book: Book, from?: ListeningPoint | null) => {
+      const index = book.tracks.findIndex(
+        (track) => track.id === from?.trackId,
+      );
+      if (!from || index < 0) return goTo(book, 0, 0);
+      return goTo(book, index, book.tracks[index].missing ? 0 : from.seconds);
+    },
+    /** Plays a book from the start of the Track at `trackIndex`. */
+    jumpTo: (book: Book, trackIndex: number) => goTo(book, trackIndex, 0),
+    /** Plays a book again from Track 1 at 0:00. */
+    startOver: (book: Book) => goTo(book, 0, 0),
+    /**
+     * Where in the book the listener is now, to keep as its Listening position;
+     * null when nothing plays or the Track can't play now.
+     */
+    listeningPosition: () => {
+      if (state.status === "finished") {
+        if (!lastTrack) return null;
+        return {
+          audiobookId: state.book.id,
+          trackId: lastTrack.id,
+          seconds: lastTrack.durationSeconds ?? platform.currentTime(),
+          finished: true,
+        };
+      }
+      if (state.status !== "playing" && state.status !== "paused") return null;
+      return {
+        audiobookId: state.book.id,
+        trackId: state.book.tracks[state.trackIndex].id,
+        seconds: platform.currentTime(),
+        finished: false,
+      };
+    },
     pause: () => {
       if (state.status !== "playing") return;
       platform.pause();

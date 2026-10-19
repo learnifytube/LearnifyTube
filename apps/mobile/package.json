@@ -35,6 +35,7 @@
     "@types/react": "~19.2.2",
     "drizzle-orm": "^0.45.1",
     "expo": "55.0.0-preview.7",
+    "expo-audio": "~55.0.18",
     "expo-constants": "~55.0.2",
     "expo-file-system": "~55.0.2",
     "expo-intent-launcher": "~55.0.8",

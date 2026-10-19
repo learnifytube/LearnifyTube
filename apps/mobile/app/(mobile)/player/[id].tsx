@@ -21,6 +21,7 @@ import {
   type PlaybackFailure,
 } from "../../../services/playback-source";
 import { api } from "../../../services/api";
+import { bookPlayer } from "../../../services/book-player";
 import { videoThumbnails } from "../../../services/video-thumbnails";
 import { useWatchProgressRecorder } from "../../../hooks/useWatchProgressRecorder";
 import * as videoRepo from "../../../db/repositories/videos";
@@ -109,6 +110,9 @@ export default function PlayerScreen() {
     2 * Math.floor(captionWidth / (captionFontSize * 0.55));
 
   useEffect(() => holdPlayerOrientation(), []);
+
+  // A Video and a book never play at once.
+  useEffect(() => bookPlayer.pause(), []);
 
   useEffect(() => {
     setFullScreenBars(isLandscape);

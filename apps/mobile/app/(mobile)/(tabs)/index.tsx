@@ -24,9 +24,11 @@ import {
 } from "../../../services/browseCache";
 import { markBrowseCacheChanged } from "../../../stores/sync";
 import { deviceMirror } from "../../../services/device-mirror";
+import { bookPlayer } from "../../../services/book-player";
 import { useRecentlyAddedVideos } from "../../../core/hooks/useBrowseCatalog";
 import { useLibraryCatalog } from "../../../core/hooks/useLibraryCatalog";
 import { VideoGridCard } from "../../../components/VideoGridCard";
+import { AudiobooksRow } from "../../../components/phone/AudiobooksRow";
 import {
   buildPhoneHome,
   type PhoneHomeRow,
@@ -39,6 +41,7 @@ import { colors, spacing, fontSize, fontWeight } from "../../../theme";
 import { ArrowLeft, Smartphone } from "../../../theme/icons";
 import type { StreamingVideo } from "../../../stores/playback";
 import type { RemoteVideoWithStatus } from "../../../types";
+import type { Audiobook } from "../../../../shared/mobile-sync-contract";
 
 const POSTER_WIDTH = 168;
 
@@ -98,6 +101,12 @@ function playRow(row: PhoneHomeRow, startIndex: number) {
   });
   if (!video) return;
   router.push(`/player/${video.id}`);
+}
+
+// Tapping an Audiobook plays it at once, from its first Track.
+function playAudiobook(book: Audiobook) {
+  void bookPlayer.play(book);
+  router.push("/book-player");
 }
 
 export default function HomeScreen() {
@@ -328,6 +337,7 @@ export default function HomeScreen() {
                 desktop is connected and it stays here.
               </Text>
             ) : null}
+            <AudiobooksRow serverUrl={serverUrl} onPlay={playAudiobook} />
           </>
         }
         renderItem={({ item: row }) => (

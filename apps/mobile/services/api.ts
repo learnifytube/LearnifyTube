@@ -213,6 +213,19 @@ export const api = {
     return parseWithSchema(onDeviceSetSchema, payload);
   },
 
+  /** The raw Audiobook catalog; `services/audiobook-catalog/` parses it. */
+  async getAudiobooks(serverUrl: string): Promise<unknown> {
+    const response = await fetchWithTimeout(`${serverUrl}/api/audiobooks`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  },
+
+  getAudiobookTrackFileUrl(serverUrl: string, trackId: string): string {
+    return withPairingToken(
+      `${serverUrl}/api/audiobook-track/${encodeURIComponent(trackId)}/file`,
+    );
+  },
+
   /** Tells the desktop what this Device holds and what was watched on it. */
   async reportDevice(serverUrl: string, report: DeviceReport): Promise<void> {
     const response = await fetchWithTimeout(

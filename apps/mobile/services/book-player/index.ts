@@ -6,7 +6,9 @@ import {
 } from "expo-audio";
 import { api } from "../api";
 import { useConnectionStore } from "../../stores/connection";
+import { heldAudiobooks } from "../held-audiobooks";
 import { createBookPlayer, type BookAudioPlatform } from "./createBookPlayer";
+import { localFirstTrackUri } from "./localFirstTrackUri";
 
 // One expo-audio player for every book, made on first use so importing this
 // module never touches the native module.
@@ -30,11 +32,16 @@ const getAudio = () => {
 };
 
 const expoAudioPlatform: BookAudioPlatform = {
-  // Streams every Track from the desktop for now.
-  trackUri: async (_book, track) => {
-    const serverUrl = useConnectionStore.getState().serverUrl;
-    return serverUrl ? api.getAudiobookTrackFileUrl(serverUrl, track.id) : null;
-  },
+  // The Track's file on the phone when held, else a Stream from the desktop.
+  trackUri: localFirstTrackUri({
+    held: (track) => heldAudiobooks.trackUri(track.id),
+    stream: (track) => {
+      const serverUrl = useConnectionStore.getState().serverUrl;
+      return serverUrl
+        ? api.getAudiobookTrackFileUrl(serverUrl, track.id)
+        : null;
+    },
+  }),
   load: (uri, startAt) => {
     const player = getAudio();
     player.replace({ uri });
@@ -54,7 +61,17 @@ const expoAudioPlatform: BookAudioPlatform = {
   },
 };
 
-export const bookPlayer = createBookPlayer(expoAudioPlatform);
+const player = createBookPlayer(expoAudioPlatform);
+
+// Playing a book also fetches the whole book onto the phone (it's pulled),
+// while the Track playing Streams uninterrupted.
+export const bookPlayer: typeof player = {
+  ...player,
+  play: (...args) => {
+    heldAudiobooks.pull(args[0]);
+    return player.play(...args);
+  },
+};
 
 export function useBookPlayerState() {
   return useSyncExternalStore(bookPlayer.subscribe, bookPlayer.getState);

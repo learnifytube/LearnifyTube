@@ -197,3 +197,73 @@ describe("Book player", () => {
     });
   });
 });
+
+describe("Book player, local first", () => {
+  it("plays Tracks held on the phone from the phone and Streams the rest", async () => {
+    const { audio, player } = createHarness({
+      heldTrackIds: ["cd1-01", "cd3-01"],
+    });
+    await player.play(frankl);
+
+    audio.finishTrack();
+    await player.settled();
+    audio.finishTrack();
+    await player.settled();
+
+    expect(audio.loadedUris()).toEqual([
+      "file://held/cd1-01",
+      "stream://cd1-02",
+      "file://held/cd3-01",
+    ]);
+  });
+
+  it("plays a held book start to end with no desktop", async () => {
+    const { audio, player } = createHarness({
+      desktop: false,
+      heldTrackIds: ["cd1-01", "cd1-02", "cd3-01"],
+    });
+    await player.play(frankl);
+    for (let i = 0; i < frankl.tracks.length; i++) {
+      audio.finishTrack();
+      await player.settled();
+    }
+
+    expect(audio.loadedUris()).toEqual([
+      "file://held/cd1-01",
+      "file://held/cd1-02",
+      "file://held/cd3-01",
+    ]);
+    expect(player.getState()).toEqual({ status: "finished", book: frankl });
+  });
+
+  it("stops at a Track not on the phone yet when there is no desktop", async () => {
+    const { audio, player } = createHarness({
+      desktop: false,
+      heldTrackIds: ["cd1-01"],
+    });
+    await player.play(frankl);
+
+    audio.finishTrack();
+    await player.settled();
+
+    expect(player.getState()).toMatchObject({
+      status: "unavailable",
+      trackIndex: 1,
+    });
+  });
+
+  it("uses a Track that reached the phone while the one before it played", async () => {
+    const held: string[] = [];
+    const { audio, player } = createHarness({ heldTrackIds: held });
+    await player.play(frankl);
+
+    held.push("cd1-02");
+    audio.finishTrack();
+    await player.settled();
+
+    expect(audio.loadedUris()).toEqual([
+      "stream://cd1-01",
+      "file://held/cd1-02",
+    ]);
+  });
+});

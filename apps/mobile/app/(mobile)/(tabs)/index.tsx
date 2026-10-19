@@ -41,7 +41,7 @@ import { colors, spacing, fontSize, fontWeight } from "../../../theme";
 import { ArrowLeft, Smartphone } from "../../../theme/icons";
 import type { StreamingVideo } from "../../../stores/playback";
 import type { RemoteVideoWithStatus } from "../../../types";
-import type { Audiobook } from "../../../../shared/mobile-sync-contract";
+import type { Book } from "../../../services/book-player";
 
 const POSTER_WIDTH = 168;
 
@@ -104,7 +104,7 @@ function playRow(row: PhoneHomeRow, startIndex: number) {
 }
 
 // Tapping an Audiobook plays it at once, from its first Track.
-function playAudiobook(book: Audiobook) {
+function playAudiobook(book: Book) {
   void bookPlayer.play(book);
   router.push("/book-player");
 }

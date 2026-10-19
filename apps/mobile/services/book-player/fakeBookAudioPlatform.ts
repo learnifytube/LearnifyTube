@@ -1,4 +1,5 @@
 import type { BookAudioPlatform, NowPlaying } from "./createBookPlayer";
+import { localFirstTrackUri } from "./localFirstTrackUri";
 
 type Loaded = { uri: string; startAt: number; nowPlaying: NowPlaying };
 
@@ -8,19 +9,29 @@ export function createFakeBookAudioPlatform({
   unavailableTrackIds = [] as string[],
   // Tracks whose source resolves only when releaseSlowTracks() is called.
   slowTrackIds = [] as string[],
+  // Tracks held on the phone (read each time a Track starts).
+  heldTrackIds = [] as string[],
+  // False for Offline mode: nothing Streams.
+  desktop = true,
 } = {}) {
   const slow: (() => void)[] = [];
   const loads: Loaded[] = [];
   const endedListeners = new Set<() => void>();
   const state = { playing: false, time: 0, stopped: false };
+  const localFirst = localFirstTrackUri({
+    held: async (track) =>
+      heldTrackIds.includes(track.id) ? `file://held/${track.id}` : null,
+    stream: (track) =>
+      desktop && !unavailableTrackIds.includes(track.id)
+        ? `stream://${track.id}`
+        : null,
+  });
 
   const platform: BookAudioPlatform = {
-    trackUri: async (_book, track) => {
+    trackUri: async (book, track) => {
       if (slowTrackIds.includes(track.id))
         await new Promise<void>((resolve) => slow.push(resolve));
-      return unavailableTrackIds.includes(track.id)
-        ? null
-        : `stream://${track.id}`;
+      return localFirst(book, track);
     },
     load: (uri, startAt, nowPlaying) => {
       loads.push({ uri, startAt, nowPlaying });

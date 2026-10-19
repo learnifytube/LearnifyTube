@@ -14,6 +14,7 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import { useDatabase } from "../hooks/useDatabase";
 import { downloadQueue } from "../services/download-queue";
 import { deviceMirror } from "../services/device-mirror";
+import { heldAudiobooks } from "../services/held-audiobooks";
 import { startDesktopConnection } from "../services/desktop-connection";
 import { getAppSurface } from "../core/hooks/useAppSurface";
 import { useOfflineCopyScans } from "../hooks/useOfflineCopyScans";
@@ -41,6 +42,12 @@ function DesktopConnectionRunner() {
     if (getAppSurface() !== "tv") return;
     return startDesktopConnection();
   }, []);
+  return null;
+}
+
+// Fetches the rest of every Audiobook held on the phone whenever it can.
+function HeldAudiobooksRunner() {
+  useEffect(() => heldAudiobooks.start(), []);
   return null;
 }
 
@@ -163,6 +170,7 @@ export default function RootLayout() {
       <DatabaseInitializer>
         <DesktopConnectionRunner />
         <DownloadQueueRunner />
+        <HeldAudiobooksRunner />
         <DeviceMirrorRunner />
         <OfflineCopyScanner />
         <NavigationLogger />

@@ -1,17 +1,12 @@
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import {
-  bookPlayer,
-  useBookPlayerState,
-  type Book,
-} from "../../services/book-player";
-import { heldAudiobooks } from "../../services/held-audiobooks";
+import { bookPlayer, useBookPlayerState } from "../../services/book-player";
 import { resolveRemoteAssetUrl } from "../../services/browseCache";
 import { useConnectionStore } from "../../stores/connection";
 import { AudiobookCover } from "../../components/phone/AudiobookCover";
-import { colors, fontSize, fontWeight, radius, spacing } from "../../theme";
-import { ArrowLeft, Pause, Play, Trash2 } from "../../theme/icons";
+import { colors, fontSize, fontWeight, spacing } from "../../theme";
+import { ArrowLeft, Pause, Play } from "../../theme/icons";
 
 const COVER_SIZE = 240;
 
@@ -76,52 +71,8 @@ export default function BookPlayerScreen() {
             )}
           </Pressable>
         ) : null}
-        <OnThisPhone book={book} />
       </View>
     </SafeAreaView>
-  );
-}
-
-// How much of the book is on this phone, and Remove from this phone.
-function OnThisPhone({ book }: { book: Book }) {
-  const hold = heldAudiobooks.useHolds().get(book.id);
-  if (!hold) return null;
-
-  const confirmRemove = () => {
-    Alert.alert(
-      "Remove from this phone?",
-      `${book.title} stays on the desktop.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            bookPlayer.pause();
-            void heldAudiobooks.remove(book.id);
-          },
-        },
-      ],
-    );
-  };
-
-  return (
-    <View style={styles.onThisPhone}>
-      <Text style={styles.heldText} testID="book-held">
-        {hold.complete
-          ? "On this phone"
-          : `Getting it onto this phone: ${hold.heldTracks} of ${hold.totalTracks} Tracks`}
-      </Text>
-      <Pressable
-        testID="book-remove-from-phone"
-        style={styles.removeButton}
-        onPress={confirmRemove}
-        accessibilityLabel="Remove from this phone"
-      >
-        <Trash2 size={16} color={colors.foreground} />
-        <Text style={styles.removeText}>Remove from this phone</Text>
-      </Pressable>
-    </View>
   );
 }
 
@@ -164,19 +115,6 @@ const styles = StyleSheet.create({
   author: { color: colors.mutedForeground, fontSize: fontSize.base },
   track: { color: colors.mutedForeground, fontSize: fontSize.sm },
   message: { color: colors.warning, fontSize: fontSize.sm, textAlign: "center" },
-  onThisPhone: { alignItems: "center", gap: spacing.sm, marginTop: spacing.xl },
-  heldText: { color: colors.mutedForeground, fontSize: fontSize.sm },
-  removeButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  removeText: { color: colors.foreground, fontSize: fontSize.sm },
   playButton: {
     marginTop: spacing.lg,
     width: 72,

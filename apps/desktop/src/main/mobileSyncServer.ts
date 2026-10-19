@@ -515,6 +515,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
     assetUrl,
     sendJson,
     sendError,
+    readBody,
   });
 
   const handleApiInfo = async (res: http.ServerResponse): Promise<void> => {

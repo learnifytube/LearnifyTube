@@ -1,8 +1,8 @@
-import type { Book } from "../../services/book-player/createBookPlayer";
+import type { Audiobook } from "../../../shared/mobile-sync-contract";
 import type { Hold } from "../../services/held-audiobooks/createHeldAudiobooks";
 
 export type AudiobooksRowItem = {
-  book: Book;
+  book: Audiobook;
   /** Every Track is on this phone: it plays with no desktop. */
   onThisPhone: boolean;
   /** Offline mode and not on this phone: shown dimmed, tapping does nothing. */
@@ -20,7 +20,7 @@ export function audiobooksRowItems({
   holds,
 }: {
   connected: boolean;
-  catalog: Book[] | null;
+  catalog: Audiobook[] | null;
   holds: ReadonlyMap<string, Hold>;
 }): AudiobooksRowItem[] {
   const listed = catalog ?? [];

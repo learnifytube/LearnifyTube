@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { Book } from "../book-player/createBookPlayer";
+import type { Audiobook } from "../../../shared/mobile-sync-contract";
 
 /**
  * Why the phone holds a book: the user `pulled` it by playing it, or the
@@ -9,7 +9,7 @@ export type HoldReason = "pulled" | "mirrored";
 
 /** A book held (or being fetched) on this phone, as saved between app runs. */
 export type HeldBookRecord = {
-  book: Book;
+  book: Audiobook;
   reasons: HoldReason[];
   /** The file on the phone of each Track fetched so far, by Track id. */
   trackUris: Record<string, string>;
@@ -17,7 +17,7 @@ export type HeldBookRecord = {
 };
 
 export type Hold = {
-  book: Book;
+  book: Audiobook;
   reasons: HoldReason[];
   /** Tracks on the phone, and Tracks there are to fetch (missing ones don't count). */
   heldTracks: number;
@@ -139,7 +139,7 @@ export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
     void ready.then(change);
   };
 
-  const holdNow = (book: Book, reason: HoldReason) => {
+  const holdNow = (book: Audiobook, reason: HoldReason) => {
     const existing = records.get(book.id);
     records.set(book.id, {
       book,
@@ -153,10 +153,10 @@ export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
     pump();
   };
 
-  const hold = (book: Book, reason: HoldReason) =>
+  const hold = (book: Audiobook, reason: HoldReason) =>
     afterLoad(() => holdNow(book, reason));
 
-  const pull = (book: Book) =>
+  const pull = (book: Audiobook) =>
     afterLoad(() => {
       const mirrored = records.get(book.id)?.reasons.includes("mirrored");
       holdNow(book, mirrored ? "mirrored" : "pulled");
@@ -187,7 +187,7 @@ export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
 
   // Newer snapshots of held books from the desktop's catalog (e.g. after a
   // Rescan added Tracks); books the phone doesn't hold are ignored.
-  const refresh = (books: Book[]) =>
+  const refresh = (books: Audiobook[]) =>
     afterLoad(() => {
       let any = false;
       for (const book of books) {

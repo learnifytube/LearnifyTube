@@ -12,6 +12,7 @@ import {
 } from "@/api/db/schema";
 import { computeOnDeviceSet } from "./on-device-set";
 import { mergeDeviceWatch } from "./device-watch";
+import { recordListening } from "../audiobooks/listening";
 
 import { FAVORITES_LIST_ID } from "@/lib/lists";
 
@@ -119,6 +120,8 @@ export const recordDeviceReport = async (
     .insert(syncDevices)
     .values({ id: report.deviceId, ...device })
     .onConflictDoUpdate({ target: syncDevices.id, set: device });
+
+  for (const entry of report.listening ?? []) await recordListening(db, entry);
 
   const videoIds = report.watch.map((entry) => entry.videoId);
   if (videoIds.length === 0) return;

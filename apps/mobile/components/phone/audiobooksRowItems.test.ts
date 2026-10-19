@@ -1,8 +1,11 @@
-import type { Book } from "../../services/book-player/createBookPlayer";
+import type { Audiobook } from "../../../shared/mobile-sync-contract";
 import type { Hold } from "../../services/held-audiobooks/createHeldAudiobooks";
 import { audiobooksRowItems } from "./audiobooksRowItems";
 
-const book = (id: string): Book => ({
+const book = (id: string): Audiobook => ({
+  listeningPosition: null,
+  finished: false,
+  sentToDevices: false,
   id,
   title: id,
   author: null,
@@ -10,7 +13,7 @@ const book = (id: string): Book => ({
   tracks: [{ id: `${id}-1`, title: "1", durationSeconds: 60, missing: false }],
 });
 
-const hold = (b: Book, complete: boolean): Hold => ({
+const hold = (b: Audiobook, complete: boolean): Hold => ({
   book: b,
   reasons: ["pulled"],
   heldTracks: complete ? 1 : 0,

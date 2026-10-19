@@ -9,6 +9,8 @@ import {
   findTrackFilePath,
   loadAudiobookCatalog,
 } from "../api/audiobooks/catalog";
+import { recordListening } from "../api/audiobooks/listening";
+import { audiobookListeningSchema } from "../../../shared/mobile-sync-contract";
 import { resolveAudiobookTrackFile, resolveWithinAllowed } from "./security/path-confinement";
 import { getAllowedBaseDirs } from "./security/allowed-dirs";
 
@@ -18,6 +20,7 @@ type AudiobookSyncRoutesDeps = {
   assetUrl: (pathname: string) => string;
   sendJson: (res: http.ServerResponse, data: unknown, statusCode?: number) => void;
   sendError: (res: http.ServerResponse, message: string, statusCode?: number) => void;
+  readBody: (req: http.IncomingMessage) => Promise<string>;
 };
 
 const COVER_CONTENT_TYPES: Record<string, string> = {
@@ -56,6 +59,7 @@ export const createAudiobookSyncRoutes = ({
   assetUrl,
   sendJson,
   sendError,
+  readBody,
 }: AudiobookSyncRoutesDeps): {
   handle: (
     req: http.IncomingMessage,
@@ -122,14 +126,42 @@ export const createAudiobookSyncRoutes = ({
     streamFile(res, cover.realPath);
   };
 
+  // A Device's Listening position while it plays; the newest one is kept.
+  const handleListening = async (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    audiobookId: string
+  ): Promise<void> => {
+    const body: unknown = JSON.parse(await readBody(req));
+    const parsed = audiobookListeningSchema.safeParse(body);
+    if (!parsed.success || parsed.data.audiobookId !== audiobookId) {
+      sendError(res, "Invalid Listening position", 400);
+      return;
+    }
+    await recordListening(db, parsed.data);
+    sendJson(res, { success: true });
+  };
+
+  const postRoute = async (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    pathname: string
+  ): Promise<boolean> => {
+    const listeningMatch = pathname.match(/^\/api\/audiobook\/([^/]+)\/listening$/);
+    if (!listeningMatch) return false;
+    await handleListening(req, res, decodeURIComponent(listeningMatch[1]));
+    return true;
+  };
+
   const route = async (
     req: http.IncomingMessage,
     res: http.ServerResponse,
     url: string
   ): Promise<boolean> => {
-    if (req.method !== "GET") return false;
+    if (req.method !== "GET" && req.method !== "POST") return false;
     const pathname = url.split("?")[0];
     try {
+      if (req.method === "POST") return await postRoute(req, res, pathname);
       if (pathname === "/api/audiobooks") {
         await handleCatalog(res);
         return true;

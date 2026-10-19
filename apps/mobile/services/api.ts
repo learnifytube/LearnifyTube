@@ -13,6 +13,7 @@ import type {
 import {
   onDeviceSetSchema,
   syncServerInfoSchema,
+  type AudiobookListening,
   type DeviceReport,
   type OnDeviceSet,
 } from "../../shared/mobile-sync-contract";
@@ -224,6 +225,22 @@ export const api = {
     return withPairingToken(
       `${serverUrl}/api/audiobook-track/${encodeURIComponent(trackId)}/file`,
     );
+  },
+
+  /** Tells the desktop where this phone is in an Audiobook; the desktop keeps the newest. */
+  async reportListening(
+    serverUrl: string,
+    listening: AudiobookListening,
+  ): Promise<void> {
+    const response = await fetchWithTimeout(
+      `${serverUrl}/api/audiobook/${encodeURIComponent(listening.audiobookId)}/listening`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(listening),
+      },
+    );
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
   },
 
   /** Tells the desktop what this Device holds and what was watched on it. */

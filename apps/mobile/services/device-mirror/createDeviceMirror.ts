@@ -33,6 +33,8 @@ export type DeviceMirrorPlatform = {
   /** Stores the Video's thumbnail on the Device, so it shows in Offline mode. */
   storeThumbnail: (serverUrl: string, video: SetVideo) => Promise<void>;
   getWatchProgress: () => DeviceReport["watch"];
+  /** Listening positions kept on this Device. */
+  getListening: () => NonNullable<DeviceReport["listening"]>;
   loadMirroredIds: () => Promise<string[]>;
   saveMirroredIds: (videoIds: string[]) => Promise<void>;
   /** Keeps the latest On-device set, which the TV shows as "Sent to this TV" in Offline mode too. */
@@ -105,6 +107,7 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
       kind: platform.device.kind,
       offlineVideoIds: platform.getLibraryVideoIds(),
       watch: platform.getWatchProgress(),
+      listening: platform.getListening(),
     });
 
     // Videos held from before thumbnails were stored with Offline copies;
@@ -161,7 +164,9 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
 
       if (typeof EventSource !== "undefined") {
         try {
-          const eventsUrl = platform.getEventsUrl ? platform.getEventsUrl(serverUrl) : `${serverUrl}/api/events`;
+          const eventsUrl = platform.getEventsUrl
+            ? platform.getEventsUrl(serverUrl)
+            : `${serverUrl}/api/events`;
           const es = new EventSource(eventsUrl);
           eventSource = es;
           es.addEventListener("sync:on-device-set", () => {

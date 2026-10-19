@@ -1,6 +1,12 @@
-import type { Book } from "../book-player/createBookPlayer";
+import type { Audiobook } from "../../../shared/mobile-sync-contract";
 import { createHeldAudiobooks } from "./createHeldAudiobooks";
 import { createFakeHeldAudiobooksPlatform } from "./fakeHeldAudiobooksPlatform";
+
+const unplayed = {
+  listeningPosition: null,
+  finished: false,
+  sentToDevices: false,
+};
 
 const track = (id: string, missing = false) => ({
   id,
@@ -9,7 +15,8 @@ const track = (id: string, missing = false) => ({
   missing,
 });
 
-const frankl: Book = {
+const frankl: Audiobook = {
+  ...unplayed,
   id: "frankl",
   title: "Man's Search for Meaning",
   author: "Viktor Frankl",
@@ -17,7 +24,8 @@ const frankl: Book = {
   tracks: [track("cd1-01"), track("gone", true), track("cd3-01")],
 };
 
-const orwell: Book = {
+const orwell: Audiobook = {
+  ...unplayed,
   id: "orwell",
   title: "1984",
   author: "George Orwell",

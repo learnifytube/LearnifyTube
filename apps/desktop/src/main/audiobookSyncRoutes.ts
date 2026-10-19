@@ -65,10 +65,7 @@ export const createAudiobookSyncRoutes = ({
   ) => Promise<void>;
 } => {
   const handleCatalog = async (res: http.ServerResponse): Promise<void> => {
-    sendJson(
-      res,
-      await loadAudiobookCatalog(db, (id) => assetUrl(`/api/audiobook/${id}/cover`))
-    );
+    sendJson(res, await loadAudiobookCatalog(db, assetUrl));
   };
 
   const handleTrackFile = async (

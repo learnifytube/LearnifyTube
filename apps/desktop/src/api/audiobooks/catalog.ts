@@ -2,17 +2,12 @@ import path from "path";
 import { asc, eq } from "drizzle-orm";
 import type { Database } from "@/api/db";
 import { audiobooks, audiobookTracks } from "@/api/db/schema";
-import type {
-  AudiobookCatalog,
-  ListeningPosition,
-} from "../../../../shared/mobile-sync-contract";
+import type { AudiobookCatalog, ListeningPosition } from "../../../../shared/mobile-sync-contract";
 
 // A Track is named after its file, without the extension.
 const trackTitle = (filePath: string): string => path.parse(filePath).name;
 
-const listeningPosition = (
-  book: typeof audiobooks.$inferSelect
-): ListeningPosition | null =>
+const listeningPosition = (book: typeof audiobooks.$inferSelect): ListeningPosition | null =>
   book.listeningTrackId !== null &&
   book.listeningSeconds !== null &&
   book.listeningUpdatedAt !== null
@@ -23,10 +18,13 @@ const listeningPosition = (
       }
     : null;
 
-/** Every imported Audiobook for Devices, its Tracks in Track order. */
+/**
+ * Every imported Audiobook for Devices, its Tracks in Track order.
+ * `assetUrl` makes a desktop path into a URL a Device can fetch.
+ */
 export const loadAudiobookCatalog = async (
   db: Database,
-  coverUrl: (audiobookId: string) => string
+  assetUrl: (pathname: string) => string
 ): Promise<AudiobookCatalog> => {
   const [books, tracks] = await Promise.all([
     db.select().from(audiobooks).orderBy(asc(audiobooks.title)),
@@ -37,7 +35,10 @@ export const loadAudiobookCatalog = async (
       id: book.id,
       title: book.title,
       author: book.author,
-      coverUrl: book.coverPath ? coverUrl(book.id) : null,
+      // Versioned, so a changed cover isn't shown from a Device's image cache.
+      coverUrl: book.coverPath
+        ? assetUrl(`/api/audiobook/${book.id}/cover?v=${book.updatedAt ?? book.createdAt}`)
+        : null,
       tracks: tracks
         .filter((track) => track.audiobookId === book.id)
         .map((track) => ({

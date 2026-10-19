@@ -14,7 +14,7 @@ const createDb = async () => {
 
 type Db = Awaited<ReturnType<typeof createDb>>;
 
-const coverUrl = (id: string): string => `http://desktop/api/audiobook/${id}/cover?token=x`;
+const coverUrl = (pathname: string): string => `http://desktop${pathname}`;
 
 const addFrankl = async (db: Db): Promise<void> => {
   await db.insert(schema.audiobooks).values({
@@ -24,6 +24,7 @@ const addFrankl = async (db: Db): Promise<void> => {
     sourceFolder: "/books/Frankl",
     coverPath: "/userData/audiobook-covers/frankl.jpg",
     createdAt: 1,
+    updatedAt: 5,
   });
   // Inserted out of order: the catalog follows the Track order, not insertion.
   await db.insert(schema.audiobookTracks).values([
@@ -73,7 +74,8 @@ describe("Audiobook catalog", () => {
         id: "frankl",
         title: "Man's Search for Meaning",
         author: "Viktor Frankl",
-        coverUrl: "http://desktop/api/audiobook/frankl/cover?token=x",
+        // Versioned, so a changed cover isn't shown from a Device's image cache.
+        coverUrl: "http://desktop/api/audiobook/frankl/cover?v=5",
         tracks: [
           { id: "t1", title: "Track 01", durationSeconds: 300, missing: false },
           { id: "t2", title: "Track 02", durationSeconds: 240, missing: false },

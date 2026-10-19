@@ -39,6 +39,7 @@ import {
   deviceReportSchema,
 } from "../../../shared/mobile-sync-contract";
 import { loadOnDeviceSet, recordDeviceReport } from "../api/on-device/store";
+import { createAudiobookSyncRoutes } from "./audiobookSyncRoutes";
 
 // pipe() leaves the file open when the client hangs up mid-stream (a skip or seek);
 // pipeline() closes it.
@@ -508,6 +509,13 @@ const createMobileSyncServer = (): MobileSyncServer => {
 
     powerMonitorListenersRegistered = true;
   };
+
+  const audiobookRoutes = createAudiobookSyncRoutes({
+    db: defaultDb,
+    assetUrl,
+    sendJson,
+    sendError,
+  });
 
   const handleApiInfo = async (res: http.ServerResponse): Promise<void> => {
     try {
@@ -2714,7 +2722,8 @@ const createMobileSyncServer = (): MobileSyncServer => {
       return;
     }
 
-    sendError(res, "Not found", 404);
+    // GET /api/audiobooks, /api/audiobook-track/:id/file, /api/audiobook/:id/cover; else 404
+    await audiobookRoutes.handle(req, res, url, () => sendError(res, "Not found", 404));
   };
 
   const start = async (requestedPort?: number): Promise<number> => {

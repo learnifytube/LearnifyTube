@@ -71,3 +71,46 @@ export const resolveWithinAllowed = (
 
   return { ok: false, reason: "outside-allowed" };
 };
+
+const AUDIO_CONTENT_TYPES: Record<string, string> = {
+  ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+  ".m4b": "audio/mp4",
+  ".aac": "audio/aac",
+  ".flac": "audio/flac",
+  ".ogg": "audio/ogg",
+  ".opus": "audio/ogg",
+};
+
+export type TrackFileResult =
+  | { ok: true; realPath: string; contentType: string }
+  | { ok: false; reason: "unknown-track" | "not-found" | "not-audio" };
+
+/**
+ * Decide whether an Audiobook Track's file may be served. Track files live in
+ * the user's own folders, outside every allowed directory, so they are allowed
+ * one by one: only the file recorded for a Track of an imported Audiobook,
+ * found by Track id (never by a path from the request), and only when it is a
+ * regular audio file once symlinks are resolved.
+ */
+export const resolveAudiobookTrackFile = async (
+  trackId: string,
+  findTrackFilePath: (trackId: string) => Promise<string | null>
+): Promise<TrackFileResult> => {
+  const recorded = trackId ? await findTrackFilePath(trackId) : null;
+  if (!recorded) {
+    return { ok: false, reason: "unknown-track" };
+  }
+
+  const realPath = realpathOrNull(path.resolve(recorded));
+  if (!realPath) {
+    return { ok: false, reason: "not-found" };
+  }
+
+  const contentType = AUDIO_CONTENT_TYPES[path.extname(realPath).toLowerCase()];
+  if (!contentType || !fs.statSync(realPath).isFile()) {
+    return { ok: false, reason: "not-audio" };
+  }
+
+  return { ok: true, realPath, contentType };
+};

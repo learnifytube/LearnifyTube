@@ -35,6 +35,26 @@ export const onDeviceSetSchema = z.object({
 
 export type OnDeviceSet = z.infer<typeof onDeviceSetSchema>;
 
+/** Where the user is in an Audiobook: one Track and a time inside it. The newest updatedAt wins. */
+export const listeningPositionSchema = z.object({
+  trackId: z.string(),
+  seconds: z.number().min(0),
+  updatedAt: z.number(),
+});
+
+export type ListeningPosition = z.infer<typeof listeningPositionSchema>;
+
+/**
+ * A Device's Listening position in one Audiobook, and whether it played to the end.
+ * Sent in the Device report and, while playing, to POST /api/audiobook/:id/listening.
+ */
+export const audiobookListeningSchema = listeningPositionSchema.extend({
+  audiobookId: z.string(),
+  finished: z.boolean(),
+});
+
+export type AudiobookListening = z.infer<typeof audiobookListeningSchema>;
+
 /** POST /api/devices/report: what a Device holds and what was watched on it. */
 export const deviceReportSchema = z.object({
   deviceId: z.string().min(1),
@@ -49,21 +69,14 @@ export const deviceReportSchema = z.object({
       lastWatchedAt: z.number(),
     })
   ),
+  /** Listening positions kept on the Device; absent from Devices older than Audiobooks. */
+  listening: z.array(audiobookListeningSchema).optional(),
 });
 
 export type DeviceReport = z.infer<typeof deviceReportSchema>;
 
 /** Server-Sent Events emitted by GET /api/events */
 export const SYNC_SSE_EVENT_ON_DEVICE_SET = "sync:on-device-set";
-
-/** Where the user is in an Audiobook: one Track and a time inside it. The newest updatedAt wins. */
-export const listeningPositionSchema = z.object({
-  trackId: z.string(),
-  seconds: z.number().min(0),
-  updatedAt: z.number(),
-});
-
-export type ListeningPosition = z.infer<typeof listeningPositionSchema>;
 
 /** One audio file of an Audiobook. Its file is GET /api/audiobook-track/:id/file. */
 export const audiobookTrackSchema = z.object({

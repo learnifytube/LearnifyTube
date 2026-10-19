@@ -61,8 +61,8 @@ export type PlaybackSourceRequest = {
 };
 
 /**
- * What the player does when the desktop drops out while it depends on it: play the
- * Offline copy, else the next Video in the queue the Device holds, else go back.
+ * What the player does when the desktop drops out mid-Stream: play the Offline
+ * copy, else the next Video in the queue the Device holds, else go back.
  */
 function planDesktopLoss({
   videoId,
@@ -268,9 +268,7 @@ export function createPlaybackSource(platform: PlaybackSourcePlatform) {
         });
     };
 
-    const dependsOnDesktop = () =>
-      state.source.kind === "stream" || state.source.kind === "preparing";
-
+    // A Stream that has started; the player's position is where it dropped out.
     const onDesktopLoss = () => {
       const plan = planDesktopLoss({
         videoId,
@@ -282,15 +280,9 @@ export function createPlaybackSource(platform: PlaybackSourcePlatform) {
         videoId,
         plan: plan.kind,
       });
-      const wasStreaming = state.source.kind === "stream";
-      stopPreparing();
       const uri = offlineCopy.getUri(videoId);
       if (plan.kind === "offlineCopy" && uri) {
-        setSource({
-          kind: "offline",
-          uri,
-          resumeAt: wasStreaming ? getPosition() : null,
-        });
+        setSource({ kind: "offline", uri, resumeAt: getPosition() });
         return;
       }
       setSource({
@@ -306,7 +298,10 @@ export function createPlaybackSource(platform: PlaybackSourcePlatform) {
         if (source.kind === "failed" && source.failure.kind === "notOnThisTV") {
           resolve();
         }
-      } else if (dependsOnDesktop()) {
+      } else if (source.kind === "preparing") {
+        // Nothing has played yet: stay on the chosen Video until the desktop is back.
+        resolve();
+      } else if (source.kind === "stream") {
         onDesktopLoss();
       }
       if (

@@ -256,7 +256,32 @@ describe("Playback source", () => {
       expect(state().source).toEqual({ kind: "desktopLost", nextIndex: null });
     });
 
-    it("also carries on when it drops out while the desktop is still fetching", async () => {
+  });
+
+  describe("when the desktop drops out while it is still fetching", () => {
+    it("stays on the chosen Video rather than moving on to a held one", async () => {
+      const h = createHarness();
+      h.holds("v2");
+      const { session, state } = h.play({
+        videoId: "v1",
+        queue: queueOf("v1", "v2"),
+        index: 0,
+      });
+      const seen: string[] = [];
+      session.subscribe(() => seen.push(state().source.kind));
+      await flush();
+
+      h.disconnect();
+
+      expect(seen).not.toContain("desktopLost");
+      expect(state().source).toMatchObject({
+        kind: "failed",
+        failure: { kind: "notOnThisTV" },
+        canRetry: false,
+      });
+    });
+
+    it("prepares the Video again once the desktop is back", async () => {
       const h = createHarness();
       h.holds("v2");
       const { state } = h.play({
@@ -265,10 +290,23 @@ describe("Playback source", () => {
         index: 0,
       });
       await flush();
-
       h.disconnect();
 
-      expect(state().source).toEqual({ kind: "desktopLost", nextIndex: 1 });
+      h.desktop.has("v1");
+      h.connect();
+      await flush();
+
+      expect(state().source).toMatchObject({ kind: "stream" });
+    });
+
+    it("plays the Offline copy if it has landed", async () => {
+      const h = createHarness();
+      const { state } = h.play({ videoId: "v1" });
+      await flush();
+      h.holds("v1");
+      h.disconnect();
+
+      expect(state().source).toMatchObject({ kind: "offline", resumeAt: null });
     });
   });
 

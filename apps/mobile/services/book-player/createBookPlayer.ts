@@ -24,8 +24,22 @@ export type BookAudioPlatform = {
   pause: () => void;
   stop: () => void;
   currentTime: () => number;
+  /** Moves within the loaded Track. */
+  seekTo: (seconds: number) => void;
+  /** Sets the playback speed of the loaded Track, keeping pitch. */
+  setRate: (rate: number) => void;
   /** Called when the loaded Track plays to its end. */
   onEnded: (listener: () => void) => () => void;
+  /**
+   * Called when the audio starts or stops playing by itself: audio focus lost
+   * or regained (a call, another app), headphones unplugged, or the
+   * lock-screen and notification controls.
+   */
+  onPlayingChange: (listener: (playing: boolean) => void) => () => void;
+  /** Called when the loaded Track is ready to play. */
+  onReady: (listener: () => void) => () => void;
+  /** Called when the loaded Track can't be played (a file that 404s). */
+  onFailed: (listener: () => void) => () => void;
 };
 
 export type BookPlayerState =
@@ -43,7 +57,11 @@ export type BookPlayerState =
  * skipping missing Tracks, until the last one ends. The platform decides where
  * each Track plays from and owns the audio output.
  */
-export function createBookPlayer(platform: BookAudioPlatform) {
+export function createBookPlayer(
+  platform: BookAudioPlatform,
+  options: BookPlayerOptions = {},
+) {
+  const speed = options.speed ?? createSpeedMemory();
   let state: BookPlayerState = { status: "idle" };
   const listeners = new Set<() => void>();
   // Each Track change takes a ticket; a slower, older one gives way.
@@ -55,12 +73,50 @@ export function createBookPlayer(platform: BookAudioPlatform) {
     for (const listener of listeners) listener();
   };
 
+  // A Track that fails or never gets ready is skipped: on Android the audio
+  // output reports no error for a file that 404s, it just never loads.
+  const stallTimeoutMs = options.stallTimeoutMs ?? 20_000;
+  let stallTimer: ReturnType<typeof setTimeout> | null = null;
+  // The Track change a failure skipped to; a failure there too stops the book.
+  let skippedTo = -1;
+
+  const stopWatching = () => {
+    if (stallTimer) clearTimeout(stallTimer);
+    stallTimer = null;
+  };
+
+  const watchLoading = (mine: number) => {
+    stopWatching();
+    stallTimer = setTimeout(() => {
+      stallTimer = null;
+      if (mine === ticket) trackDidNotPlay();
+    }, stallTimeoutMs);
+  };
+
+  const trackDidNotPlay = () => {
+    stopWatching();
+    if (state.status !== "playing" && state.status !== "paused") return;
+    const { book, trackIndex } = state;
+    if (ticket === skippedTo) {
+      // Two Tracks in a row: the source is likely gone (no desktop), so stop
+      // here rather than rushing through the rest of the book.
+      ++ticket;
+      platform.stop();
+      setState({ status: "unavailable", book, trackIndex });
+      return;
+    }
+    void goTo(book, trackIndex + 1, 0, state.status === "playing");
+    skippedTo = ticket;
+  };
+
   // Plays the first Track from `fromIndex` on that isn't missing.
   const startTrack = async (
     book: Book,
     fromIndex: number,
     startAt: number,
     mine: number,
+    // false keeps a paused book paused when a skip crosses into another Track.
+    autoplay = true,
   ) => {
     const trackIndex = book.tracks.findIndex(
       (track, index) => index >= fromIndex && !track.missing,
@@ -78,24 +134,73 @@ export function createBookPlayer(platform: BookAudioPlatform) {
       setState({ status: "unavailable", book, trackIndex });
       return;
     }
+    watchLoading(mine);
     platform.load(uri, startAt, {
       bookTitle: book.title,
       trackTitle: track.title,
       author: book.author,
       coverUrl: book.coverUrl,
     });
-    platform.play();
-    setState({ status: "playing", book, trackIndex });
+    platform.setRate(clampSpeed(speed.get()));
+    if (autoplay) platform.play();
+    setState({ status: autoplay ? "playing" : "paused", book, trackIndex });
   };
 
-  const goTo = (book: Book, fromIndex: number, startAt: number) => {
-    pending = startTrack(book, fromIndex, startAt, ++ticket);
+  const goTo = (
+    book: Book,
+    fromIndex: number,
+    startAt: number,
+    autoplay = true,
+  ) => {
+    pending = startTrack(book, fromIndex, startAt, ++ticket, autoplay);
     return pending;
+  };
+
+  // Moves `seconds` from where the book is now, crossing Track boundaries
+  // (back from 0:10 of a Track lands 20s before the end of the previous one).
+  const skip = (seconds: number) => {
+    if (state.status !== "playing" && state.status !== "paused") {
+      return Promise.resolve();
+    }
+    const { book, trackIndex } = state;
+    const autoplay = state.status === "playing";
+    const target = platform.currentTime() + seconds;
+    if (target < 0) {
+      const previous = previousTrackIndex(book, trackIndex);
+      if (previous < 0) {
+        platform.seekTo(0);
+        return Promise.resolve();
+      }
+      const length = book.tracks[previous]?.durationSeconds ?? null;
+      const startAt = length === null ? 0 : Math.max(0, length + target);
+      return goTo(book, previous, startAt, autoplay);
+    }
+    const length = book.tracks[trackIndex]?.durationSeconds ?? null;
+    if (length !== null && target >= length) {
+      return goTo(book, trackIndex + 1, target - length, autoplay);
+    }
+    platform.seekTo(target);
+    return Promise.resolve();
   };
 
   platform.onEnded(() => {
     if (state.status !== "playing") return;
     void goTo(state.book, state.trackIndex + 1, 0);
+  });
+
+  platform.onReady(() => {
+    stopWatching();
+    skippedTo = -1;
+  });
+  platform.onFailed(trackDidNotPlay);
+
+  // The audio output already did it; the book follows.
+  platform.onPlayingChange((playing) => {
+    if (playing && state.status === "paused") {
+      setState({ ...state, status: "playing" });
+    } else if (!playing && state.status === "playing") {
+      setState({ ...state, status: "paused" });
+    }
   });
 
   return {
@@ -111,6 +216,18 @@ export function createBookPlayer(platform: BookAudioPlatform) {
       platform.play();
       setState({ ...state, status: "playing" });
     },
+    /** Skips ±seconds, into the previous or next Track when it crosses one. */
+    skip,
+    /** The playback speed, 0.75× to 2×, kept across Tracks and books. */
+    getSpeed: () => clampSpeed(speed.get()),
+    setSpeed: (rate: number) => {
+      const next = clampSpeed(rate);
+      speed.set(next);
+      if (state.status === "playing" || state.status === "paused") {
+        platform.setRate(next);
+      }
+      for (const listener of listeners) listener();
+    },
     getState: () => state,
     subscribe: (listener: () => void) => {
       listeners.add(listener);
@@ -124,3 +241,41 @@ export function createBookPlayer(platform: BookAudioPlatform) {
 }
 
 export type BookPlayer = ReturnType<typeof createBookPlayer>;
+
+const MIN_BOOK_SPEED = 0.75;
+const MAX_BOOK_SPEED = 2;
+
+/** Where the chosen speed is remembered; the app persists it. */
+type BookSpeedMemory = {
+  get: () => number;
+  set: (rate: number) => void;
+};
+
+type BookPlayerOptions = {
+  speed?: BookSpeedMemory;
+  /** How long a Track may take to get ready before it is skipped. */
+  stallTimeoutMs?: number;
+};
+
+function createSpeedMemory(): BookSpeedMemory {
+  let rate = 1;
+  return {
+    get: () => rate,
+    set: (next) => {
+      rate = next;
+    },
+  };
+}
+
+function clampSpeed(rate: number) {
+  if (!Number.isFinite(rate)) return 1;
+  return Math.min(MAX_BOOK_SPEED, Math.max(MIN_BOOK_SPEED, rate));
+}
+
+// The last Track before `index` that isn't missing, or -1.
+function previousTrackIndex(book: Book, index: number) {
+  for (let i = index - 1; i >= 0; i--) {
+    if (!book.tracks[i]?.missing) return i;
+  }
+  return -1;
+}

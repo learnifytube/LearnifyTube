@@ -1,14 +1,26 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { bookPlayer, useBookPlayerState } from "../../services/book-player";
+import {
+  bookPlayer,
+  useBookPlayerState,
+  useBookSpeed,
+} from "../../services/book-player";
 import { resolveRemoteAssetUrl } from "../../services/browseCache";
 import { useConnectionStore } from "../../stores/connection";
 import { AudiobookCover } from "../../components/phone/AudiobookCover";
-import { colors, fontSize, fontWeight, spacing } from "../../theme";
-import { ArrowLeft, Pause, Play } from "../../theme/icons";
+import { colors, fontSize, fontWeight, radius, spacing } from "../../theme";
+import {
+  ArrowLeft,
+  Pause,
+  Play,
+  RotateCcw,
+  RotateCw,
+} from "../../theme/icons";
 
 const COVER_SIZE = 240;
+const SKIP_SECONDS = 30;
+const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
 
 // The book playing now. Leaving this screen keeps the book playing.
 export default function BookPlayerScreen() {
@@ -52,25 +64,68 @@ export default function BookPlayerScreen() {
         ) : null}
         {message ? <Text style={styles.message}>{message}</Text> : null}
         {state.status === "playing" || state.status === "paused" ? (
-          <Pressable
-            testID="book-play-pause"
-            style={styles.playButton}
-            onPress={() =>
-              state.status === "playing"
-                ? bookPlayer.pause()
-                : bookPlayer.resume()
-            }
-            accessibilityLabel={state.status === "playing" ? "Pause" : "Play"}
-          >
-            {state.status === "playing" ? (
-              <Pause size={32} color={colors.primaryForeground} />
-            ) : (
-              <Play size={32} color={colors.primaryForeground} />
-            )}
-          </Pressable>
+          <View style={styles.controls}>
+            <SkipButton seconds={-SKIP_SECONDS} />
+            <Pressable
+              testID="book-play-pause"
+              style={styles.playButton}
+              onPress={() =>
+                state.status === "playing"
+                  ? bookPlayer.pause()
+                  : bookPlayer.resume()
+              }
+              accessibilityLabel={
+                state.status === "playing" ? "Pause" : "Play"
+              }
+            >
+              {state.status === "playing" ? (
+                <Pause size={32} color={colors.primaryForeground} />
+              ) : (
+                <Play size={32} color={colors.primaryForeground} />
+              )}
+            </Pressable>
+            <SkipButton seconds={SKIP_SECONDS} />
+          </View>
+        ) : null}
+        {state.status === "playing" || state.status === "paused" ? (
+          <SpeedButton />
         ) : null}
       </View>
     </SafeAreaView>
+  );
+}
+
+// ±30s, crossing into the previous or next Track.
+function SkipButton({ seconds }: { seconds: number }) {
+  const forward = seconds > 0;
+  const Icon = forward ? RotateCw : RotateCcw;
+  return (
+    <Pressable
+      testID={forward ? "book-skip-forward" : "book-skip-back"}
+      style={styles.skipButton}
+      onPress={() => void bookPlayer.skip(seconds)}
+      accessibilityLabel={`${forward ? "Forward" : "Back"} ${Math.abs(seconds)} seconds`}
+    >
+      <Icon size={28} color={colors.foreground} />
+      <Text style={styles.skipLabel}>{Math.abs(seconds)}</Text>
+    </Pressable>
+  );
+}
+
+// Cycles through the speeds; the Book player remembers the choice.
+function SpeedButton() {
+  const speed = useBookSpeed();
+  const next =
+    SPEEDS.find((option) => option > speed + 0.001) ?? SPEEDS[0] ?? 1;
+  return (
+    <Pressable
+      testID="book-speed"
+      style={styles.speedButton}
+      onPress={() => bookPlayer.setSpeed(next)}
+      accessibilityLabel={`Speed ${speed}×, change to ${next}×`}
+    >
+      <Text style={styles.speedLabel}>{speed}×</Text>
+    </Pressable>
   );
 }
 
@@ -113,8 +168,38 @@ const styles = StyleSheet.create({
   author: { color: colors.mutedForeground, fontSize: fontSize.base },
   track: { color: colors.mutedForeground, fontSize: fontSize.sm },
   message: { color: colors.warning, fontSize: fontSize.sm, textAlign: "center" },
-  playButton: {
+  controls: {
     marginTop: spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xl,
+  },
+  skipButton: {
+    width: 56,
+    height: 56,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  skipLabel: {
+    position: "absolute",
+    color: colors.foreground,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+  },
+  speedButton: {
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  speedLabel: {
+    color: colors.foreground,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+  },
+  playButton: {
     width: 72,
     height: 72,
     borderRadius: 36,

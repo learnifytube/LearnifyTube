@@ -36,6 +36,34 @@ export const saveCover = async (
   return null;
 };
 
+// Copies an image the user picked to `<coversDir>/<bookId>-<time>.<ext>`; a new
+// name each time so the renderer doesn't show the old cover from cache.
+export const saveCoverFromImage = async (
+  imagePath: string,
+  coversDir: string,
+  bookId: string
+): Promise<string> => {
+  await fs.promises.mkdir(coversDir, { recursive: true });
+  const target = path.join(
+    coversDir,
+    `${bookId}-${Date.now()}${path.extname(imagePath).toLowerCase()}`
+  );
+  await fs.promises.copyFile(imagePath, target);
+  return target;
+};
+
+// Deletes an app-owned cover copy. Anything outside the covers folder is the
+// user's and is never touched.
+export const removeAppCover = async (
+  coverPath: string | null,
+  coversDir: string
+): Promise<void> => {
+  if (!coverPath || path.dirname(path.resolve(coverPath)) !== path.resolve(coversDir)) return;
+  await fs.promises.rm(coverPath, { force: true }).catch(() => undefined);
+};
+
+export const COVER_IMAGE_EXTENSIONS = Object.keys(MIME_BY_EXTENSION).map((ext) => ext.slice(1));
+
 // A data URL for showing the cover in the Import preview, before anything is saved.
 export const previewCover = async (
   folderPath: string,

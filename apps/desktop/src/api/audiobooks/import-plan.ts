@@ -55,7 +55,7 @@ const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" })
 const segmentsOf = (path: string): string[] => path.split("/");
 
 // By subfolder, then file name, reading numbers as numbers.
-const compareTrackPaths = (a: string, b: string): number => {
+export const compareTrackPaths = (a: string, b: string): number => {
   const aDirs = segmentsOf(a).slice(0, -1);
   const bDirs = segmentsOf(b).slice(0, -1);
   for (let i = 0; i < Math.min(aDirs.length, bDirs.length); i++) {
@@ -145,4 +145,12 @@ export const planImport = (listing: FolderListing, mode?: ImportMode): ImportPla
       ? [proposeBook("", listing.name, listing.files)]
       : groupBySubfolder(listing);
   return { suggestedMode, books: books.filter((book) => book.tracks.length > 0) };
+};
+
+// The book with its Tracks in the order the user dragged them into; Tracks the
+// order leaves out keep their planned order after the ordered ones.
+export const withTrackOrder = (book: ProposedAudiobook, paths: string[]): ProposedAudiobook => {
+  const rank = new Map(paths.map((path, index) => [path, index]));
+  const rankOf = (track: ProposedTrack): number => rank.get(track.path) ?? paths.length;
+  return { ...book, tracks: [...book.tracks].sort((a, b) => rankOf(a) - rankOf(b)) };
 };

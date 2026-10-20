@@ -3,6 +3,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystemLegacy from "expo-file-system/legacy";
 import { api } from "../api";
 import { getVideoStorageLocation } from "../storage-location";
+import {
+  documentsDir,
+  ensureDir,
+  fileExists,
+  isContentUri,
+  joinUri,
+  removeFile as remove,
+} from "../storage-files";
 import { useConnectionStore } from "../../stores/connection";
 import {
   createHeldAudiobooks,
@@ -14,39 +22,10 @@ const STORAGE_KEY = "learnify-held-audiobooks";
 const AUDIOBOOKS_DIR = "audiobooks";
 
 const saf = FileSystemLegacy.StorageAccessFramework;
-const isContentUri = (uri: string) => uri.startsWith("content://");
-const joinUri = (base: string, name: string) =>
-  `${base.replace(/\/+$/, "")}/${name}`;
 const parentUri = (uri: string) => {
   const trimmed = uri.replace(/\/+$/, "");
   return trimmed.slice(0, trimmed.lastIndexOf("/"));
 };
-
-const documentsDir = () => {
-  const documentDirectory = FileSystemLegacy.documentDirectory;
-  if (!documentDirectory)
-    throw new Error("Document directory is not available");
-  return documentDirectory.replace(/\/+$/, "");
-};
-
-const ensureDir = async (parent: string, name: string) => {
-  if (isContentUri(parent)) {
-    const children = await saf.readDirectoryAsync(parent);
-    const existing = children.find((uri) =>
-      decodeURIComponent(uri).endsWith(`/${name}`),
-    );
-    return existing ?? saf.makeDirectoryAsync(parent, name);
-  }
-  const dirUri = joinUri(parent, name);
-  const info = await FileSystemLegacy.getInfoAsync(dirUri);
-  if (!info.exists) {
-    await FileSystemLegacy.makeDirectoryAsync(dirUri, { intermediates: true });
-  }
-  return dirUri;
-};
-
-const remove = (uri: string) =>
-  FileSystemLegacy.deleteAsync(uri, { idempotent: true });
 
 // Books go in an `audiobooks` folder of the Storage location, one folder per
 // book: beside the `videos` folder in a picked or USB folder, never inside it,
@@ -136,14 +115,7 @@ const platform: HeldAudiobooksPlatform = {
       signal.removeEventListener("abort", abort);
     }
   },
-  exists: async (uri) => {
-    try {
-      const info = await FileSystemLegacy.getInfoAsync(uri);
-      return info.exists && !info.isDirectory;
-    } catch {
-      return false;
-    }
-  },
+  exists: fileExists,
   remove,
   loadRecords: async () => {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);

@@ -8,7 +8,7 @@ import { continueListening } from "../../services/listening-position/listeningPo
 import { useAudiobookCatalogStore } from "../../stores/audiobookCatalog";
 import { useListeningPositionsStore } from "../../stores/listeningPositions";
 import type { Audiobook } from "../../../shared/mobile-sync-contract";
-import { colors, fontSize, fontWeight, spacing } from "../../theme";
+import { colors, fontSize, fontWeight, radius, spacing } from "../../theme";
 import { Info, Smartphone } from "../../theme/icons";
 import { AudiobookCover } from "./AudiobookCover";
 import {
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
     right: spacing.xs,
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: radius.full,
     backgroundColor: colors.background,
     opacity: 0.85,
     alignItems: "center",
@@ -226,18 +226,18 @@ const styles = StyleSheet.create({
     color: colors.foreground,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.semibold,
-    marginTop: spacing.xs + 2,
+    marginTop: spacing.sm,
   },
   caption: {
     color: colors.mutedForeground,
     fontSize: fontSize.xs,
-    marginTop: 2,
+    marginTop: spacing.xs,
   },
   badge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    marginTop: 2,
+    gap: spacing.xs,
+    marginTop: spacing.xs,
   },
   badgeText: { color: colors.primary, fontSize: fontSize.xs },
 });

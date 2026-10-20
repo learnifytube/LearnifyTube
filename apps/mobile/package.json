@@ -76,5 +76,14 @@
   "private": true,
   "jest": {
     "preset": "jest-expo"
+  },
+  "expo": {
+    "autolinking": {
+      "android": {
+        "buildFromSource": [
+          "expo-audio"
+        ]
+      }
+    }
   }
 }

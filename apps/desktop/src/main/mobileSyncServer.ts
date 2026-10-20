@@ -35,6 +35,7 @@ import {
   MIN_SUPPORTED_MOBILE_SYNC_PROTOCOL_VERSION,
   SYNC_SSE_EVENT_AUDIOBOOKS,
   SYNC_SSE_EVENT_ON_DEVICE_SET,
+  SYNC_SSE_HEARTBEAT_MS,
   type SyncServerInfo,
   type OnDeviceSet,
   deviceReportSchema,
@@ -404,8 +405,10 @@ const createMobileSyncServer = (): MobileSyncServer => {
     // Initial comment to confirm connection
     res.write(": connected\n\n");
     sseClients.add(res);
+    const heartbeat = setInterval(() => res.write(": ping\n\n"), SYNC_SSE_HEARTBEAT_MS);
 
     res.on("close", () => {
+      clearInterval(heartbeat);
       sseClients.delete(res);
     });
   };

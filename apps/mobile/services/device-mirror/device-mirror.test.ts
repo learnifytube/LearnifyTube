@@ -1,4 +1,8 @@
-import type { OnDeviceSet } from "../../../shared/mobile-sync-contract";
+import {
+  SYNC_SSE_EVENT_AUDIOBOOKS,
+  SYNC_SSE_EVENT_ON_DEVICE_SET,
+  type OnDeviceSet,
+} from "../../../shared/mobile-sync-contract";
 import {
   createDeviceMirror,
   planMirror,
@@ -6,6 +10,9 @@ import {
 } from "./createDeviceMirror";
 
 const SERVER = "http://desktop.local:53318";
+
+// Lets a sync started by a pushed event finish.
+const flush = () => new Promise((resolve) => setTimeout(resolve, 10));
 
 const setVideo = (id: string): OnDeviceSet["videos"][number] => ({
   id,
@@ -91,6 +98,7 @@ function createHarness({
     // The desktops listened to for pushed sync events, and how to push one.
     listening: [] as string[],
     pushEvent: (_event: string) => {},
+    reconnect: () => {},
     conditionsChanged: () => {},
   };
   const platform: DeviceMirrorPlatform = {
@@ -110,9 +118,10 @@ function createHarness({
       report: async (_serverUrl, report) => {
         state.reports.push(report);
       },
-      listen: (serverUrl, onEvent) => {
+      listen: (serverUrl, { onEvent, onReconnect }) => {
         state.listening.push(serverUrl);
         state.pushEvent = onEvent;
+        state.reconnect = onReconnect;
         return () => {
           state.listening = state.listening.filter((url) => url !== serverUrl);
         };
@@ -295,26 +304,38 @@ describe("device mirror", () => {
   it("syncs when the desktop pushes an On-device set or Audiobooks change", async () => {
     const { state, mirror } = createHarness({ set: ["a"] });
     const stop = mirror.start();
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await flush();
     expect(state.listening).toEqual([SERVER]);
     state.requested = [];
 
-    state.pushEvent("sync:on-device-set");
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    state.pushEvent(SYNC_SSE_EVENT_ON_DEVICE_SET);
+    await flush();
     expect(state.requested).toEqual(["a"]);
 
     const mirrorsBefore = state.audiobookMirrors.length;
-    state.pushEvent("sync:audiobooks");
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    state.pushEvent(SYNC_SSE_EVENT_AUDIOBOOKS);
+    await flush();
     expect(state.audiobookMirrors).toHaveLength(mirrorsBefore + 1);
 
     const mirrorsAfter = state.audiobookMirrors.length;
     state.pushEvent("message");
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await flush();
     expect(state.audiobookMirrors).toHaveLength(mirrorsAfter);
 
     stop();
     expect(state.listening).toEqual([]);
+  });
+
+  it("syncs when the stream reconnects, for events pushed while it was down", async () => {
+    const { state, mirror } = createHarness({ set: ["a"] });
+    const stop = mirror.start();
+    await flush();
+    state.requested = [];
+
+    state.reconnect();
+    await flush();
+    expect(state.requested).toEqual(["a"]);
+    stop();
   });
 
   it("listens to the new desktop when the connection changes, and to none without one", () => {

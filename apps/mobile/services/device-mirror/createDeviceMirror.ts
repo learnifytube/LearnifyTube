@@ -18,8 +18,14 @@ export type DeviceMirrorPlatform = {
     /** The On-device set, or null when the desktop is too old to serve one. */
     getOnDeviceSet: (serverUrl: string) => Promise<SetVideo[] | null>;
     report: (serverUrl: string, report: DeviceReport) => Promise<void>;
-    /** Listens to the desktop's pushed sync events; returns a function that stops. */
-    listen: (serverUrl: string, onEvent: (event: string) => void) => () => void;
+    /**
+     * Listens to the desktop's pushed sync events, and says when the stream
+     * comes back after dropping; returns a function that stops.
+     */
+    listen: (
+      serverUrl: string,
+      handlers: { onEvent: (event: string) => void; onReconnect: () => void },
+    ) => () => void;
   };
   device: {
     getId: () => Promise<string>;
@@ -167,7 +173,7 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
     let stopListening: (() => void) | null = null;
     let listeningTo: string | null = null;
 
-    const listen = () => {
+    const followConnection = () => {
       const serverUrl = platform.isForeground()
         ? platform.getServerUrl()
         : null;
@@ -176,13 +182,17 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
       stopListening = null;
       listeningTo = serverUrl;
       if (!serverUrl) return;
-      stopListening = platform.desktop.listen(serverUrl, (event) => {
-        if (SYNC_EVENTS.has(event)) void syncNow();
+      stopListening = platform.desktop.listen(serverUrl, {
+        onEvent: (event) => {
+          if (SYNC_EVENTS.has(event)) void syncNow();
+        },
+        // Events pushed while the stream was down are lost.
+        onReconnect: () => void syncNow(),
       });
     };
 
-    const unsubscribeListen = platform.onConditionsChange(listen);
-    listen();
+    const unsubscribeListen = platform.onConditionsChange(followConnection);
+    followConnection();
 
     return () => {
       unsubscribe();

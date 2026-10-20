@@ -81,6 +81,8 @@ export type DeviceReport = z.infer<typeof deviceReportSchema>;
 export const SYNC_SSE_EVENT_ON_DEVICE_SET = "sync:on-device-set";
 /** The Audiobooks sent to Devices changed (sent, removed from Devices, forgotten or rescanned). */
 export const SYNC_SSE_EVENT_AUDIOBOOKS = "sync:audiobooks";
+/** How often GET /api/events writes a comment, so a Device can tell a dropped stream from a quiet one. */
+export const SYNC_SSE_HEARTBEAT_MS = 25_000;
 
 /** One audio file of an Audiobook. Its file is GET /api/audiobook-track/:id/file. */
 export const audiobookTrackSchema = z.object({

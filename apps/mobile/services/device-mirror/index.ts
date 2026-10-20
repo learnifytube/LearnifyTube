@@ -89,8 +89,8 @@ const platform: DeviceMirrorPlatform = {
       return (await api.getOnDeviceSet(serverUrl)).videos;
     },
     report: (serverUrl, report) => api.reportDevice(serverUrl, report),
-    listen: (serverUrl, onEvent) =>
-      listenToSyncEvents(api.getEventsUrl(serverUrl), onEvent),
+    listen: (serverUrl, handlers) =>
+      listenToSyncEvents(api.getEventsUrl(serverUrl), handlers),
   },
   device: {
     getId: getDeviceId,

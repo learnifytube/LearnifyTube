@@ -83,14 +83,32 @@ const TRACK_1 = "local-file:///books/Frankl/CD%201/Track%2001.mp3";
 const TRACK_2 = "local-file:///books/Frankl/CD%201/Track%2002.mp3";
 const TRACK_3 = "local-file:///books/Frankl/CD%202/Track%2001.mp3";
 
+// The window's document, where every media element's play is heard.
+const createFakePage = () => {
+  const listeners: ((event: { target: unknown }) => void)[] = [];
+  return {
+    addEventListener: (_type: "play", listener: (event: { target: unknown }) => void) => {
+      listeners.push(listener);
+    },
+    /** A Video on some page starts playing. */
+    playVideo: () => {
+      for (const listener of listeners) listener({ target: { nodeName: "VIDEO" } });
+    },
+  };
+};
+
 const setup = () => {
   const audio = createFakeAudio();
+  const page = createFakePage();
   const saves: ListeningSave[] = [];
+  const skipped: string[][] = [];
   const player = createDesktopBookPlayer({
     audio,
+    page,
     saveListening: (save) => saves.push(save),
   });
-  return { audio, saves, player };
+  player.onTracksSkipped((tracks) => skipped.push(tracks.map((track) => track.title)));
+  return { audio, page, saves, skipped, player };
 };
 
 const trackPlaying = (player: ReturnType<typeof setup>["player"]) => {
@@ -150,8 +168,8 @@ describe("Desktop Book player", () => {
     expect(player.getState().status).toBe("playing");
   });
 
-  it("skips a Track whose file can't be read", async () => {
-    const { audio, player } = setup();
+  it("skips a Track whose file can't be read, naming it", async () => {
+    const { audio, skipped, player } = setup();
     await player.play(frankl());
 
     audio.fail();
@@ -159,6 +177,48 @@ describe("Desktop Book player", () => {
 
     expect(audio.src).toBe(TRACK_2);
     expect(trackPlaying(player)).toBe("Track 02");
+    expect(skipped).toEqual([["Track 01"]]);
+  });
+
+  it("skips Tracks gone after a Rescan when playback reaches them, naming them", async () => {
+    const { audio, skipped, player } = setup();
+    const book = frankl();
+    book.tracks[1].missing = true;
+    book.tracks[2].missing = true;
+    await player.play(book);
+    expect(skipped).toEqual([]);
+
+    audio.finish();
+    await player.settled();
+
+    expect(player.getState().status).toBe("finished");
+    expect(skipped).toEqual([["Track 02", "Track 01"]]);
+  });
+
+  it("plays a Track whose file name has # or ? in it", async () => {
+    const { audio, skipped, player } = setup();
+    const book = frankl();
+    book.tracks[0].filePath = "/books/Frankl/Part #1 - Why?.mp3";
+
+    await player.play(book);
+
+    expect(audio.src).toBe("local-file:///books/Frankl/Part%20%231%20-%20Why%3F.mp3");
+    expect(trackPlaying(player)).toBe("Part #1 - Why?");
+    expect(skipped).toEqual([]);
+  });
+
+  it("pauses the book when a Video starts playing, and Play resumes it", async () => {
+    const { audio, page, player } = setup();
+    await player.play(frankl());
+
+    page.playVideo();
+
+    expect(audio.paused).toBe(true);
+    expect(player.getState().status).toBe("paused");
+
+    player.resume();
+    expect(audio.paused).toBe(false);
+    expect(player.getState().status).toBe("playing");
   });
 
   it("plays a picked Track from its start, and Start over from Track 1", async () => {

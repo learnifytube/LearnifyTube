@@ -17,5 +17,8 @@ const normalizeLocalPath = (inputPath: string | null | undefined): string => {
 export const toLocalFileUrl = (inputPath: string | null | undefined): string => {
   const normalized = normalizeLocalPath(inputPath);
   if (!normalized) return "";
-  return `local-file://${encodeURI(normalized)}`;
+  // encodeURI leaves `#` and `?` alone, which would cut the path short as a
+  // fragment or query; main decodes the whole path with decodeURIComponent.
+  const encoded = encodeURI(normalized).replace(/#/g, "%23").replace(/\?/g, "%3F");
+  return `local-file://${encoded}`;
 };

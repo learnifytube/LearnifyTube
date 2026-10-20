@@ -120,17 +120,43 @@ describe("Held Audiobooks", () => {
     expect(restarted.held.getHold("frankl")).toMatchObject({ complete: true });
   });
 
-  it("stops fetching in the background and carries on in the foreground", async () => {
-    const { fake, held } = createHarness();
-    fake.setForeground(false);
+  it("keeps fetching while the app is in the background", async () => {
+    const fake = createFakeHeldAudiobooksPlatform({
+      serverUrl: "http://desktop",
+      gatedTrackIds: ["cd3-01"],
+    });
+    const { held } = createHarness(fake);
+    held.pull(frankl);
+    await fake.fetchStarted("cd3-01");
 
-    held.pull(orwell);
+    fake.goToBackground();
+    fake.releaseTrack("cd3-01");
     await held.idle();
-    expect(fake.fetched()).toEqual([]);
 
-    fake.setForeground(true);
+    expect(fake.fetched()).toEqual(["frankl/cd1-01", "frankl/cd3-01"]);
+    expect(held.getHold("frankl")).toMatchObject({ complete: true });
+  });
+
+  it("carries on a Track cut short by a disconnect from where it stopped", async () => {
+    const fake = createFakeHeldAudiobooksPlatform({
+      serverUrl: "http://desktop",
+      gatedTrackIds: ["cd3-01"],
+    });
+    const { held } = createHarness(fake);
+    held.pull(frankl);
+    await fake.fetchStarted("cd3-01");
+
+    fake.setServerUrl(null);
     await held.idle();
-    expect(fake.fetched()).toEqual(["orwell/intro", "orwell/book"]);
+    expect(fake.partials()).toEqual(["cd3-01"]);
+
+    fake.releaseTrack("cd3-01");
+    fake.setServerUrl("http://desktop");
+    await held.idle();
+
+    expect(fake.resumed()).toEqual(["cd3-01"]);
+    expect(fake.partials()).toEqual([]);
+    expect(held.getHold("frankl")).toMatchObject({ complete: true });
   });
 
   it("retries a Track the desktop couldn't serve on the next connection", async () => {
@@ -165,6 +191,7 @@ describe("Held Audiobooks", () => {
     await held.idle();
 
     expect(fake.files()).toEqual([]);
+    expect(fake.partials()).toEqual([]);
     expect(held.getHold("frankl")).toBeNull();
     expect(fake.storedRecords()).toEqual([]);
     await expect(held.trackUri("cd1-01")).resolves.toBeNull();

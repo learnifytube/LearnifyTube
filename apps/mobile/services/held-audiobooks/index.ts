@@ -75,9 +75,55 @@ const place = async (bookId: string, trackId: string, tempUri: string) => {
   return dest;
 };
 
+// Where a Track's fetch lands until it is whole: the app's own storage, which
+// the legacy resumable download can append to (a picked folder can't).
+const partialUri = async (trackId: string) =>
+  joinUri(
+    await ensureDir(documentsDir(), AUDIOBOOKS_DIR),
+    `${trackId}.download`,
+  );
+
+// Fetches url into fileUri, carrying on from the bytes a cut-short fetch left
+// there (a Range request for the rest). Aborting, or the desktop dropping,
+// keeps those bytes for the next fetch; an error answer deletes them, and a
+// desktop that won't resume (200 or 416) gets the whole file fetched again.
+const downloadInto = async (
+  url: string,
+  fileUri: string,
+  signal: AbortSignal,
+): Promise<void> => {
+  const partial = await FileSystemLegacy.getInfoAsync(fileUri);
+  // On Android the resume data is the byte count already in the file.
+  const resumeFrom =
+    partial.exists && partial.size > 0 ? String(partial.size) : undefined;
+  const transfer = FileSystemLegacy.createDownloadResumable(
+    url,
+    fileUri,
+    {},
+    undefined,
+    resumeFrom,
+  );
+  const pause = () => {
+    transfer.pauseAsync().catch(() => {});
+  };
+  signal.addEventListener("abort", pause);
+  try {
+    const result = await transfer.downloadAsync();
+    if (signal.aborted || !result) throw new Error("Fetch cancelled");
+    if (result.status === (resumeFrom ? 206 : 200)) return;
+    // The answer's body went into the file: what is there is no good now.
+    await remove(fileUri);
+    if (resumeFrom && (result.status === 200 || result.status === 416)) {
+      return downloadInto(url, fileUri, signal);
+    }
+    throw new Error(`Track fetch failed: ${result.status}`);
+  } finally {
+    signal.removeEventListener("abort", pause);
+  }
+};
+
 const platform: HeldAudiobooksPlatform = {
   getServerUrl: () => useConnectionStore.getState().serverUrl,
-  isForeground: () => AppState.currentState === "active",
   onConditionsChange: (listener) => {
     const appStateSubscription = AppState.addEventListener("change", listener);
     const unsubscribeConnection = useConnectionStore.subscribe(
@@ -91,31 +137,21 @@ const platform: HeldAudiobooksPlatform = {
     };
   },
   fetchTrack: async (serverUrl, bookId, trackId, signal) => {
-    const tempDir = await ensureDir(documentsDir(), AUDIOBOOKS_DIR);
-    const tempUri = joinUri(tempDir, `${trackId}.download`);
-    const transfer = FileSystemLegacy.createDownloadResumable(
+    const tempUri = await partialUri(trackId);
+    await downloadInto(
       api.getAudiobookTrackFileUrl(serverUrl, trackId),
       tempUri,
+      signal,
     );
-    const abort = () => {
-      transfer.pauseAsync().catch(() => {});
-    };
-    signal.addEventListener("abort", abort);
     try {
-      const result = await transfer.downloadAsync();
-      if (signal.aborted) throw new Error("Fetch cancelled");
-      if (!result || result.status !== 200) {
-        throw new Error(`Track fetch failed: ${result?.status ?? "unknown"}`);
-      }
       return await place(bookId, trackId, tempUri);
     } catch (error) {
       await remove(tempUri).catch(() => {});
       throw error;
-    } finally {
-      signal.removeEventListener("abort", abort);
     }
   },
   exists: fileExists,
+  discardPartial: async (trackId) => remove(await partialUri(trackId)),
   remove,
   loadRecords: async () => {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);

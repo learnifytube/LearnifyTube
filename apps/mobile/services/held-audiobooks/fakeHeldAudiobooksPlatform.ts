@@ -12,7 +12,7 @@ export function createFakeHeldAudiobooksPlatform({
   gatedTrackIds = [] as string[],
   storedRecords = [] as HeldBookRecord[],
 } = {}) {
-  const conditions = { serverUrl, foreground: true };
+  const conditions = { serverUrl };
   const conditionListeners = new Set<() => void>();
   const failing = new Set(failingTrackIds);
   const gated = new Set(gatedTrackIds);
@@ -21,6 +21,9 @@ export function createFakeHeldAudiobooksPlatform({
   const files = new Set<string>();
   const fetched: string[] = [];
   const removed: string[] = [];
+  // Tracks a fetch was cut short on, with what it left on the phone.
+  const partials = new Set<string>();
+  const resumed: string[] = [];
   let records: HeldBookRecord[] = JSON.parse(JSON.stringify(storedRecords));
   for (const record of records) {
     for (const uri of Object.values(record.trackUris)) files.add(uri);
@@ -32,7 +35,6 @@ export function createFakeHeldAudiobooksPlatform({
 
   const platform: HeldAudiobooksPlatform = {
     getServerUrl: () => conditions.serverUrl,
-    isForeground: () => conditions.foreground,
     onConditionsChange: (listener) => {
       conditionListeners.add(listener);
       return () => conditionListeners.delete(listener);
@@ -43,11 +45,13 @@ export function createFakeHeldAudiobooksPlatform({
           gates.set(trackId, resolve);
           for (const waiter of gateWaiters.get(trackId) ?? []) waiter();
           gateWaiters.delete(trackId);
-          signal.addEventListener("abort", () =>
-            reject(new Error("Fetch cancelled")),
-          );
+          signal.addEventListener("abort", () => {
+            partials.add(trackId);
+            reject(new Error("Fetch cancelled"));
+          });
         });
       }
+      if (partials.delete(trackId)) resumed.push(trackId);
       if (failing.has(trackId) || conditions.serverUrl !== fromUrl) {
         throw new Error("The desktop couldn't serve this Track");
       }
@@ -57,6 +61,9 @@ export function createFakeHeldAudiobooksPlatform({
       return uri;
     },
     exists: async (uri) => files.has(uri),
+    discardPartial: async (trackId) => {
+      partials.delete(trackId);
+    },
     remove: async (uri) => {
       files.delete(uri);
       removed.push(uri);
@@ -74,14 +81,18 @@ export function createFakeHeldAudiobooksPlatform({
     /** Files on the phone now. */
     files: () => [...files],
     removed: () => removed,
+    /** Tracks whose cut-short fetch left part of the file on the phone. */
+    partials: () => [...partials],
+    /** Tracks fetched on from where a cut-short fetch stopped, in order. */
+    resumed: () => resumed,
     /** What the phone saved, as a fresh app start would load it. */
     storedRecords: () => records,
     setServerUrl: (url: string | null) => {
       conditions.serverUrl = url;
       changeConditions();
     },
-    setForeground: (foreground: boolean) => {
-      conditions.foreground = foreground;
+    /** The app goes to the background (the screen turns off). */
+    goToBackground: () => {
       changeConditions();
     },
     healTrack: (trackId: string) => failing.delete(trackId),

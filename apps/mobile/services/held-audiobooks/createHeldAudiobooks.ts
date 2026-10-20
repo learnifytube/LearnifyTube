@@ -28,10 +28,13 @@ export type Hold = {
 
 export type HeldAudiobooksPlatform = {
   getServerUrl: () => string | null;
-  isForeground: () => boolean;
   /** Called when the desktop connection or the app's foreground state changes. */
   onConditionsChange: (listener: () => void) => () => void;
-  /** Fetches a Track's file from the desktop into the Storage location; returns its URI. */
+  /**
+   * Fetches a Track's file from the desktop into the Storage location; returns
+   * its URI. A fetch cut short (aborted, or the desktop dropped) leaves what it
+   * got on the phone, and the next fetch of that Track carries on from there.
+   */
   fetchTrack: (
     serverUrl: string,
     bookId: string,
@@ -39,6 +42,8 @@ export type HeldAudiobooksPlatform = {
     signal: AbortSignal,
   ) => Promise<string>;
   exists: (uri: string) => Promise<boolean>;
+  /** Deletes what a cut-short fetch of the Track left on the phone. */
+  discardPartial: (trackId: string) => Promise<void>;
   remove: (uri: string) => Promise<void>;
   loadRecords: () => Promise<HeldBookRecord[]>;
   saveRecords: (records: HeldBookRecord[]) => void;
@@ -61,8 +66,9 @@ const toHold = (record: HeldBookRecord): Hold => {
 /**
  * Audiobooks held on this phone, whole. Holding a book fetches every Track
  * that isn't on the phone yet, one at a time, whenever the desktop is
- * connected and the app is in the foreground; a fetch cut short resumes on
- * the next connection. Files go to the Storage location.
+ * connected, in the background too (for as long as the app runs); a Track
+ * cut short carries on from where it stopped on the next connection. Files
+ * go to the Storage location.
  */
 export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
   const records = new Map<string, HeldBookRecord>();
@@ -72,6 +78,7 @@ export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
   let ready: Promise<void> = Promise.resolve();
   let running: {
     bookId: string;
+    trackId: string;
     controller: AbortController;
     work: Promise<void>;
   } | null = null;
@@ -86,8 +93,7 @@ export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
     for (const listener of listeners) listener();
   };
 
-  const canRun = () =>
-    loaded && platform.getServerUrl() !== null && platform.isForeground();
+  const canRun = () => loaded && platform.getServerUrl() !== null;
 
   const nextToFetch = () => {
     const ordered = [...records.values()].sort((a, b) => a.heldAt - b.heldAt);
@@ -131,7 +137,7 @@ export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
         running = null;
         pump();
       });
-    running = { bookId, controller, work };
+    running = { bookId, trackId, controller, work };
   }
 
   // Changes wait for the saved holds, so they never shadow one.
@@ -168,10 +174,15 @@ export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
     const record = records.get(bookId);
     if (!record) return;
     records.delete(bookId);
-    if (running?.bookId === bookId) running.controller.abort();
+    const cutShort = running?.bookId === bookId ? running : null;
+    cutShort?.controller.abort();
     changed();
     for (const uri of Object.values(record.trackUris)) {
       await platform.remove(uri).catch(() => {});
+    }
+    if (cutShort) {
+      await cutShort.work;
+      await platform.discardPartial(cutShort.trackId).catch(() => {});
     }
   };
 

@@ -326,6 +326,30 @@ describe("device mirror", () => {
     expect(state.listening).toEqual([]);
   });
 
+  it("syncs once more after the sync running when asked during it, however often", async () => {
+    const { state, mirror } = createHarness({ set: ["a"] });
+
+    const running = mirror.syncNow();
+    const asked = [mirror.syncNow(), mirror.syncNow(), mirror.syncNow()];
+    await Promise.all([running, ...asked]);
+
+    expect(state.audiobookMirrors).toHaveLength(2);
+    expect(state.reports).toHaveLength(2);
+  });
+
+  it("doesn't drop an Audiobooks change pushed while a sync is running", async () => {
+    const { state, mirror } = createHarness({ set: ["a"] });
+    const stop = mirror.start();
+    const mirrorsBefore = state.audiobookMirrors.length;
+
+    // start() began a sync that hasn't finished yet.
+    state.pushEvent(SYNC_SSE_EVENT_AUDIOBOOKS);
+    await flush();
+
+    expect(state.audiobookMirrors).toHaveLength(mirrorsBefore + 2);
+    stop();
+  });
+
   it("syncs when the stream reconnects, for events pushed while it was down", async () => {
     const { state, mirror } = createHarness({ set: ["a"] });
     const stop = mirror.start();

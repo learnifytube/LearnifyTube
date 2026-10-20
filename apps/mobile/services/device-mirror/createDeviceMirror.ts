@@ -92,6 +92,8 @@ export function planMirror(input: {
 
 export function createDeviceMirror(platform: DeviceMirrorPlatform) {
   let syncing: Promise<void> | null = null;
+  // The one sync queued to run after the sync in flight.
+  let followUp: Promise<void> | null = null;
 
   const sync = async () => {
     const serverUrl = platform.getServerUrl();
@@ -146,16 +148,31 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
     }
   };
 
-  /** Mirrors the On-device set now; a call during a sync waits for that sync. */
-  const syncNow = () => {
-    syncing ??= sync()
+  const runSync = () =>
+    sync()
       .catch((error) => {
         console.warn("[DeviceMirror] Sync failed", error);
       })
       .finally(() => {
         syncing = null;
       });
-    return syncing;
+
+  /**
+   * Mirrors the On-device set now. A call during a sync queues one more sync
+   * after it (however many calls arrive), since what changed may have been read
+   * already, and waits for that one.
+   */
+  const syncNow = () => {
+    if (!syncing) {
+      syncing = runSync();
+      return syncing;
+    }
+    followUp ??= syncing.then(() => {
+      followUp = null;
+      syncing ??= runSync();
+      return syncing;
+    });
+    return followUp;
   };
 
   const syncIfConnected = () => {

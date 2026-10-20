@@ -7,6 +7,7 @@ import { trpcClient } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/ui/page-container";
 import { AudiobookCover } from "./components/AudiobookCover";
+import { AudiobookCardPlayButton } from "./components/AudiobookCardPlayButton";
 import { ImportPreviewDialog } from "./components/ImportPreviewDialog";
 import { formatListeningTime } from "./format";
 
@@ -61,25 +62,30 @@ export default function AudiobooksPage(): React.JSX.Element {
       ) : (
         <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {books.map((book) => (
-            <Link key={book.id} to="/audiobook" search={{ id: book.id }} className="group block">
-              <AudiobookCover
-                coverPath={book.coverPath}
-                title={book.title}
-                className="transition-transform group-hover:scale-105"
-              />
-              <h3 className="mt-2 line-clamp-2 text-sm font-medium leading-tight group-hover:text-primary">
-                {book.title}
-              </h3>
-              <p className="truncate text-xs text-muted-foreground">
-                {[
-                  book.author,
-                  `${book.trackCount} Tracks`,
-                  formatListeningTime(book.durationSeconds),
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-            </Link>
+            <div key={book.id} className="group relative">
+              <Link to="/audiobook" search={{ id: book.id }} className="block">
+                <AudiobookCover
+                  coverPath={book.coverPath}
+                  title={book.title}
+                  className="transition-transform group-hover:scale-105"
+                />
+                <h3 className="mt-2 line-clamp-2 text-sm font-medium leading-tight group-hover:text-primary">
+                  {book.title}
+                </h3>
+                <p className="truncate text-xs text-muted-foreground">
+                  {[
+                    book.author,
+                    `${book.trackCount} Tracks`,
+                    formatListeningTime(book.durationSeconds),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              </Link>
+              <div className="pointer-events-none absolute inset-x-0 top-0 aspect-square">
+                <AudiobookCardPlayButton bookId={book.id} title={book.title} />
+              </div>
+            </div>
           ))}
         </div>
       )}

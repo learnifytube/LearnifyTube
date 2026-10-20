@@ -3,7 +3,12 @@ import { logger } from "@/helpers/logger";
 import { trpcClient } from "@/utils/trpc";
 import { queryClient } from "@/utils/queryClient";
 import type { BookPlayerState } from "../../../../shared/book-player/createBookPlayer";
-import { createDesktopBookPlayer } from "./desktopBookPlayer";
+import { createDesktopBookPlayer, type TrackProgress } from "./desktopBookPlayer";
+import { connectMediaSession } from "./mediaSession";
+import { handleBookPlayerKey } from "./spaceKey";
+
+// The desktop's speed, kept apart from the phone's.
+const SPEED_KEY = "learnify.bookPlayer.speed";
 
 /**
  * The desktop's one Book player. Its `<audio>` element belongs to this module,
@@ -26,11 +31,46 @@ export const bookPlayer = createDesktopBookPlayer({
         logger.warn("[BookPlayer] Saving the Listening position failed", { error });
       });
   },
+  speed: {
+    get: () => {
+      try {
+        return Number(localStorage.getItem(SPEED_KEY) ?? 1);
+      } catch {
+        return 1;
+      }
+    },
+    set: (rate) => {
+      try {
+        localStorage.setItem(SPEED_KEY, String(rate));
+      } catch {
+        // The speed holds until the app closes.
+      }
+    },
+  },
 });
+
+if ("mediaSession" in navigator) connectMediaSession(bookPlayer, navigator.mediaSession);
+
+window.addEventListener("keydown", (event) =>
+  handleBookPlayerKey(event, bookPlayer, {
+    videoOnPage: document.querySelector("video") !== null,
+  })
+);
 
 export function useBookPlayerState(): BookPlayerState {
   return useSyncExternalStore(bookPlayer.subscribe, bookPlayer.getState);
 }
 
-export type { DesktopAudiobook } from "./desktopBookPlayer";
+/** The book's speed, for the bar. */
+export function useBookSpeed(): number {
+  return useSyncExternalStore(bookPlayer.subscribe, bookPlayer.getSpeed);
+}
+
+/** How far into its Track the book is. */
+export function useTrackProgress(): TrackProgress {
+  return useSyncExternalStore(bookPlayer.subscribeProgress, bookPlayer.getProgress);
+}
+
+export { BOOK_SPEEDS } from "../../../../shared/book-player/createBookPlayer";
+export type { DesktopAudiobook, TrackProgress } from "./desktopBookPlayer";
 export type { BookPlayerState };

@@ -10,6 +10,7 @@ const createFakeAudio = () => {
   let source = "";
   const audio = {
     currentTime: 0,
+    duration: NaN,
     playbackRate: 1,
     defaultPlaybackRate: 1,
     preservesPitch: true,
@@ -36,6 +37,7 @@ const createFakeAudio = () => {
     },
     load: (): void => {
       audio.currentTime = 0;
+      audio.duration = NaN;
       audio.ended = false;
       audio.paused = true;
     },
@@ -45,10 +47,17 @@ const createFakeAudio = () => {
     addEventListener: (type: string, listener: () => void): void => {
       events.addEventListener(type, listener);
     },
-    /** The loaded file is read far enough to play. */
-    ready: (): void => {
+    /** The loaded file is read far enough to play; it is `length` seconds long. */
+    ready: (length = 300): void => {
+      audio.duration = length;
+      fire("durationchange");
       fire("loadedmetadata");
       fire("canplay");
+    },
+    /** Plays on to `seconds` into the loaded file. */
+    playTo: (seconds: number): void => {
+      audio.currentTime = seconds;
+      fire("timeupdate");
     },
     /** Plays to the end of the loaded file: Chromium pauses, then ends. */
     finish: (): void => {
@@ -83,14 +92,21 @@ const TRACK_1 = "local-file:///books/Frankl/CD%201/Track%2001.mp3";
 const TRACK_2 = "local-file:///books/Frankl/CD%201/Track%2002.mp3";
 const TRACK_3 = "local-file:///books/Frankl/CD%202/Track%2001.mp3";
 
-const setup = () => {
+const setup = ({ savedSpeed = 1 }: { savedSpeed?: number } = {}) => {
   const audio = createFakeAudio();
   const saves: ListeningSave[] = [];
+  const speed = { saved: savedSpeed };
   const player = createDesktopBookPlayer({
     audio,
     saveListening: (save) => saves.push(save),
+    speed: {
+      get: () => speed.saved,
+      set: (rate) => {
+        speed.saved = rate;
+      },
+    },
   });
-  return { audio, saves, player };
+  return { audio, saves, speed, player };
 };
 
 const trackPlaying = (player: ReturnType<typeof setup>["player"]) => {
@@ -220,5 +236,44 @@ describe("Desktop Book player", () => {
 
     expect(player.getState().status).toBe("finished");
     expect(saves.at(-1)?.listening).toMatchObject({ trackId: "t3", finished: true });
+  });
+
+  it("plays at the speed remembered from last time, and remembers a new one", async () => {
+    const { audio, speed, player } = setup({ savedSpeed: 1.5 });
+
+    await player.play(frankl());
+    expect(audio.playbackRate).toBe(1.5);
+
+    player.setSpeed(1.25);
+    expect(audio.playbackRate).toBe(1.25);
+    expect(speed.saved).toBe(1.25);
+  });
+
+  it("shows how far into the Track the book is, and seeks within it", async () => {
+    const { audio, player } = setup();
+    expect(player.getProgress()).toEqual({ elapsed: 0, duration: 0 });
+
+    await player.play(frankl());
+    audio.ready(312);
+    const changes: unknown[] = [];
+    player.subscribeProgress(() => changes.push(player.getProgress()));
+    audio.playTo(61.5);
+
+    expect(changes).toEqual([{ elapsed: 61.5, duration: 312 }]);
+
+    player.seekTo(200);
+    expect(audio.currentTime).toBe(200);
+    expect(player.getProgress()).toEqual({ elapsed: 200, duration: 312 });
+
+    player.seekTo(999);
+    expect(audio.currentTime).toBe(312);
+  });
+
+  it("shows the Track's known length until its file says how long it is", async () => {
+    const { player } = setup();
+
+    await player.play(frankl({ listeningTrackId: "t2", listeningSeconds: 754 }));
+
+    expect(player.getProgress()).toEqual({ elapsed: 754, duration: 300 });
   });
 });

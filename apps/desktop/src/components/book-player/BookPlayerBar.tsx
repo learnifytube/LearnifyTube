@@ -3,6 +3,8 @@ import { Link } from "@tanstack/react-router";
 import { Pause, Play, RotateCcw, RotateCw, SkipBack, SkipForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { bookPlayer, useBookPlayerState } from "@/services/book-player";
+import { BookSeekBar } from "./BookSeekBar";
+import { BookSpeedMenu } from "./BookSpeedMenu";
 
 const SKIP_SECONDS = 30;
 
@@ -60,18 +62,25 @@ export function BookPlayerBar(): React.JSX.Element | null {
         <p className="truncate text-xs text-muted-foreground">{trackLine(state)}</p>
       </div>
 
-      <div className="flex shrink-0 items-center gap-1">
-        {control("Previous Track", <SkipBack className="h-4 w-4" />, bookPlayer.previousTrack)}
-        {control(`Back ${SKIP_SECONDS}s`, <RotateCcw className="h-4 w-4" />, () =>
-          bookPlayer.skip(-SKIP_SECONDS)
-        )}
-        {state.status === "playing"
-          ? control("Pause", <Pause className="h-5 w-5" />, bookPlayer.pause)
-          : control("Play", <Play className="h-5 w-5" />, bookPlayer.resume)}
-        {control(`Forward ${SKIP_SECONDS}s`, <RotateCw className="h-4 w-4" />, () =>
-          bookPlayer.skip(SKIP_SECONDS)
-        )}
-        {control("Next Track", <SkipForward className="h-4 w-4" />, bookPlayer.nextTrack)}
+      <div className="flex w-80 shrink-0 flex-col items-center lg:w-[28rem]">
+        <div className="flex items-center gap-1">
+          {control("Previous Track", <SkipBack className="h-4 w-4" />, bookPlayer.previousTrack)}
+          {control(`Back ${SKIP_SECONDS}s`, <RotateCcw className="h-4 w-4" />, () =>
+            bookPlayer.skip(-SKIP_SECONDS)
+          )}
+          {state.status === "playing"
+            ? control("Pause", <Pause className="h-5 w-5" />, bookPlayer.pause)
+            : control("Play", <Play className="h-5 w-5" />, bookPlayer.resume)}
+          {control(`Forward ${SKIP_SECONDS}s`, <RotateCw className="h-4 w-4" />, () =>
+            bookPlayer.skip(SKIP_SECONDS)
+          )}
+          {control("Next Track", <SkipForward className="h-4 w-4" />, bookPlayer.nextTrack)}
+        </div>
+        <BookSeekBar disabled={!active} />
+      </div>
+
+      <div className="flex shrink-0 justify-end">
+        <BookSpeedMenu />
       </div>
     </div>
   );

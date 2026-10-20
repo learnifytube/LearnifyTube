@@ -7,6 +7,7 @@ import {
   useBookPlayerState,
   useBookSpeed,
 } from "../../services/book-player";
+import { BOOK_SPEEDS } from "../../../shared/book-player/createBookPlayer";
 import { useConnectionStore } from "../../stores/connection";
 import { AudiobookCover } from "../../components/phone/AudiobookCover";
 import { BookTracksSheet } from "../../components/phone/BookTracksSheet";
@@ -24,7 +25,6 @@ import {
 
 const COVER_SIZE = 240;
 const SKIP_SECONDS = 30;
-const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
 
 // The book playing now. Leaving this screen keeps the book playing.
 export default function BookPlayerScreen() {
@@ -157,7 +157,7 @@ function SkipButton({ seconds }: { seconds: number }) {
 function SpeedButton() {
   const speed = useBookSpeed();
   const next =
-    SPEEDS.find((option) => option > speed + 0.001) ?? SPEEDS[0] ?? 1;
+    BOOK_SPEEDS.find((option) => option > speed + 0.001) ?? BOOK_SPEEDS[0] ?? 1;
   return (
     <Pressable
       testID="book-speed"

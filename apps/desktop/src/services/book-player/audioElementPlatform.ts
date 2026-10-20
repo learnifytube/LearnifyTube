@@ -4,6 +4,8 @@ import type { BookAudioPlatform } from "../../../../shared/book-player/createBoo
 export type AudioOutput = {
   src: string;
   currentTime: number;
+  /** Seconds; NaN until the loaded file says how long it is. */
+  readonly duration: number;
   playbackRate: number;
   defaultPlaybackRate: number;
   preservesPitch: boolean;

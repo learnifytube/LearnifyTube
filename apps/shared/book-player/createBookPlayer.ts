@@ -327,8 +327,11 @@ const RESTART_TRACK_AFTER_SECONDS = 3;
 const MIN_BOOK_SPEED = 0.75;
 const MAX_BOOK_SPEED = 2;
 
+/** The speeds a listener can pick, on the phone and the desktop alike. */
+export const BOOK_SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
+
 /** Where the chosen speed is remembered; the app persists it. */
-type BookSpeedMemory = {
+export type BookSpeedMemory = {
   get: () => number;
   set: (rate: number) => void;
 };

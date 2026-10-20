@@ -3,6 +3,7 @@ import {
   createBookPlayer,
   type Book,
   type BookPlayer,
+  type BookSpeedMemory,
   type ListeningPoint,
 } from "../../../../shared/book-player/createBookPlayer";
 import {
@@ -36,7 +37,18 @@ export type DesktopBookPlayer = Omit<BookPlayer, "play" | "jumpTo" | "startOver"
   jumpTo: (book: DesktopAudiobook, trackIndex: number) => Promise<void>;
   /** Plays a book again from Track 1 at 0:00. */
   startOver: (book: DesktopAudiobook) => Promise<void>;
+  /** How far into the Track the book is; zeros while no Track plays. */
+  getProgress: () => TrackProgress;
+  /** Called as the Track plays on, seeks, or changes. */
+  subscribeProgress: (listener: () => void) => () => void;
+  /** Moves to `seconds` into the Track playing. */
+  seekTo: (seconds: number) => void;
 };
+
+/** Where the book is within its Track, in seconds. */
+export type TrackProgress = { elapsed: number; duration: number };
+
+const NO_PROGRESS: TrackProgress = { elapsed: 0, duration: 0 };
 
 // A Track is named after its file, without the extension (as Devices see it).
 const trackTitle = (filePath: string): string =>
@@ -56,9 +68,12 @@ const resumeFrom = (book: DesktopAudiobook): ListeningPoint | null =>
 export function createDesktopBookPlayer({
   audio,
   saveListening,
+  speed,
 }: {
   audio: AudioOutput;
   saveListening: (save: ListeningSave) => void;
+  /** Where the desktop's own speed is remembered (the phone keeps its own). */
+  speed?: BookSpeedMemory;
 }): DesktopBookPlayer {
   // Each Track's file, by Track id, for the books played so far.
   const trackFiles = new Map<string, string>();
@@ -66,7 +81,7 @@ export function createDesktopBookPlayer({
     const filePath = trackFiles.get(track.id);
     return filePath ? toLocalFileUrl(filePath) : null;
   });
-  const player = createBookPlayer(platform);
+  const player = createBookPlayer(platform, { speed });
   keepListeningPosition(player, saveListening);
 
   const toBook = (book: DesktopAudiobook): Book => {
@@ -85,8 +100,48 @@ export function createDesktopBookPlayer({
     };
   };
 
+  // The Track's length: its file's once known, else the length its scan found.
+  const trackLength = (track: Book["tracks"][number] | undefined): number =>
+    Number.isFinite(audio.duration) && audio.duration > 0
+      ? audio.duration
+      : (track?.durationSeconds ?? 0);
+
+  let progress = NO_PROGRESS;
+  const progressListeners = new Set<() => void>();
+  const updateProgress = (): void => {
+    const state = player.getState();
+    const next =
+      state.status === "playing" || state.status === "paused"
+        ? {
+            elapsed: platform.currentTime(),
+            duration: trackLength(state.book.tracks[state.trackIndex]),
+          }
+        : NO_PROGRESS;
+    if (next.elapsed === progress.elapsed && next.duration === progress.duration) return;
+    progress = next;
+    for (const listener of progressListeners) listener();
+  };
+  for (const type of ["timeupdate", "durationchange", "emptied"]) {
+    audio.addEventListener(type, updateProgress);
+  }
+  player.subscribe(updateProgress);
+
   return {
     ...player,
+    getProgress: () => progress,
+    subscribeProgress: (listener) => {
+      progressListeners.add(listener);
+      return () => {
+        progressListeners.delete(listener);
+      };
+    },
+    seekTo: (seconds) => {
+      const state = player.getState();
+      if (state.status !== "playing" && state.status !== "paused") return;
+      const length = trackLength(state.book.tracks[state.trackIndex]);
+      platform.seekTo(Math.max(0, length > 0 ? Math.min(seconds, length) : seconds));
+      updateProgress();
+    },
     play: (book) => player.play(toBook(book), resumeFrom(book)),
     jumpTo: (book, trackIndex) => player.jumpTo(toBook(book), trackIndex),
     startOver: (book) => player.startOver(toBook(book)),

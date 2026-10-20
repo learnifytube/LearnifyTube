@@ -10,9 +10,11 @@ export type ConfinementResult =
   | { ok: true; realPath: string }
   | { ok: false; reason: "invalid" | "not-found" | "outside-allowed" };
 
+// The native realpath also restores each name's real case, which the JS one
+// keeps as asked: Chromium lowercases `local-file://Users/...` to `/users/...`.
 const realpathOrNull = (target: string): string | null => {
   try {
-    return fs.realpathSync(target);
+    return fs.realpathSync.native(target);
   } catch {
     return null;
   }
@@ -151,8 +153,15 @@ export const createTrackFileAllowlist = (
   const resolved = new Map<string, TrackFileResult>();
 
   const load = (): Promise<Map<string, string>> => {
+    // Keyed by real path, so a path asked for in another case still finds its Track.
     recorded ??= loadTrackFilePaths().then(
-      (paths) => new Map(paths.map((filePath) => [localFileKey(filePath, platform), filePath]))
+      (paths) =>
+        new Map(
+          paths.map((filePath) => [
+            localFileKey(realpathOrNull(filePath) ?? filePath, platform),
+            filePath,
+          ])
+        )
     );
     // A failed read is tried again at the next request.
     recorded.catch(() => {
@@ -167,7 +176,8 @@ export const createTrackFileAllowlist = (
       const key = localFileKey(requestedPath, platform);
       const kept = resolved.get(key);
       if (kept) return kept;
-      const trackFile = (await load()).get(key);
+      const realKey = localFileKey(realpathOrNull(requestedPath) ?? requestedPath, platform);
+      const trackFile = (await load()).get(realKey);
       if (!trackFile) return { ok: false, reason: "unknown-track" };
       const result = resolveAudioFile(trackFile);
       if (result.ok) resolved.set(key, result);

@@ -9,6 +9,12 @@ import {
   resolveWithinAllowed,
 } from "./path-confinement";
 
+// Chromium lowercases the host of a standard-scheme URL, so on macOS
+// `local-file://Users/me/a.mp3` arrives as `/users/me/a.mp3`. That still names
+// the file only where the file system ignores case.
+const caseInsensitiveFs = fs.existsSync(os.tmpdir().toUpperCase());
+const testOnCaseInsensitiveFs = caseInsensitiveFs ? test : test.skip;
+
 describe("resolveWithinAllowed", () => {
   let root: string;
   let allowed: string;
@@ -33,6 +39,15 @@ describe("resolveWithinAllowed", () => {
     fs.writeFileSync(p, "data");
     return p;
   };
+
+  testOnCaseInsensitiveFs(
+    "accepts a file asked for in another case and returns its real path",
+    () => {
+      const file = writeFile(allowed, "Video.mp4");
+      const result = resolveWithinAllowed(file.toLowerCase(), [allowed]);
+      expect(result).toEqual({ ok: true, realPath: file });
+    }
+  );
 
   test("accepts a file inside an allowed directory and returns its real path", () => {
     const file = writeFile(allowed, "video.mp4");
@@ -230,6 +245,23 @@ describe("Track file allowlist", () => {
       realPath: file,
       contentType: "audio/mpeg",
     });
+  });
+
+  testOnCaseInsensitiveFs("serves a Track file asked for in another case", async () => {
+    const file = writeFile("Frankl/CD 1/Track 01.mp3");
+    const allowlist = createTrackFileAllowlist(trackFiles(file).load);
+    expect(await allowlist.resolve(file.toLowerCase())).toEqual({
+      ok: true,
+      realPath: file,
+      contentType: "audio/mpeg",
+    });
+  });
+
+  testOnCaseInsensitiveFs("refuses a file next to a Track asked for in another case", async () => {
+    const track = writeFile("Frankl/Track 01.mp3");
+    const other = writeFile("Frankl/Track 02.mp3");
+    const allowlist = createTrackFileAllowlist(trackFiles(track).load);
+    expect(await allowlist.resolve(other.toLowerCase())).toMatchObject({ ok: false });
   });
 
   test("refuses a file that is not a Track, even next to one", async () => {

@@ -63,14 +63,10 @@ export const findTrackFilePath = async (db: Database, trackId: string): Promise<
   return track?.filePath ?? null;
 };
 
-/** True when `filePath` is recorded as the file of a Track of an imported Audiobook. */
-export const isTrackFilePath = async (db: Database, filePath: string): Promise<boolean> => {
-  const [track] = await db
-    .select({ id: audiobookTracks.id })
-    .from(audiobookTracks)
-    .where(eq(audiobookTracks.filePath, filePath))
-    .limit(1);
-  return Boolean(track);
+/** The file of every Track of an imported Audiobook, as recorded. */
+export const listTrackFilePaths = async (db: Database): Promise<string[]> => {
+  const tracks = await db.select({ filePath: audiobookTracks.filePath }).from(audiobookTracks);
+  return tracks.map((track) => track.filePath);
 };
 
 export const findAudiobookCoverPath = async (

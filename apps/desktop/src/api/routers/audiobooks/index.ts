@@ -25,6 +25,7 @@ import {
 } from "@/api/audiobooks/covers";
 import { planRescan } from "@/api/audiobooks/rescan-plan";
 import { recordDesktopListening } from "@/api/audiobooks/listening";
+import { trackFiles } from "@/main/security/track-files";
 import {
   audiobookListeningSchema,
   type AudiobookListening,
@@ -153,6 +154,7 @@ export const audiobooksRouter = t.router({
         ids.push(id);
       }
       previewedListingsByFolder.delete(input.folderPath);
+      trackFiles.tracksChanged();
       return { ids };
     }),
 
@@ -310,6 +312,7 @@ export const audiobooksRouter = t.router({
       }
       await tx.update(audiobooks).set({ updatedAt: Date.now() }).where(eq(audiobooks.id, book.id));
     });
+    trackFiles.tracksChanged();
     // Devices holding a sent book fetch the Tracks it gained.
     if (book.sentToDevices) await notifyDevices();
     return {
@@ -328,6 +331,7 @@ export const audiobooksRouter = t.router({
       await tx.delete(audiobookTracks).where(eq(audiobookTracks.audiobookId, book.id));
       await tx.delete(audiobooks).where(eq(audiobooks.id, book.id));
     });
+    trackFiles.tracksChanged();
     await removeAppCover(book.coverPath, audiobookCoversDir(app.getPath("userData")));
     // Devices remove their mirrored copy of a forgotten sent book.
     if (book.sentToDevices) await notifyDevices();

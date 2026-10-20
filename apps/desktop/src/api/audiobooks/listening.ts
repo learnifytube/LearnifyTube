@@ -50,8 +50,9 @@ export type DesktopListening = { listening: AudiobookListening; announce: boolea
 
 /**
  * The desktop Book player's own Listening position. A kept position from a
- * meaningful moment (pause, Track change, finish) is announced so open phones
- * refresh; periodic saves while playing are kept quietly.
+ * meaningful moment (pause, Track change, finish) of a book sent to Devices is
+ * announced so open phones refresh; periodic saves while playing, and books
+ * Devices don't have, are kept quietly.
  */
 export const recordDesktopListening = async (
   db: Database,
@@ -59,5 +60,11 @@ export const recordDesktopListening = async (
   announceAudiobooksChanged: () => void
 ): Promise<void> => {
   const kept = await recordListening(db, listening);
-  if (kept && announce) announceAudiobooksChanged();
+  if (!kept || !announce) return;
+  const [book] = await db
+    .select({ sentToDevices: audiobooks.sentToDevices })
+    .from(audiobooks)
+    .where(eq(audiobooks.id, listening.audiobookId))
+    .limit(1);
+  if (book?.sentToDevices) announceAudiobooksChanged();
 };

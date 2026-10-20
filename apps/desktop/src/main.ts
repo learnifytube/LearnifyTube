@@ -28,11 +28,11 @@ import { userPreferences } from "./api/db/schema";
 import { isLikelyMdnsTransportError, logMdnsDiagnosticSnapshot } from "./main/mdnsDiagnostics";
 import { parseUserPreferences } from "./lib/types/user-preferences";
 import {
-  resolveAudiobookTrackPath,
+  localFilePath,
   resolveWithinAllowed,
   type ConfinementResult,
 } from "./main/security/path-confinement";
-import { isTrackFilePath } from "./api/audiobooks/catalog";
+import { trackFiles } from "./main/security/track-files";
 import { getAllowedBaseDirs, refreshAllowedBaseDirs } from "./main/security/allowed-dirs";
 
 // Global error handlers to prevent crashes from logging errors
@@ -470,16 +470,14 @@ app.whenReady().then(async () => {
 
       // Confine reads to the download/cache directories so a compromised
       // renderer cannot read arbitrary files (e.g. SSH keys, .secrets.env).
-      const allowed = resolveWithinAllowed(normalizedPath, getAllowedBaseDirs());
-      // Audiobook Tracks live in the user's own folders: each recorded Track file is let through.
-      const track = allowed.ok
-        ? null
-        : await resolveAudiobookTrackPath(normalizedPath, (filePath) =>
-            isTrackFilePath(defaultDb, filePath)
-          );
-      const confinement: ConfinementResult = track?.ok
+      // On Windows `/C:/Books/a.mp3` names `C:\Books\a.mp3`.
+      const requestedPath = localFilePath(normalizedPath);
+      // Audiobook Tracks live in the user's own folders: each recorded Track file is
+      // let through, from memory, so a playing Track's Range requests touch no disk.
+      const track = await trackFiles.resolve(requestedPath);
+      const confinement: ConfinementResult = track.ok
         ? { ok: true, realPath: track.realPath }
-        : allowed;
+        : resolveWithinAllowed(requestedPath, getAllowedBaseDirs());
       if (!confinement.ok) {
         const statusCode = confinement.reason === "not-found" ? 404 : 403;
         logger.error("[protocol] local-file request rejected", {
@@ -515,7 +513,7 @@ app.whenReady().then(async () => {
       // Content-type based on extension with enhanced MP4 handling
       const ext = path.extname(filePath).toLowerCase();
       let contentType: string;
-      if (track?.ok) {
+      if (track.ok) {
         contentType = track.contentType;
       } else if (ext === ".mp4") {
         contentType = "video/mp4";

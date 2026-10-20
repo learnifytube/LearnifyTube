@@ -1,12 +1,25 @@
 import React from "react";
 import { Link } from "@tanstack/react-router";
-import { Pause, Play, RotateCcw, RotateCw, SkipBack, SkipForward } from "lucide-react";
+import {
+  Pause,
+  Play,
+  RefreshCw,
+  Repeat,
+  RotateCcw,
+  RotateCw,
+  SkipBack,
+  SkipForward,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { bookPlayer, useBookPlayerState } from "@/services/book-player";
 import { BookSeekBar } from "./BookSeekBar";
 import { BookSpeedMenu } from "./BookSpeedMenu";
 
 const SKIP_SECONDS = 30;
+
+/** How far toasts sit above the bottom while the bar shows, to clear its controls. */
+export const BOOK_PLAYER_BAR_TOAST_OFFSET = 112;
 
 // What the bar says under the book title.
 const trackLine = (state: ReturnType<typeof useBookPlayerState>): string => {
@@ -20,7 +33,9 @@ const trackLine = (state: ReturnType<typeof useBookPlayerState>): string => {
 
 /**
  * The bar at the bottom of every page while a book is in the Book player:
- * the book, its Track, and the controls. Hidden until the user presses play.
+ * the book, its Track, and the controls. Hidden until the user presses play,
+ * and again once closed. A finished book can be played again, and a Track that
+ * couldn't be played tried again.
  */
 export function BookPlayerBar(): React.JSX.Element | null {
   const state = useBookPlayerState();
@@ -68,9 +83,13 @@ export function BookPlayerBar(): React.JSX.Element | null {
           {control(`Back ${SKIP_SECONDS}s`, <RotateCcw className="h-4 w-4" />, () =>
             bookPlayer.skip(-SKIP_SECONDS)
           )}
-          {state.status === "playing"
-            ? control("Pause", <Pause className="h-5 w-5" />, bookPlayer.pause)
-            : control("Play", <Play className="h-5 w-5" />, bookPlayer.resume)}
+          {state.status === "finished"
+            ? control("Play again", <Repeat className="h-5 w-5" />, bookPlayer.playAgain, false)
+            : state.status === "unavailable"
+              ? control("Try again", <RefreshCw className="h-5 w-5" />, bookPlayer.retry, false)
+              : state.status === "playing"
+                ? control("Pause", <Pause className="h-5 w-5" />, bookPlayer.pause)
+                : control("Play", <Play className="h-5 w-5" />, bookPlayer.resume)}
           {control(`Forward ${SKIP_SECONDS}s`, <RotateCw className="h-4 w-4" />, () =>
             bookPlayer.skip(SKIP_SECONDS)
           )}
@@ -79,8 +98,9 @@ export function BookPlayerBar(): React.JSX.Element | null {
         <BookSeekBar disabled={!active} />
       </div>
 
-      <div className="flex shrink-0 justify-end">
+      <div className="flex shrink-0 items-center justify-end gap-1">
         <BookSpeedMenu />
+        {control("Close the Book player", <X className="h-4 w-4" />, bookPlayer.close, false)}
       </div>
     </div>
   );

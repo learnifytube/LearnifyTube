@@ -3,8 +3,9 @@ import * as os from "os";
 import * as path from "path";
 
 import {
+  createTrackFileAllowlist,
+  localFileKey,
   resolveAudiobookTrackFile,
-  resolveAudiobookTrackPath,
   resolveWithinAllowed,
 } from "./path-confinement";
 
@@ -198,7 +199,7 @@ const writeAudioFile = (dir: string, name: string): string => {
   return p;
 };
 
-describe("resolveAudiobookTrackPath", () => {
+describe("Track file allowlist", () => {
   let root: string;
 
   beforeEach(() => {
@@ -212,35 +213,107 @@ describe("resolveAudiobookTrackPath", () => {
   const writeFile = (name: string): string => writeAudioFile(root, name);
 
   // The Track files of imported Audiobooks, as the database holds them.
-  const trackFiles =
-    (...paths: string[]) =>
-    async (filePath: string): Promise<boolean> =>
-      paths.includes(filePath);
+  const trackFiles = (...paths: string[]) => {
+    const loads = { count: 0 };
+    const load = async (): Promise<string[]> => {
+      loads.count += 1;
+      return paths;
+    };
+    return { loads, load };
+  };
 
   test("serves the file of a Track of an imported Audiobook, wherever its folder is", async () => {
     const file = writeFile("Frankl/CD 1/Track 01.mp3");
-    const result = await resolveAudiobookTrackPath(file, trackFiles(file));
-    expect(result).toEqual({ ok: true, realPath: file, contentType: "audio/mpeg" });
+    const allowlist = createTrackFileAllowlist(trackFiles(file).load);
+    expect(await allowlist.resolve(file)).toEqual({
+      ok: true,
+      realPath: file,
+      contentType: "audio/mpeg",
+    });
   });
 
   test("refuses a file that is not a Track, even next to one", async () => {
     const track = writeFile("Frankl/Track 01.mp3");
     const other = writeFile("Frankl/Track 02.mp3");
-    const result = await resolveAudiobookTrackPath(other, trackFiles(track));
-    expect(result).toEqual({ ok: false, reason: "unknown-track" });
+    const allowlist = createTrackFileAllowlist(trackFiles(track).load);
+    expect(await allowlist.resolve(other)).toEqual({ ok: false, reason: "unknown-track" });
+  });
+
+  test("matches a Track asked for with .. in its path, and nothing beside it", async () => {
+    const track = writeFile("Frankl/Track 01.mp3");
+    writeFile("Frankl/Track 02.mp3");
+    const allowlist = createTrackFileAllowlist(trackFiles(track).load);
+    expect(await allowlist.resolve(path.join(root, "Frankl", "x", "..", "Track 01.mp3"))).toEqual(
+      expect.objectContaining({ ok: true })
+    );
+    expect(await allowlist.resolve(`${track}/../Track 02.mp3`)).toEqual({
+      ok: false,
+      reason: "unknown-track",
+    });
   });
 
   test("returns not-found when the Track's file is gone", async () => {
     const gone = path.join(root, "gone.mp3");
-    const result = await resolveAudiobookTrackPath(gone, trackFiles(gone));
-    expect(result).toEqual({ ok: false, reason: "not-found" });
+    const allowlist = createTrackFileAllowlist(trackFiles(gone).load);
+    expect(await allowlist.resolve(gone)).toEqual({ ok: false, reason: "not-found" });
   });
 
   test("refuses a Track whose file is a symlink to something that is not audio", async () => {
     const notes = writeFile("notes.txt");
     const link = path.join(root, "track.mp3");
     fs.symlinkSync(notes, link);
-    const result = await resolveAudiobookTrackPath(link, trackFiles(link));
-    expect(result).toEqual({ ok: false, reason: "not-audio" });
+    const allowlist = createTrackFileAllowlist(trackFiles(link).load);
+    expect(await allowlist.resolve(link)).toEqual({ ok: false, reason: "not-audio" });
+  });
+
+  test("reads the Track files once, not on every request, until Tracks change", async () => {
+    const file = writeFile("Frankl/Track 01.mp3");
+    const tracks = trackFiles(file);
+    const allowlist = createTrackFileAllowlist(tracks.load);
+
+    await Promise.all([allowlist.resolve(file), allowlist.resolve(file)]);
+    await allowlist.resolve(file);
+    expect(tracks.loads.count).toBe(1);
+
+    allowlist.tracksChanged();
+    await allowlist.resolve(file);
+    expect(tracks.loads.count).toBe(2);
+  });
+
+  test("lets in a Track imported after the first request once Tracks change", async () => {
+    const first = writeFile("Frankl/Track 01.mp3");
+    const later = writeFile("Orwell/1984.mp3");
+    const paths = [first];
+    const allowlist = createTrackFileAllowlist(async () => [...paths]);
+    expect(await allowlist.resolve(later)).toEqual({ ok: false, reason: "unknown-track" });
+
+    paths.push(later);
+    allowlist.tracksChanged();
+
+    expect(await allowlist.resolve(later)).toEqual(expect.objectContaining({ ok: true }));
+  });
+});
+
+describe("localFileKey", () => {
+  test("matches a Windows Track path asked for over local-file:// to the one recorded", () => {
+    expect(localFileKey("/C:/Books/Frankl/a.mp3", "win32")).toBe(
+      localFileKey("C:\\Books\\Frankl\\a.mp3", "win32")
+    );
+    expect(localFileKey("/c:/books/frankl/A.MP3", "win32")).toBe(
+      localFileKey("C:\\Books\\Frankl\\a.mp3", "win32")
+    );
+  });
+
+  test("keeps Windows neighbours and other drives apart", () => {
+    const track = localFileKey("C:\\Books\\Frankl\\a.mp3", "win32");
+    expect(localFileKey("/C:/Books/Frankl/b.mp3", "win32")).not.toBe(track);
+    expect(localFileKey("/D:/Books/Frankl/a.mp3", "win32")).not.toBe(track);
+  });
+
+  test("is case-sensitive and resolves .. on macOS and Linux", () => {
+    expect(localFileKey("/books/Frankl/x/../a.mp3", "darwin")).toBe("/books/Frankl/a.mp3");
+    expect(localFileKey("/books/frankl/a.mp3", "linux")).not.toBe(
+      localFileKey("/books/Frankl/a.mp3", "linux")
+    );
   });
 });

@@ -5,6 +5,8 @@ import { Outlet, createRootRoute, useMatches } from "@tanstack/react-router";
 import { analytics } from "@/helpers/analytics";
 import { logger } from "@/helpers/logger";
 import { Toaster } from "sonner";
+import { useBookPlayerState } from "@/services/book-player";
+import { BOOK_PLAYER_BAR_TOAST_OFFSET } from "@/components/book-player/BookPlayerBar";
 
 export const RootRoute = createRootRoute({
   component: Root,
@@ -55,6 +57,9 @@ export const RootRoute = createRootRoute({
 function Root(): React.JSX.Element {
   const matches = useMatches();
   const isFullScreenRoute = matches.some((match) => match.pathname === "/raining-letters");
+  const bookPlayerState = useBookPlayerState();
+  // Toasts rise above the Book player bar while it shows, clear of its controls.
+  const bookPlayerBarShown = !isFullScreenRoute && bookPlayerState.status !== "idle";
   const previousPathRef = useRef<string | null>(null);
 
   // Navigation trace: log every route change with from -> to
@@ -94,7 +99,7 @@ function Root(): React.JSX.Element {
           <Outlet />
         </BaseLayout>
       )}
-      <Toaster />
+      <Toaster offset={bookPlayerBarShown ? { bottom: BOOK_PLAYER_BAR_TOAST_OFFSET } : undefined} />
     </>
   );
 }

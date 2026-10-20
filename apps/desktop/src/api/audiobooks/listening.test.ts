@@ -124,6 +124,7 @@ describe("Recording the desktop's own Listening position", () => {
   };
   beforeEach(async () => {
     db = await createDb();
+    await db.update(schema.audiobooks).set({ sentToDevices: true });
     announced = 0;
   });
 
@@ -136,6 +137,15 @@ describe("Recording the desktop's own Listening position", () => {
       updatedAt: 1_000,
     });
     expect(announced).toBe(1);
+  });
+
+  it("keeps the position of a book not sent to Devices quietly", async () => {
+    await db.update(schema.audiobooks).set({ sentToDevices: false });
+
+    await recordDesktopListening(db, { listening: listening(), announce: true }, announce);
+
+    expect((await frankl(db)).listeningPosition?.updatedAt).toBe(1_000);
+    expect(announced).toBe(0);
   });
 
   it("keeps a periodic position quietly", async () => {

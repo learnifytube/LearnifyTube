@@ -105,19 +105,79 @@ export const resolveAudiobookTrackFile = async (
 };
 
 /**
- * Decide whether a path asked for over `local-file://` is an Audiobook Track's
+ * The form of a local file path two paths are compared in. A Windows path asked
+ * for over `local-file://` arrives as `/C:/Books/a.mp3` and is recorded as
+ * `C:\\Books\\a.mp3`, with any drive-letter and name case: both resolve to one
+ * key. Elsewhere paths are resolved and compared case-sensitively.
+ */
+export const localFileKey = (filePath: string, platform: string = process.platform): string => {
+  if (platform !== "win32") return path.posix.resolve(filePath);
+  const withoutLeadingSlash = filePath.replace(/^[\\/]+(?=[a-zA-Z]:)/, "");
+  return path.win32.resolve(withoutLeadingSlash).toLowerCase();
+};
+
+/**
+ * The local file path a path asked for over `local-file://` names: on Windows
+ * `/C:/Books/a.mp3` is `C:\\Books\\a.mp3`.
+ */
+export const localFilePath = (
+  requestedPath: string,
+  platform: string = process.platform
+): string =>
+  platform === "win32" ? requestedPath.replace(/^[\\/]+(?=[a-zA-Z]:)/, "") : requestedPath;
+
+export type TrackFileAllowlist = {
+  resolve: (requestedPath: string) => Promise<TrackFileResult>;
+  /** Tracks were added, moved or removed: read the recorded files again. */
+  tracksChanged: () => void;
+};
+
+/**
+ * Decides whether a path asked for over `local-file://` is an Audiobook Track's
  * file the desktop may play: only a path recorded for a Track of an imported
  * Audiobook (so a neighbouring file stays out of reach), and only when it is a
  * regular audio file once symlinks are resolved.
+ *
+ * The recorded Track files are read once and kept, and each Track's resolved
+ * file is kept once found, so the Range requests of a playing Track do no
+ * database query or realpath. Call `tracksChanged` when Tracks are added,
+ * moved or removed.
  */
-export const resolveAudiobookTrackPath = async (
-  requestedPath: string,
-  isTrackFilePath: (filePath: string) => Promise<boolean>
-): Promise<TrackFileResult> => {
-  if (!requestedPath || !(await isTrackFilePath(requestedPath))) {
-    return { ok: false, reason: "unknown-track" };
-  }
-  return resolveAudioFile(requestedPath);
+export const createTrackFileAllowlist = (
+  loadTrackFilePaths: () => Promise<string[]>,
+  platform: string = process.platform
+): TrackFileAllowlist => {
+  let recorded: Promise<Map<string, string>> | null = null;
+  const resolved = new Map<string, TrackFileResult>();
+
+  const load = (): Promise<Map<string, string>> => {
+    recorded ??= loadTrackFilePaths().then(
+      (paths) => new Map(paths.map((filePath) => [localFileKey(filePath, platform), filePath]))
+    );
+    // A failed read is tried again at the next request.
+    recorded.catch(() => {
+      recorded = null;
+    });
+    return recorded;
+  };
+
+  return {
+    resolve: async (requestedPath: string): Promise<TrackFileResult> => {
+      if (!requestedPath) return { ok: false, reason: "unknown-track" };
+      const key = localFileKey(requestedPath, platform);
+      const kept = resolved.get(key);
+      if (kept) return kept;
+      const trackFile = (await load()).get(key);
+      if (!trackFile) return { ok: false, reason: "unknown-track" };
+      const result = resolveAudioFile(trackFile);
+      if (result.ok) resolved.set(key, result);
+      return result;
+    },
+    tracksChanged: (): void => {
+      recorded = null;
+      resolved.clear();
+    },
+  };
 };
 
 const resolveAudioFile = (recorded: string): TrackFileResult => {

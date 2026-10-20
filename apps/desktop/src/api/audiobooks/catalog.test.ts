@@ -7,7 +7,7 @@ import { audiobookCatalogSchema } from "../../../../shared/mobile-sync-contract"
 import {
   findAudiobookCoverPath,
   findTrackFilePath,
-  isTrackFilePath,
+  listTrackFilePaths,
   loadAudiobookCatalog,
 } from "./catalog";
 
@@ -125,11 +125,13 @@ describe("Audiobook catalog", () => {
     expect(await findAudiobookCoverPath(db, "nope")).toBeNull();
   });
 
-  it("tells a Track's file from any other file", async () => {
+  it("lists the file of every Track, and no other file", async () => {
     await addFrankl(db);
 
-    expect(await isTrackFilePath(db, "/books/Frankl/CD 1/Track 02.mp3")).toBe(true);
-    expect(await isTrackFilePath(db, "/books/Frankl/CD 1/cover.jpg")).toBe(false);
-    expect(await isTrackFilePath(db, "t2")).toBe(false);
+    expect((await listTrackFilePaths(db)).sort()).toEqual([
+      "/books/Frankl/CD 1/Track 01.mp3",
+      "/books/Frankl/CD 1/Track 02.mp3",
+      "/books/Frankl/CD 3/Track 1.mp3",
+    ]);
   });
 });

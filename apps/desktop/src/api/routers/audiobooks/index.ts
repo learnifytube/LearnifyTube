@@ -23,6 +23,10 @@ import {
   saveCoverFromImage,
 } from "@/api/audiobooks/covers";
 import { planRescan } from "@/api/audiobooks/rescan-plan";
+import {
+  devicesHoldingAudiobook,
+  setAudiobookSentToDevices,
+} from "@/api/audiobooks/send-to-devices";
 
 const importModeSchema = z.enum(["one-book", "each-subfolder"]);
 
@@ -43,6 +47,16 @@ const listingFor = async (folderPath: string): Promise<FolderListing> => {
   const listing = await scanFolder(folderPath);
   listings.set(folderPath, listing);
   return listing;
+};
+
+// Tells connected Devices to Mirror the sent Audiobooks now (over SSE).
+const notifyDevices = async (): Promise<void> => {
+  try {
+    const { getMobileSyncServer } = await import("@/main/mobileSyncServer");
+    getMobileSyncServer().broadcastAudiobooksChanged();
+  } catch {
+    // The sync server isn't running here; Devices pick it up at their next sync.
+  }
 };
 
 export const audiobooksRouter = t.router({
@@ -290,6 +304,8 @@ export const audiobooksRouter = t.router({
       }
       await tx.update(audiobooks).set({ updatedAt: Date.now() }).where(eq(audiobooks.id, book.id));
     });
+    // Devices holding a sent book fetch the Tracks it gained.
+    if (book.sentToDevices) await notifyDevices();
     return {
       added: plan.tracks.filter((track) => track.kind === "new").length,
       missing: plan.tracks.filter((track) => track.kind === "existing" && track.missing).length,
@@ -307,5 +323,19 @@ export const audiobooksRouter = t.router({
       await tx.delete(audiobooks).where(eq(audiobooks.id, book.id));
     });
     await removeAppCover(book.coverPath, audiobookCoversDir(app.getPath("userData")));
+    // Devices remove their mirrored copy of a forgotten sent book.
+    if (book.sentToDevices) await notifyDevices();
   }),
+
+  // Send to Devices / Remove from Devices, always the whole Audiobook.
+  setSentToDevices: publicProcedure
+    .input(z.object({ id: z.string(), sent: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      const changed = await setAudiobookSentToDevices(ctx.db ?? defaultDb, input.id, input.sent);
+      if (changed) await notifyDevices();
+    }),
+
+  devicesHolding: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(({ input, ctx }) => devicesHoldingAudiobook(ctx.db ?? defaultDb, input.id)),
 });

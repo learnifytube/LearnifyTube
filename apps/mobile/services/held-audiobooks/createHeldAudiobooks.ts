@@ -259,6 +259,13 @@ export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
     refresh,
     /** The book's hold on this phone, or null when it holds none of it. */
     getHold: (bookId: string) => holds.get(bookId) ?? null,
+    /** Every hold by book id as it stands now. */
+    getHolds: () => holds,
+    /** Every hold by book id, once the saved holds have loaded. */
+    allHolds: async () => {
+      await ready;
+      return holds;
+    },
     /** The Track's file on this phone when it is there and reachable, else null. */
     trackUri,
     subscribe,

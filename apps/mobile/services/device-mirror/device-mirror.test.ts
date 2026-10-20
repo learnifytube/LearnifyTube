@@ -85,6 +85,9 @@ function createHarness({
     thumbnails: new Set<string>(),
     thumbnailFailures: new Set<string>(),
     savedSet: null as string[] | null,
+    audiobookMirrors: [] as string[],
+    audiobookMirrorFails: false,
+    heldAudiobookIds: [] as string[],
   };
   const platform: DeviceMirrorPlatform = {
     getServerUrl: () => state.serverUrl,
@@ -137,6 +140,14 @@ function createHarness({
     saveOnDeviceSet: (videos) => {
       state.savedSet = videos.map((video) => video.id);
     },
+    audiobooks: {
+      mirror: async (serverUrl) => {
+        if (state.audiobookMirrorFails)
+          throw new Error("Catalog request failed");
+        state.audiobookMirrors.push(serverUrl);
+      },
+      heldIds: async () => state.heldAudiobookIds,
+    },
   };
   return { state, mirror: createDeviceMirror(platform) };
 }
@@ -188,6 +199,7 @@ describe("device mirror", () => {
 
   it("reports what the Device holds, its watch progress and Listening positions", async () => {
     const { state, mirror } = createHarness({ set: [], library: ["x"] });
+    state.heldAudiobookIds = ["orwell"];
     await mirror.syncNow();
     expect(state.reports).toEqual([
       {
@@ -205,8 +217,23 @@ describe("device mirror", () => {
             finished: false,
           },
         ],
+        heldAudiobookIds: ["orwell"],
       },
     ]);
+  });
+
+  it("Mirrors the sent Audiobooks on every sync", async () => {
+    const { state, mirror } = createHarness({ set: [] });
+    await mirror.syncNow();
+    expect(state.audiobookMirrors).toEqual([SERVER]);
+  });
+
+  it("still Mirrors Videos and reports when the Audiobook Mirror fails", async () => {
+    const { state, mirror } = createHarness({ set: ["a"] });
+    state.audiobookMirrorFails = true;
+    await mirror.syncNow();
+    expect(state.requested).toEqual(["a"]);
+    expect(state.reports).toHaveLength(1);
   });
 
   it("stores missing thumbnails for Videos in the set the Device already holds", async () => {
@@ -272,6 +299,11 @@ describe("device mirror", () => {
       // Allow async syncNow promise to finish
       await new Promise((resolve) => setTimeout(resolve, 10));
       expect(state.requested).toEqual(["a"]);
+
+      const mirrorsBefore = state.audiobookMirrors.length;
+      listeners["sync:audiobooks"]?.();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(state.audiobookMirrors).toHaveLength(mirrorsBefore + 1);
       stop();
     } finally {
       globalThis.EventSource = originalEventSource;

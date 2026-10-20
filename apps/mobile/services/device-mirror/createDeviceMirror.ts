@@ -1,6 +1,8 @@
-import type {
-  DeviceReport,
-  OnDeviceSet,
+import {
+  SYNC_SSE_EVENT_AUDIOBOOKS,
+  SYNC_SSE_EVENT_ON_DEVICE_SET,
+  type DeviceReport,
+  type OnDeviceSet,
 } from "../../../shared/mobile-sync-contract";
 
 type SetVideo = OnDeviceSet["videos"][number];
@@ -40,6 +42,12 @@ export type DeviceMirrorPlatform = {
   /** Keeps the latest On-device set, which the TV shows as "Sent to this TV" in Offline mode too. */
   saveOnDeviceSet: (videos: SetVideo[]) => void;
   getEventsUrl?: (serverUrl: string) => string;
+  /** The Audiobook Mirror (`createAudiobookMirror`); a TV holds no Audiobooks. */
+  audiobooks: {
+    mirror: (serverUrl: string) => Promise<void>;
+    /** Audiobooks wholly on this Device. */
+    heldIds: () => Promise<string[]>;
+  };
 };
 
 const SYNC_INTERVAL_MS = 2 * 60_000;
@@ -101,6 +109,11 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
     }
     await platform.saveMirroredIds(plan.mirroredIds);
 
+    // A failing Audiobook Mirror never holds up the Videos' report.
+    await platform.audiobooks.mirror(serverUrl).catch((error) => {
+      console.warn("[DeviceMirror] Audiobook Mirror failed", error);
+    });
+
     await platform.desktop.report(serverUrl, {
       deviceId: await platform.device.getId(),
       name: platform.device.name,
@@ -108,6 +121,7 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
       offlineVideoIds: platform.getLibraryVideoIds(),
       watch: platform.getWatchProgress(),
       listening: platform.getListening(),
+      heldAudiobookIds: await platform.audiobooks.heldIds(),
     });
 
     // Videos held from before thumbnails were stored with Offline copies;
@@ -169,9 +183,14 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
             : `${serverUrl}/api/events`;
           const es = new EventSource(eventsUrl);
           eventSource = es;
-          es.addEventListener("sync:on-device-set", () => {
-            void syncNow();
-          });
+          for (const event of [
+            SYNC_SSE_EVENT_ON_DEVICE_SET,
+            SYNC_SSE_EVENT_AUDIOBOOKS,
+          ]) {
+            es.addEventListener(event, () => {
+              void syncNow();
+            });
+          }
           es.onerror = () => {
             // Falls back safely to normal interval polling
           };

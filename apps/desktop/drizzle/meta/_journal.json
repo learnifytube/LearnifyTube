@@ -141,6 +141,13 @@
       "when": 1792427469446,
       "tag": "0019_audiobooks",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1792455501775,
+      "tag": "0020_device_audiobooks",
+      "breakpoints": true
     }
   ]
 }

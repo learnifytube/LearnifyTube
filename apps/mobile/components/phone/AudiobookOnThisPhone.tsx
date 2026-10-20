@@ -16,11 +16,17 @@ export function AudiobookOnThisPhone({
   const playerState = useBookPlayerState();
   if (!hold) return null;
 
+  // Brought by the Audiobook Mirror: the desktop decides whether it stays.
+  const sent = hold.reasons.includes("mirrored");
+
   const playingThis =
     playerState.status !== "idle" && playerState.book.id === bookId;
 
   const confirmRemove = () => {
-    Alert.alert("Remove from this phone?", `${title} stays on the desktop.`, [
+    const message = sent
+      ? `${title} stays on the desktop. It was sent to Devices, so it comes back at the next sync unless it is removed from Devices on the desktop.`
+      : `${title} stays on the desktop.`;
+    Alert.alert("Remove from this phone?", message, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
@@ -39,6 +45,7 @@ export function AudiobookOnThisPhone({
         {hold.complete
           ? "On this phone"
           : `Getting it onto this phone: ${hold.heldTracks} of ${hold.totalTracks} Tracks`}
+        {sent ? " · Sent from the desktop" : ""}
       </Text>
       <Pressable
         testID="audiobook-remove-from-phone"

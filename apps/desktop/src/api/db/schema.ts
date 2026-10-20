@@ -601,6 +601,8 @@ export const syncDevices = sqliteTable("sync_devices", {
   name: text("name").notNull(),
   kind: text("kind", { enum: ["phone", "tv"] }).notNull(),
   offlineVideoIdsJson: text("offline_video_ids_json").notNull(),
+  // Audiobooks wholly on the Device, as it last reported (ADR-0004: never Videos).
+  heldAudiobookIdsJson: text("held_audiobook_ids_json").notNull().default("[]"),
   lastSeenAt: integer("last_seen_at").notNull(),
 });
 

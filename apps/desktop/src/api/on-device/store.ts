@@ -114,6 +114,8 @@ export const recordDeviceReport = async (
     name: report.name,
     kind: report.kind,
     offlineVideoIdsJson: JSON.stringify(report.offlineVideoIds),
+    // Devices older than Audiobooks don't say; they hold none.
+    heldAudiobookIdsJson: JSON.stringify(report.heldAudiobookIds ?? []),
     lastSeenAt: now,
   };
   await db

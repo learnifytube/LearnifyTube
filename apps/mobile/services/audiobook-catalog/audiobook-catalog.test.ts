@@ -44,6 +44,19 @@ describe("Audiobook catalog", () => {
     expect(requested).toEqual([]);
   });
 
+  it("tells a desktop too old to serve Audiobooks from one serving none", async () => {
+    expect(
+      await createHarness({ syncProtocolVersion: 2 }).catalog.served(
+        "http://desktop",
+      ),
+    ).toBeNull();
+    expect(
+      await createHarness({ payload: { audiobooks: [] } }).catalog.served(
+        "http://desktop",
+      ),
+    ).toEqual([]);
+  });
+
   it("rejects a catalog that doesn't match the sync contract", async () => {
     const { catalog } = createHarness({
       payload: { audiobooks: [{ ...frankl, tracks: [{ id: "t1" }] }] },

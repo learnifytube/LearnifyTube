@@ -1,0 +1,1 @@
+ALTER TABLE `sync_devices` ADD `held_audiobook_ids_json` text DEFAULT '[]' NOT NULL;

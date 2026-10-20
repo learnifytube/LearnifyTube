@@ -71,12 +71,16 @@ export const deviceReportSchema = z.object({
   ),
   /** Listening positions kept on the Device; absent from Devices older than Audiobooks. */
   listening: z.array(audiobookListeningSchema).optional(),
+  /** Audiobooks wholly on the Device (every Track that isn't missing); absent from older Devices. */
+  heldAudiobookIds: z.array(z.string()).optional(),
 });
 
 export type DeviceReport = z.infer<typeof deviceReportSchema>;
 
 /** Server-Sent Events emitted by GET /api/events */
 export const SYNC_SSE_EVENT_ON_DEVICE_SET = "sync:on-device-set";
+/** The Audiobooks sent to Devices changed (sent, removed from Devices, forgotten or rescanned). */
+export const SYNC_SSE_EVENT_AUDIOBOOKS = "sync:audiobooks";
 
 /** One audio file of an Audiobook. Its file is GET /api/audiobook-track/:id/file. */
 export const audiobookTrackSchema = z.object({

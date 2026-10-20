@@ -33,6 +33,7 @@ import { createPairingStore, type PairingStore } from "./security/pairing-store"
 import {
   MOBILE_SYNC_PROTOCOL_VERSION,
   MIN_SUPPORTED_MOBILE_SYNC_PROTOCOL_VERSION,
+  SYNC_SSE_EVENT_AUDIOBOOKS,
   SYNC_SSE_EVENT_ON_DEVICE_SET,
   type SyncServerInfo,
   type OnDeviceSet,
@@ -240,6 +241,7 @@ type MobileSyncServer = {
   isRunning: () => boolean;
   getConnectedDevices: () => ConnectedDevice[];
   broadcastOnDeviceSetChanged: () => void;
+  broadcastAudiobooksChanged: () => void;
 };
 
 /**
@@ -371,13 +373,18 @@ const createMobileSyncServer = (): MobileSyncServer => {
   // Active SSE client connections
   const sseClients = new Set<http.ServerResponse>();
 
-  const broadcastOnDeviceSetChanged = (): void => {
-    logger.info(`[MobileSyncServer] Broadcasting ${SYNC_SSE_EVENT_ON_DEVICE_SET} to ${sseClients.size} clients`);
-    const message = `event: ${SYNC_SSE_EVENT_ON_DEVICE_SET}\ndata: {}\n\n`;
+  const broadcast = (event: string): void => {
+    logger.info(`[MobileSyncServer] Broadcasting ${event} to ${sseClients.size} clients`);
+    const message = `event: ${event}\ndata: {}\n\n`;
     for (const client of sseClients) {
       client.write(message);
     }
   };
+
+  const broadcastOnDeviceSetChanged = (): void => broadcast(SYNC_SSE_EVENT_ON_DEVICE_SET);
+
+  // Devices Mirror the sent Audiobooks again (ADR-0003).
+  const broadcastAudiobooksChanged = (): void => broadcast(SYNC_SSE_EVENT_AUDIOBOOKS);
 
   const handleEventsStream = (res: http.ServerResponse): void => {
     res.writeHead(200, {
@@ -2849,6 +2856,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
     isRunning,
     getConnectedDevices,
     broadcastOnDeviceSetChanged,
+    broadcastAudiobooksChanged,
   };
 };
 

@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { AudiobookCover } from "./components/AudiobookCover";
+import { AudiobookOnDevices } from "./components/AudiobookOnDevices";
 import { EditAudiobookDialog } from "./components/EditAudiobookDialog";
 import { SortableTrackList } from "./components/SortableTrackList";
 import { formatListeningTime } from "./format";
@@ -137,6 +138,8 @@ export default function AudiobookPage(): React.JSX.Element {
               </Button>
             </div>
 
+            <AudiobookOnDevices id={book.id} sentToDevices={book.sentToDevices} />
+
             <h2 className="mt-6 text-sm font-semibold">{book.tracks.length} Tracks</h2>
             <p className="text-xs text-muted-foreground">Drag to change the Track order.</p>
             <SortableTrackList
@@ -173,6 +176,8 @@ export default function AudiobookPage(): React.JSX.Element {
             <AlertDialogDescription>
               It is removed from LearnifyTube only. Your audio files stay where they are, untouched;
               you can Import the folder again any time.
+              {book?.sentToDevices &&
+                " Devices it was sent to remove their copy, unless it was played there."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

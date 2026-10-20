@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpcClient } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
@@ -84,14 +84,6 @@ export default function AudiobookPage(): React.JSX.Element {
 
   return (
     <PageContainer>
-      <Link
-        to="/audiobooks"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Audiobooks
-      </Link>
-
       {bookQuery.isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}
       {!bookQuery.isLoading && !book && (
         <p className="text-sm text-muted-foreground">This Audiobook is no longer here.</p>

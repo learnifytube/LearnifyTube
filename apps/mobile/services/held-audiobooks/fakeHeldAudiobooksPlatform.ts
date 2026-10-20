@@ -24,9 +24,11 @@ export function createFakeHeldAudiobooksPlatform({
   // Tracks a fetch was cut short on, with what it left on the phone.
   const partials = new Set<string>();
   const resumed: string[] = [];
+  let coversFetched = 0;
   let records: HeldBookRecord[] = JSON.parse(JSON.stringify(storedRecords));
   for (const record of records) {
     for (const uri of Object.values(record.trackUris)) files.add(uri);
+    if (record.cover) files.add(record.cover.uri);
   }
 
   const changeConditions = () => {
@@ -58,6 +60,15 @@ export function createFakeHeldAudiobooksPlatform({
       const uri = `file://storage/${bookId}/${trackId}`;
       files.add(uri);
       fetched.push(`${bookId}/${trackId}`);
+      return uri;
+    },
+    fetchCover: async (fromUrl, bookId) => {
+      if (conditions.serverUrl !== fromUrl) {
+        throw new Error("The desktop couldn't serve this cover");
+      }
+      coversFetched += 1;
+      const uri = `file://covers/${bookId}-${coversFetched}`;
+      files.add(uri);
       return uri;
     },
     exists: async (uri) => files.has(uri),

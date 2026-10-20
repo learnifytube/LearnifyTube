@@ -3,7 +3,6 @@ import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { audiobookCatalog } from "../../services/audiobook-catalog";
 import { heldAudiobooks } from "../../services/held-audiobooks";
-import { resolveRemoteAssetUrl } from "../../services/browseCache";
 import { continueListening } from "../../services/listening-position/listeningPosition";
 import { useAudiobookCatalogStore } from "../../stores/audiobookCatalog";
 import { useListeningPositionsStore } from "../../stores/listeningPositions";
@@ -151,11 +150,8 @@ function AudiobookShelf({
           >
             <View>
               <AudiobookCover
-                uri={
-                  serverUrl
-                    ? resolveRemoteAssetUrl(serverUrl, book.coverUrl)
-                    : null
-                }
+                book={book}
+                serverUrl={serverUrl}
                 size={COVER_SIZE}
               />
               {needsDesktop ? null : (

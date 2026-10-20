@@ -5,7 +5,7 @@ import {
   type AudioPlayer,
 } from "expo-audio";
 import { api } from "../api";
-import { resolveRemoteAssetUrl } from "../remoteAssetUrl";
+import { localFirstCoverUri } from "../held-audiobooks/localFirstCoverUri";
 import { useConnectionStore } from "../../stores/connection";
 import { heldAudiobooks } from "../held-audiobooks";
 import type { Audiobook } from "../../../shared/mobile-sync-contract";
@@ -85,7 +85,12 @@ const showOnLockScreen = (player: AudioPlayer, nowPlaying: NowPlaying) => {
     artist: nowPlaying.author ?? nowPlaying.bookTitle,
     albumTitle: nowPlaying.bookTitle,
     artworkUrl:
-      resolveRemoteAssetUrl(serverUrl, nowPlaying.coverUrl) ?? undefined,
+      localFirstCoverUri({
+        heldCoverUri:
+          heldAudiobooks.getHold(nowPlaying.bookId)?.coverUri ?? null,
+        serverUrl,
+        coverUrl: nowPlaying.coverUrl,
+      }) ?? undefined,
   };
   if (lockScreenActive) {
     player.updateLockScreenMetadata(metadata);

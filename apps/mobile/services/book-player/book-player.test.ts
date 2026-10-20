@@ -34,6 +34,7 @@ describe("Book player", () => {
       uri: "stream://cd1-01",
       startAt: 0,
       nowPlaying: {
+        bookId: "frankl",
         bookTitle: "Man's Search for Meaning",
         trackTitle: "Track cd1-01",
         author: "Viktor Frankl",

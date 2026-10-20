@@ -6,7 +6,6 @@ import {
   useBookPlayerState,
   useBookSpeed,
 } from "../../services/book-player";
-import { resolveRemoteAssetUrl } from "../../services/browseCache";
 import { useConnectionStore } from "../../stores/connection";
 import { AudiobookCover } from "../../components/phone/AudiobookCover";
 import { colors, fontSize, fontWeight, radius, spacing } from "../../theme";
@@ -49,12 +48,7 @@ export default function BookPlayerScreen() {
     <SafeAreaView style={styles.container}>
       <BackButton />
       <View style={styles.body}>
-        <AudiobookCover
-          uri={
-            serverUrl ? resolveRemoteAssetUrl(serverUrl, book.coverUrl) : null
-          }
-          size={COVER_SIZE}
-        />
+        <AudiobookCover book={book} serverUrl={serverUrl} size={COVER_SIZE} />
         <Text style={styles.title} numberOfLines={2}>
           {book.title}
         </Text>

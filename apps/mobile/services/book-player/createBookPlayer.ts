@@ -8,6 +8,7 @@ export type BookTrack = Book["tracks"][number];
 
 /** What the lock screen and notification show for the Track playing. */
 export type NowPlaying = {
+  bookId: string;
   bookTitle: string;
   trackTitle: string;
   author: string | null;
@@ -145,6 +146,7 @@ export function createBookPlayer(
     }
     watchLoading(mine);
     platform.load(uri, startAt, {
+      bookId: book.id,
       bookTitle: book.title,
       trackTitle: track.title,
       author: book.author,

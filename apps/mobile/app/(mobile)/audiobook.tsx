@@ -2,7 +2,6 @@ import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { bookPlayer, useBookPlayerState } from "../../services/book-player";
-import { resolveRemoteAssetUrl } from "../../services/browseCache";
 import { currentListening } from "../../services/listening-position/listeningPosition";
 import { useAudiobookItems } from "../../components/phone/AudiobooksRow";
 import { AudiobookOnThisPhone } from "../../components/phone/AudiobookOnThisPhone";
@@ -72,11 +71,8 @@ export default function AudiobookScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             <AudiobookCover
-              uri={
-                serverUrl
-                  ? resolveRemoteAssetUrl(serverUrl, book.coverUrl)
-                  : null
-              }
+              book={book}
+              serverUrl={serverUrl}
               size={COVER_SIZE}
             />
             <View style={styles.headerText}>

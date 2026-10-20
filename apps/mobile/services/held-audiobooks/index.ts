@@ -2,6 +2,7 @@ import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystemLegacy from "expo-file-system/legacy";
 import { api } from "../api";
+import { resolveRemoteAssetUrl } from "../remoteAssetUrl";
 import { getVideoStorageLocation } from "../storage-location";
 import {
   documentsDir,
@@ -20,6 +21,9 @@ import {
 
 const STORAGE_KEY = "learnify-held-audiobooks";
 const AUDIOBOOKS_DIR = "audiobooks";
+// Covers stay in the app's own storage, whatever the Storage location: the
+// lock screen loads artwork through java.net.URL, which can't read content://.
+const COVERS_DIR = "audiobook-covers";
 
 const saf = FileSystemLegacy.StorageAccessFramework;
 const parentUri = (uri: string) => {
@@ -149,6 +153,21 @@ const platform: HeldAudiobooksPlatform = {
       await remove(tempUri).catch(() => {});
       throw error;
     }
+  },
+  fetchCover: async (serverUrl, bookId, coverUrl) => {
+    const url = resolveRemoteAssetUrl(serverUrl, coverUrl);
+    if (!url) throw new Error("The book has no cover URL");
+    // A new name for each cover, so screens caching images by URI show the new one.
+    const dest = joinUri(
+      await ensureDir(documentsDir(), COVERS_DIR),
+      `${bookId}-${Date.now()}`,
+    );
+    const result = await FileSystemLegacy.downloadAsync(url, dest);
+    if (result.status !== 200) {
+      await remove(dest).catch(() => {});
+      throw new Error(`Cover fetch failed: ${result.status}`);
+    }
+    return dest;
   },
   exists: fileExists,
   discardPartial: async (trackId) => remove(await partialUri(trackId)),

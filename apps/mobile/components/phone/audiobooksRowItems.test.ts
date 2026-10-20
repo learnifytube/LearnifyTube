@@ -19,6 +19,7 @@ const hold = (b: Audiobook, complete: boolean): Hold => ({
   heldTracks: complete ? 1 : 0,
   totalTracks: 1,
   complete,
+  coverUri: null,
 });
 
 const frankl = book("frankl");

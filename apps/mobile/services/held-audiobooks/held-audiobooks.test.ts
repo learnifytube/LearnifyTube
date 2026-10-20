@@ -266,6 +266,55 @@ describe("Held Audiobooks", () => {
     expect(fake.fetched()).toEqual(["orwell/book"]);
   });
 
+  it("stores a held book's cover on the phone, and deletes it with the book", async () => {
+    const { fake, held } = createHarness();
+    const covered = { ...orwell, coverUrl: "http://desktop/cover/orwell?v=1" };
+
+    held.pull(covered);
+    await held.idle();
+
+    const coverUri = held.getHold("orwell")?.coverUri;
+    expect(coverUri).toBe("file://covers/orwell-1");
+    expect(fake.files()).toContain(coverUri);
+
+    await held.remove("orwell");
+    expect(fake.files()).toEqual([]);
+  });
+
+  it("keeps the cover in step with the desktop's", async () => {
+    const { fake, held } = createHarness();
+    held.pull({ ...orwell, coverUrl: "http://desktop/cover/orwell?v=1" });
+    await held.idle();
+
+    held.refresh([{ ...orwell, coverUrl: "http://desktop/cover/orwell?v=2" }]);
+    await held.idle();
+    expect(held.getHold("orwell")?.coverUri).toBe("file://covers/orwell-2");
+    expect(fake.files()).not.toContain("file://covers/orwell-1");
+
+    held.refresh([{ ...orwell, coverUrl: null }]);
+    await held.idle();
+    expect(held.getHold("orwell")?.coverUri).toBeNull();
+    expect(fake.files()).not.toContain("file://covers/orwell-2");
+  });
+
+  it("keeps the stored cover while the desktop is away", async () => {
+    const fake = createFakeHeldAudiobooksPlatform({
+      serverUrl: "http://desktop",
+    });
+    const first = createHarness(fake);
+    first.held.pull({ ...orwell, coverUrl: "http://desktop/cover/orwell?v=1" });
+    await first.held.idle();
+    first.stop();
+
+    fake.setServerUrl(null);
+    const restarted = createHarness(fake);
+    await restarted.held.idle();
+
+    expect(restarted.held.getHold("orwell")?.coverUri).toBe(
+      "file://covers/orwell-1",
+    );
+  });
+
   it("fetches Tracks a Rescan added to a held book", async () => {
     const { fake, held } = createHarness();
     held.pull(orwell);

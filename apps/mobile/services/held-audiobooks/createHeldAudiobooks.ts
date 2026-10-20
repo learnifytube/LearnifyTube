@@ -13,6 +13,8 @@ export type HeldBookRecord = {
   reasons: HoldReason[];
   /** The file on the phone of each Track fetched so far, by Track id. */
   trackUris: Record<string, string>;
+  /** The book's cover on the phone, and the desktop cover URL it came from. */
+  cover?: { uri: string; from: string };
   heldAt: number;
 };
 
@@ -24,6 +26,8 @@ export type Hold = {
   totalTracks: number;
   /** Every Track that isn't missing is on the phone: the book plays offline. */
   complete: boolean;
+  /** The book's cover on the phone (a file:// URI), or null when none is stored. */
+  coverUri: string | null;
 };
 
 export type HeldAudiobooksPlatform = {
@@ -42,12 +46,27 @@ export type HeldAudiobooksPlatform = {
     signal: AbortSignal,
   ) => Promise<string>;
   exists: (uri: string) => Promise<boolean>;
+  /**
+   * Fetches the book's cover from the desktop into the app's own storage (a
+   * file:// URI, which the lock screen can load too); returns its URI.
+   */
+  fetchCover: (
+    serverUrl: string,
+    bookId: string,
+    coverUrl: string,
+    signal: AbortSignal,
+  ) => Promise<string>;
   /** Deletes what a cut-short fetch of the Track left on the phone. */
   discardPartial: (trackId: string) => Promise<void>;
   remove: (uri: string) => Promise<void>;
   loadRecords: () => Promise<HeldBookRecord[]>;
   saveRecords: (records: HeldBookRecord[]) => void;
 };
+
+// What to fetch next for a held book: a Track, or its cover (trackId null).
+type FetchJob =
+  | { bookId: string; trackId: string }
+  | { bookId: string; trackId: null; coverUrl: string };
 
 const toHold = (record: HeldBookRecord): Hold => {
   const tracks = record.book.tracks.filter((track) => !track.missing);
@@ -60,6 +79,7 @@ const toHold = (record: HeldBookRecord): Hold => {
     heldTracks,
     totalTracks: tracks.length,
     complete: heldTracks === tracks.length,
+    coverUri: record.cover?.uri ?? null,
   };
 };
 
@@ -68,7 +88,8 @@ const toHold = (record: HeldBookRecord): Hold => {
  * that isn't on the phone yet, one at a time, whenever the desktop is
  * connected, in the background too (for as long as the app runs); a Track
  * cut short carries on from where it stopped on the next connection. Files
- * go to the Storage location.
+ * go to the Storage location; the book's cover is stored with them, so it
+ * shows with no desktop.
  */
 export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
   const records = new Map<string, HeldBookRecord>();
@@ -78,7 +99,8 @@ export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
   let ready: Promise<void> = Promise.resolve();
   let running: {
     bookId: string;
-    trackId: string;
+    /** The Track on its way, or null for the cover. */
+    trackId: string | null;
     controller: AbortController;
     work: Promise<void>;
   } | null = null;
@@ -95,15 +117,54 @@ export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
 
   const canRun = () => loaded && platform.getServerUrl() !== null;
 
-  const nextToFetch = () => {
+  const coverKey = (bookId: string) => `cover:${bookId}`;
+
+  // Each book's cover first (it is small and shows in every row), then its Tracks.
+  const nextToFetch = (): FetchJob | null => {
     const ordered = [...records.values()].sort((a, b) => a.heldAt - b.heldAt);
-    for (const record of ordered) {
-      const track = record.book.tracks.find(
-        (t) => !t.missing && !record.trackUris[t.id] && !failed.has(t.id),
+    for (const { book, cover, trackUris } of ordered) {
+      if (
+        book.coverUrl &&
+        cover?.from !== book.coverUrl &&
+        !failed.has(coverKey(book.id))
+      ) {
+        return { bookId: book.id, trackId: null, coverUrl: book.coverUrl };
+      }
+      const track = book.tracks.find(
+        (t) => !t.missing && !trackUris[t.id] && !failed.has(t.id),
       );
-      if (track) return { bookId: record.book.id, trackId: track.id };
+      if (track) return { bookId: book.id, trackId: track.id };
     }
     return null;
+  };
+
+  const storeTrack = async (bookId: string, trackId: string, uri: string) => {
+    const record = records.get(bookId);
+    // Removed from this phone while its Track was on the way.
+    if (!record) {
+      await platform.remove(uri).catch(() => {});
+      return;
+    }
+    records.set(bookId, {
+      ...record,
+      trackUris: { ...record.trackUris, [trackId]: uri },
+    });
+    changed();
+  };
+
+  const storeCover = async (bookId: string, coverUrl: string, uri: string) => {
+    const record = records.get(bookId);
+    // Removed, or the desktop changed the cover while this one was on the way.
+    if (record?.book.coverUrl !== coverUrl) {
+      await platform.remove(uri).catch(() => {});
+      return;
+    }
+    const previous = record.cover?.uri;
+    records.set(bookId, { ...record, cover: { uri, from: coverUrl } });
+    changed();
+    if (previous && previous !== uri) {
+      await platform.remove(previous).catch(() => {});
+    }
   };
 
   function pump() {
@@ -113,25 +174,19 @@ export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
     if (!serverUrl || !next) return;
     const { bookId, trackId } = next;
     const controller = new AbortController();
-    const work = platform
-      .fetchTrack(serverUrl, bookId, trackId, controller.signal)
-      .then(async (uri) => {
-        const record = records.get(bookId);
-        // Removed from this phone while its Track was on the way.
-        if (!record) {
-          await platform.remove(uri).catch(() => {});
-          return;
-        }
-        records.set(bookId, {
-          ...record,
-          trackUris: { ...record.trackUris, [trackId]: uri },
-        });
-        changed();
-      })
+    const fetching =
+      next.trackId === null
+        ? platform
+            .fetchCover(serverUrl, bookId, next.coverUrl, controller.signal)
+            .then((uri) => storeCover(bookId, next.coverUrl, uri))
+        : platform
+            .fetchTrack(serverUrl, bookId, next.trackId, controller.signal)
+            .then((uri) => storeTrack(bookId, next.trackId, uri));
+    const work = fetching
       .catch((error) => {
         if (controller.signal.aborted) return;
-        failed.add(trackId);
-        console.warn("[HeldAudiobooks] Fetching a Track failed", error);
+        failed.add(trackId ?? coverKey(bookId));
+        console.warn("[HeldAudiobooks] Fetching for a held book failed", error);
       })
       .finally(() => {
         running = null;
@@ -140,6 +195,13 @@ export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
     running = { bookId, trackId, controller, work };
   }
 
+  // A newer snapshot of a held book; a cover the desktop dropped goes too.
+  const withBook = (record: HeldBookRecord, book: Audiobook) => {
+    if (!record.cover || book.coverUrl) return { ...record, book };
+    void platform.remove(record.cover.uri).catch(() => {});
+    return { ...record, book, cover: undefined };
+  };
+
   // Changes wait for the saved holds, so they never shadow one.
   const afterLoad = (change: () => void) => {
     void ready.then(change);
@@ -147,13 +209,14 @@ export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
 
   const holdNow = (book: Audiobook, reason: HoldReason) => {
     const existing = records.get(book.id);
+    const record = existing
+      ? withBook(existing, book)
+      : { book, reasons: [], trackUris: {}, heldAt: Date.now() };
     records.set(book.id, {
-      book,
-      reasons: existing?.reasons.includes(reason)
-        ? existing.reasons
-        : [...(existing?.reasons ?? []), reason],
-      trackUris: existing?.trackUris ?? {},
-      heldAt: existing?.heldAt ?? Date.now(),
+      ...record,
+      reasons: record.reasons.includes(reason)
+        ? record.reasons
+        : [...record.reasons, reason],
     });
     changed();
     pump();
@@ -177,12 +240,16 @@ export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
     const cutShort = running?.bookId === bookId ? running : null;
     cutShort?.controller.abort();
     changed();
-    for (const uri of Object.values(record.trackUris)) {
+    const uris = [...Object.values(record.trackUris)];
+    if (record.cover) uris.push(record.cover.uri);
+    for (const uri of uris) {
       await platform.remove(uri).catch(() => {});
     }
     if (cutShort) {
       await cutShort.work;
-      await platform.discardPartial(cutShort.trackId).catch(() => {});
+      if (cutShort.trackId) {
+        await platform.discardPartial(cutShort.trackId).catch(() => {});
+      }
     }
   };
 
@@ -204,7 +271,7 @@ export function createHeldAudiobooks(platform: HeldAudiobooksPlatform) {
       for (const book of books) {
         const record = records.get(book.id);
         if (!record) continue;
-        records.set(book.id, { ...record, book });
+        records.set(book.id, withBook(record, book));
         any = true;
       }
       if (!any) return;

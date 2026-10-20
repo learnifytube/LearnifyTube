@@ -1,7 +1,9 @@
 // Import planner: turns a listing of the folder the user picked into the
 // Audiobooks an Import would create. Pure; reading the disk happens elsewhere.
 
-export type ImportMode = "one-book" | "each-subfolder";
+export const IMPORT_MODES = ["one-book", "each-subfolder"] as const;
+
+export type ImportMode = (typeof IMPORT_MODES)[number];
 
 export type ListedFile = {
   // Relative to the picked folder, "/"-separated.

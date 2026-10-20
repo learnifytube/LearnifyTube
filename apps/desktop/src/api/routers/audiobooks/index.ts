@@ -7,6 +7,7 @@ import { publicProcedure, t } from "@/api/trpc";
 import defaultDb from "@/api/db";
 import { audiobooks, audiobookTracks } from "@/api/db/schema";
 import {
+  IMPORT_MODES,
   planImport,
   withTrackOrder,
   type FolderListing,
@@ -28,7 +29,7 @@ import {
   setAudiobookSentToDevices,
 } from "@/api/audiobooks/send-to-devices";
 
-const importModeSchema = z.enum(["one-book", "each-subfolder"]);
+const importModeSchema = z.enum(IMPORT_MODES);
 
 type PreviewBook = {
   folder: string;
@@ -38,14 +39,14 @@ type PreviewBook = {
   tracks: ProposedTrack[];
 };
 
-// The last folder listing per picked folder, so confirming saves what was previewed.
-const listings = new Map<string, FolderListing>();
+// The last folder listing previewed per picked folder, so confirming saves what was previewed.
+const previewedListingsByFolder = new Map<string, FolderListing>();
 
 const listingFor = async (folderPath: string): Promise<FolderListing> => {
-  const cached = listings.get(folderPath);
+  const cached = previewedListingsByFolder.get(folderPath);
   if (cached) return cached;
   const listing = await scanFolder(folderPath);
-  listings.set(folderPath, listing);
+  previewedListingsByFolder.set(folderPath, listing);
   return listing;
 };
 
@@ -72,7 +73,7 @@ export const audiobooksRouter = t.router({
   previewImport: publicProcedure
     .input(z.object({ folderPath: z.string().min(1) }))
     .mutation(async ({ input }) => {
-      listings.delete(input.folderPath);
+      previewedListingsByFolder.delete(input.folderPath);
       const listing = await listingFor(input.folderPath);
       const covers = new Map<string, Promise<string | null>>();
       const toPreview = (mode: ImportMode): Promise<PreviewBook[]> =>
@@ -146,7 +147,7 @@ export const audiobooksRouter = t.router({
         });
         ids.push(id);
       }
-      listings.delete(input.folderPath);
+      previewedListingsByFolder.delete(input.folderPath);
       return { ids };
     }),
 

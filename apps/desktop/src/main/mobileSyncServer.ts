@@ -41,6 +41,7 @@ import {
 } from "../../../shared/mobile-sync-contract";
 import { loadOnDeviceSet, recordDeviceReport } from "../api/on-device/store";
 import { createAudiobookSyncRoutes } from "./audiobookSyncRoutes";
+import { parseByteRange } from "./byte-range";
 
 // pipe() leaves the file open when the client hangs up mid-stream (a skip or seek);
 // pipeline() closes it.
@@ -66,10 +67,7 @@ const MOBILE_SYNC_RESUME_REANNOUNCE_DELAY_MS = 1500;
 const MOBILE_SYNC_POWER_BLOCKER_TYPE = "prevent-app-suspension";
 
 type FavoriteEntityType = "video" | "custom_playlist" | "channel_playlist";
-const MY_LIST_FAVORITE_ENTITY_TYPES: FavoriteEntityType[] = [
-  "custom_playlist",
-  "channel_playlist",
-];
+const MY_LIST_FAVORITE_ENTITY_TYPES: FavoriteEntityType[] = ["custom_playlist", "channel_playlist"];
 
 function isFavoriteEntityType(s: string): s is FavoriteEntityType {
   return s === "video" || s === "custom_playlist" || s === "channel_playlist";
@@ -335,7 +333,18 @@ const createMobileSyncServer = (): MobileSyncServer => {
     });
   };
 
-  const readBody = (req: http.IncomingMessage): Promise<string> => readRequestBody(req, logStuckBody);
+  const readBody = (req: http.IncomingMessage): Promise<string> =>
+    readRequestBody(req, logStuckBody);
+
+  const rememberRequest = (req: http.IncomingMessage, url: string): void => {
+    recentRequests.push({
+      at: new Date().toISOString(),
+      method: req.method,
+      url,
+      remotePort: req.socket.remotePort,
+    });
+    if (recentRequests.length > RECENT_REQUESTS_KEPT) recentRequests.shift();
+  };
 
   // Clean up stale devices (not seen in last 5 minutes)
   const cleanupStaleDevices = (): void => {
@@ -403,7 +412,10 @@ const createMobileSyncServer = (): MobileSyncServer => {
 
   // Absolute URL for an image the mobile app loads natively (no headers), so it carries the pairing code.
   const assetUrl = (pathname: string): string =>
-    withPairingToken(`http://${getLocalIpAddress()}:${port}${pathname}`, getMobileSyncPairingCode());
+    withPairingToken(
+      `http://${getLocalIpAddress()}:${port}${pathname}`,
+      getMobileSyncPairingCode()
+    );
 
   const sendJson = (res: http.ServerResponse, data: unknown, statusCode = 200): void => {
     logger.info(`[MobileSyncServer] → ${statusCode} JSON response`);
@@ -839,12 +851,16 @@ const createMobileSyncServer = (): MobileSyncServer => {
               : "application/octet-stream";
 
       // Handle range requests for video seeking
-      const range = req.headers.range;
+      const range = req.headers.range ? parseByteRange(req.headers.range, fileSize) : undefined;
+
+      if (range === null) {
+        res.writeHead(416, { "Content-Range": `bytes */${fileSize}` });
+        res.end();
+        return;
+      }
 
       if (range) {
-        const parts = range.replace(/bytes=/, "").split("-");
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const { start, end } = range;
         const chunkSize = end - start + 1;
 
         logger.debug("[MobileSyncServer] Range request", {
@@ -976,9 +992,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
       title: video.title,
       channelTitle: video.channelTitle,
       duration: video.durationSeconds ?? 0,
-      thumbnailUrl: hasThumbnailSource
-        ? assetUrl(`/api/video/${video.videoId}/thumbnail`)
-        : null,
+      thumbnailUrl: hasThumbnailSource ? assetUrl(`/api/video/${video.videoId}/thumbnail`) : null,
       downloadStatus:
         video.downloadStatus === "completed" ||
         video.downloadStatus === "downloading" ||
@@ -1078,9 +1092,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
           title: row.title,
           channelTitle: row.channelTitle,
           duration: row.durationSeconds ?? 0,
-          thumbnailUrl: hasThumbnailSource
-            ? assetUrl(`/api/video/${row.videoId}/thumbnail`)
-            : null,
+          thumbnailUrl: hasThumbnailSource ? assetUrl(`/api/video/${row.videoId}/thumbnail`) : null,
           downloadStatus:
             row.downloadStatus === "completed" ||
             row.downloadStatus === "downloading" ||
@@ -1349,7 +1361,10 @@ const createMobileSyncServer = (): MobileSyncServer => {
       }
       const channelItemCountMap = new Map<string, number>();
       for (const item of channelPlaylistItemList) {
-        channelItemCountMap.set(item.playlistId, (channelItemCountMap.get(item.playlistId) ?? 0) + 1);
+        channelItemCountMap.set(
+          item.playlistId,
+          (channelItemCountMap.get(item.playlistId) ?? 0) + 1
+        );
       }
 
       const remoteMyLists: RemoteMyList[] = [];
@@ -2518,13 +2533,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
 
     // Track connected device
     trackDevice(req);
-    recentRequests.push({
-      at: new Date().toISOString(),
-      method,
-      url,
-      remotePort: req.socket.remotePort,
-    });
-    if (recentRequests.length > RECENT_REQUESTS_KEPT) recentRequests.shift();
+    rememberRequest(req, url);
 
     logger.info(`[MobileSyncServer] ← ${method} ${url}`);
 
@@ -2731,7 +2740,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
     }
 
     // GET /api/audiobooks, /api/audiobook-track/:id/file, /api/audiobook/:id/cover; else 404
-    await audiobookRoutes.handle(req, res, url, () => sendError(res, "Not found", 404));
+    if (!(await audiobookRoutes.route(req, res, url))) sendError(res, "Not found", 404);
   };
 
   const start = async (requestedPort?: number): Promise<number> => {

@@ -13,6 +13,7 @@ import { recordListening } from "../api/audiobooks/listening";
 import { audiobookListeningSchema } from "../../../shared/mobile-sync-contract";
 import { resolveAudiobookTrackFile, resolveWithinAllowed } from "./security/path-confinement";
 import { getAllowedBaseDirs } from "./security/allowed-dirs";
+import { parseByteRange, type ByteRange } from "./byte-range";
 
 type AudiobookSyncRoutesDeps = {
   db: Database;
@@ -30,24 +31,11 @@ const COVER_CONTENT_TYPES: Record<string, string> = {
   ".webp": "image/webp",
 };
 
-const streamFile = (
-  res: http.ServerResponse,
-  filePath: string,
-  range?: { start: number; end: number }
-): void => {
+const streamFile = (res: http.ServerResponse, filePath: string, range?: ByteRange): void => {
   pipeline(fs.createReadStream(filePath, range), res, (err) => {
     if (!err || err.code === "ERR_STREAM_PREMATURE_CLOSE") return;
     logger.error("[MobileSyncServer] Audiobook stream error", { filePath, error: err });
   });
-};
-
-// "bytes=start-end", "bytes=start-" or "bytes=-suffix"; null when unsatisfiable.
-const parseRange = (header: string, size: number): { start: number; end: number } | null => {
-  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
-  if (!match || (match[1] === "" && match[2] === "")) return null;
-  const start = match[1] === "" ? Math.max(size - Number(match[2]), 0) : Number(match[1]);
-  const end = match[1] === "" || match[2] === "" ? size - 1 : Math.min(Number(match[2]), size - 1);
-  return start <= end && start < size ? { start, end } : null;
 };
 
 /**
@@ -61,12 +49,8 @@ export const createAudiobookSyncRoutes = ({
   sendError,
   readBody,
 }: AudiobookSyncRoutesDeps): {
-  handle: (
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-    url: string,
-    notFound: () => void
-  ) => Promise<void>;
+  /** Serves an Audiobook route; false when the URL isn't one. */
+  route: (req: http.IncomingMessage, res: http.ServerResponse, url: string) => Promise<boolean>;
 } => {
   const handleCatalog = async (res: http.ServerResponse): Promise<void> => {
     sendJson(res, await loadAudiobookCatalog(db, assetUrl));
@@ -95,7 +79,7 @@ export const createAudiobookSyncRoutes = ({
       streamFile(res, file.realPath);
       return;
     }
-    const range = parseRange(rangeHeader, size);
+    const range = parseByteRange(rangeHeader, size);
     if (!range) {
       res.writeHead(416, { "Content-Range": `bytes */${size}` });
       res.end();
@@ -184,15 +168,5 @@ export const createAudiobookSyncRoutes = ({
     return false;
   };
 
-  // Serves an Audiobook route, or calls notFound for any other URL.
-  const handle = async (
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-    url: string,
-    notFound: () => void
-  ): Promise<void> => {
-    if (!(await route(req, res, url))) notFound();
-  };
-
-  return { handle };
+  return { route };
 };

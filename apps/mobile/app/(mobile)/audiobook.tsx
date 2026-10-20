@@ -10,17 +10,9 @@ import { useListeningPositionsStore } from "../../stores/listeningPositions";
 import { AudiobookCover } from "../../components/phone/AudiobookCover";
 import { colors, fontSize, fontWeight, radius, spacing } from "../../theme";
 import { ArrowLeft, RotateCcw } from "../../theme/icons";
+import { formatTrackDuration } from "../../components/phone/formatTrackDuration";
 
 const COVER_SIZE = 120;
-
-const formatDuration = (seconds: number | null) => {
-  if (seconds === null) return "";
-  const total = Math.round(seconds);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = String(total % 60).padStart(2, "0");
-  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
-};
 
 // The book screen: an Audiobook's Tracks to jump to, and Start over.
 export default function AudiobookScreen() {
@@ -119,7 +111,7 @@ export default function AudiobookScreen() {
               <Text style={styles.trackDuration}>
                 {track.missing
                   ? "Missing"
-                  : formatDuration(track.durationSeconds)}
+                  : formatTrackDuration(track.durationSeconds)}
               </Text>
             </Pressable>
           );

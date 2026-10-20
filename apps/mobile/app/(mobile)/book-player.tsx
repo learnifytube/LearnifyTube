@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -8,13 +9,17 @@ import {
 } from "../../services/book-player";
 import { useConnectionStore } from "../../stores/connection";
 import { AudiobookCover } from "../../components/phone/AudiobookCover";
+import { BookTracksSheet } from "../../components/phone/BookTracksSheet";
 import { colors, fontSize, fontWeight, radius, spacing } from "../../theme";
 import {
   ArrowLeft,
+  List,
   Pause,
   Play,
   RotateCcw,
   RotateCw,
+  SkipBack,
+  SkipForward,
 } from "../../theme/icons";
 
 const COVER_SIZE = 240;
@@ -25,6 +30,7 @@ const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
 export default function BookPlayerScreen() {
   const state = useBookPlayerState();
   const serverUrl = useConnectionStore((s) => s.serverUrl);
+  const [showTracks, setShowTracks] = useState(false);
 
   if (state.status === "idle") {
     return (
@@ -61,6 +67,14 @@ export default function BookPlayerScreen() {
         {message ? <Text style={styles.message}>{message}</Text> : null}
         {state.status === "playing" || state.status === "paused" ? (
           <View style={styles.controls}>
+            <Pressable
+              testID="book-previous-track"
+              style={styles.trackButton}
+              onPress={() => void bookPlayer.previousTrack()}
+              accessibilityLabel="Previous Track"
+            >
+              <SkipBack size={24} color={colors.foreground} />
+            </Pressable>
             <SkipButton seconds={-SKIP_SECONDS} />
             <Pressable
               testID="book-play-pause"
@@ -70,9 +84,7 @@ export default function BookPlayerScreen() {
                   ? bookPlayer.pause()
                   : bookPlayer.resume()
               }
-              accessibilityLabel={
-                state.status === "playing" ? "Pause" : "Play"
-              }
+              accessibilityLabel={state.status === "playing" ? "Pause" : "Play"}
             >
               {state.status === "playing" ? (
                 <Pause size={32} color={colors.primaryForeground} />
@@ -81,12 +93,45 @@ export default function BookPlayerScreen() {
               )}
             </Pressable>
             <SkipButton seconds={SKIP_SECONDS} />
+            <Pressable
+              testID="book-next-track"
+              style={styles.trackButton}
+              onPress={() => void bookPlayer.nextTrack()}
+              accessibilityLabel="Next Track"
+            >
+              <SkipForward size={24} color={colors.foreground} />
+            </Pressable>
           </View>
         ) : null}
-        {state.status === "playing" || state.status === "paused" ? (
-          <SpeedButton />
-        ) : null}
+        <View style={styles.extras}>
+          {state.status === "playing" || state.status === "paused" ? (
+            <SpeedButton />
+          ) : null}
+          {trackIndex !== null ? (
+            <Pressable
+              testID="book-tracks"
+              style={styles.pillButton}
+              onPress={() => setShowTracks(true)}
+              accessibilityLabel="Tracks"
+            >
+              <List size={16} color={colors.foreground} />
+              <Text style={styles.pillLabel}>Tracks</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
+      {trackIndex !== null ? (
+        <BookTracksSheet
+          book={book}
+          currentIndex={trackIndex}
+          visible={showTracks}
+          onClose={() => setShowTracks(false)}
+          onPlayTrack={(index) => {
+            setShowTracks(false);
+            void bookPlayer.playTrack(index);
+          }}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -116,11 +161,11 @@ function SpeedButton() {
   return (
     <Pressable
       testID="book-speed"
-      style={styles.speedButton}
+      style={styles.pillButton}
       onPress={() => bookPlayer.setSpeed(next)}
       accessibilityLabel={`Speed ${speed}×, change to ${next}×`}
     >
-      <Text style={styles.speedLabel}>{speed}×</Text>
+      <Text style={styles.pillLabel}>{speed}×</Text>
     </Pressable>
   );
 }
@@ -163,12 +208,22 @@ const styles = StyleSheet.create({
   },
   author: { color: colors.mutedForeground, fontSize: fontSize.base },
   track: { color: colors.mutedForeground, fontSize: fontSize.sm },
-  message: { color: colors.warning, fontSize: fontSize.sm, textAlign: "center" },
+  message: {
+    color: colors.warning,
+    fontSize: fontSize.sm,
+    textAlign: "center",
+  },
   controls: {
     marginTop: spacing.lg,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.xl,
+    gap: spacing.sm,
+  },
+  trackButton: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
   },
   skipButton: {
     width: 56,
@@ -182,15 +237,23 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     fontWeight: fontWeight.bold,
   },
-  speedButton: {
+  extras: {
     marginTop: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  pillButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: radius.full,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  speedLabel: {
+  pillLabel: {
     color: colors.foreground,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.semibold,

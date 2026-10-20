@@ -175,6 +175,12 @@ export const bookPlayer = {
     heldAudiobooks.pull(book);
     return player.startOver(book);
   },
+  /** Plays a Track of the book in the player from its start (already pulled). */
+  playTrack: (trackIndex: number) => {
+    const state = player.getState();
+    if (state.status === "idle") return Promise.resolve();
+    return player.jumpTo(state.book, trackIndex);
+  },
 };
 keepListeningPositionOnPhone(player);
 

@@ -194,6 +194,32 @@ export function createBookPlayer(
     return Promise.resolve();
   };
 
+  const previousTrack = () => {
+    if (state.status !== "playing" && state.status !== "paused") {
+      return Promise.resolve();
+    }
+    const { book, trackIndex } = state;
+    const previous = previousTrackIndex(book, trackIndex);
+    if (previous < 0 || platform.currentTime() > RESTART_TRACK_AFTER_SECONDS) {
+      platform.seekTo(0);
+      return Promise.resolve();
+    }
+    return goTo(book, previous, 0, state.status === "playing");
+  };
+
+  // Past the last Track, the book is finished.
+  const nextTrack = () => {
+    if (state.status !== "playing" && state.status !== "paused") {
+      return Promise.resolve();
+    }
+    return goTo(
+      state.book,
+      state.trackIndex + 1,
+      0,
+      state.status === "playing",
+    );
+  };
+
   platform.onEnded(() => {
     if (state.status !== "playing") return;
     void goTo(state.book, state.trackIndex + 1, 0);
@@ -265,6 +291,13 @@ export function createBookPlayer(
     },
     /** Skips ±seconds, into the previous or next Track when it crosses one. */
     skip,
+    /**
+     * Restarts the Track playing when more than 3s into it, else plays the
+     * Track before from its start; at the first Track, restarts it.
+     */
+    previousTrack,
+    /** Plays the next Track from its start; at the last Track, finishes the book. */
+    nextTrack,
     /** The playback speed, 0.75× to 2×, kept across Tracks and books. */
     getSpeed: () => clampSpeed(speed.get()),
     setSpeed: (rate: number) => {
@@ -289,6 +322,8 @@ export function createBookPlayer(
 
 export type BookPlayer = ReturnType<typeof createBookPlayer>;
 
+// Previous Track restarts the Track playing once this far into it.
+const RESTART_TRACK_AFTER_SECONDS = 3;
 const MIN_BOOK_SPEED = 0.75;
 const MAX_BOOK_SPEED = 2;
 

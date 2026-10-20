@@ -18,6 +18,8 @@ export type DeviceMirrorPlatform = {
     /** The On-device set, or null when the desktop is too old to serve one. */
     getOnDeviceSet: (serverUrl: string) => Promise<SetVideo[] | null>;
     report: (serverUrl: string, report: DeviceReport) => Promise<void>;
+    /** Listens to the desktop's pushed sync events; returns a function that stops. */
+    listen: (serverUrl: string, onEvent: (event: string) => void) => () => void;
   };
   device: {
     getId: () => Promise<string>;
@@ -41,7 +43,6 @@ export type DeviceMirrorPlatform = {
   saveMirroredIds: (videoIds: string[]) => Promise<void>;
   /** Keeps the latest On-device set, which the TV shows as "Sent to this TV" in Offline mode too. */
   saveOnDeviceSet: (videos: SetVideo[]) => void;
-  getEventsUrl?: (serverUrl: string) => string;
   /** The Audiobook Mirror (`createAudiobookMirror`); a TV holds no Audiobooks. */
   audiobooks: {
     mirror: (serverUrl: string) => Promise<void>;
@@ -51,6 +52,10 @@ export type DeviceMirrorPlatform = {
 };
 
 const SYNC_INTERVAL_MS = 2 * 60_000;
+const SYNC_EVENTS = new Set([
+  SYNC_SSE_EVENT_ON_DEVICE_SET,
+  SYNC_SSE_EVENT_AUDIOBOOKS,
+]);
 
 /**
  * What the Device does to mirror the On-device set. Only Videos the mirror brought
@@ -157,60 +162,33 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
     const interval = setInterval(syncIfConnected, SYNC_INTERVAL_MS);
     syncIfConnected();
 
-    // Listen to real-time SSE push from desktop
-    let eventSource: EventSource | null = null;
-    let sseServerUrl: string | null = null;
+    // The desktop pushes a sync event when the On-device set or the sent
+    // Audiobooks change (ADR-0003), while connected and in the foreground.
+    let stopListening: (() => void) | null = null;
+    let listeningTo: string | null = null;
 
-    const setupSSE = () => {
-      const serverUrl = platform.getServerUrl();
-      if (!serverUrl || !platform.isForeground()) {
-        if (eventSource) {
-          eventSource.close();
-          eventSource = null;
-          sseServerUrl = null;
-        }
-        return;
-      }
-      if (eventSource && sseServerUrl === serverUrl) return;
-
-      if (eventSource) eventSource.close();
-      sseServerUrl = serverUrl;
-
-      if (typeof EventSource !== "undefined") {
-        try {
-          const eventsUrl = platform.getEventsUrl
-            ? platform.getEventsUrl(serverUrl)
-            : `${serverUrl}/api/events`;
-          const es = new EventSource(eventsUrl);
-          eventSource = es;
-          for (const event of [
-            SYNC_SSE_EVENT_ON_DEVICE_SET,
-            SYNC_SSE_EVENT_AUDIOBOOKS,
-          ]) {
-            es.addEventListener(event, () => {
-              void syncNow();
-            });
-          }
-          es.onerror = () => {
-            // Falls back safely to normal interval polling
-          };
-        } catch {
-          // EventSource unavailable in some environments
-        }
-      }
+    const listen = () => {
+      const serverUrl = platform.isForeground()
+        ? platform.getServerUrl()
+        : null;
+      if (serverUrl === listeningTo) return;
+      stopListening?.();
+      stopListening = null;
+      listeningTo = serverUrl;
+      if (!serverUrl) return;
+      stopListening = platform.desktop.listen(serverUrl, (event) => {
+        if (SYNC_EVENTS.has(event)) void syncNow();
+      });
     };
 
-    const unsubscribeSSE = platform.onConditionsChange(setupSSE);
-    setupSSE();
+    const unsubscribeListen = platform.onConditionsChange(listen);
+    listen();
 
     return () => {
       unsubscribe();
-      unsubscribeSSE();
+      unsubscribeListen();
       clearInterval(interval);
-      if (eventSource) {
-        eventSource.close();
-        eventSource = null;
-      }
+      stopListening?.();
     };
   };
 

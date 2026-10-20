@@ -12,6 +12,7 @@ import { useListeningPositionsStore } from "../../stores/listeningPositions";
 import { getWatchHistory } from "../../db/repositories/watchHistory";
 import { audiobookMirror } from "../audiobook-mirror";
 import { heldAudiobooks } from "../held-audiobooks";
+import { listenToSyncEvents } from "../sync-events";
 import {
   createDeviceMirror,
   type DeviceMirrorPlatform,
@@ -88,6 +89,8 @@ const platform: DeviceMirrorPlatform = {
       return (await api.getOnDeviceSet(serverUrl)).videos;
     },
     report: (serverUrl, report) => api.reportDevice(serverUrl, report),
+    listen: (serverUrl, onEvent) =>
+      listenToSyncEvents(api.getEventsUrl(serverUrl), onEvent),
   },
   device: {
     getId: getDeviceId,
@@ -126,7 +129,6 @@ const platform: DeviceMirrorPlatform = {
   saveMirroredIds: (videoIds) =>
     AsyncStorage.setItem(MIRRORED_IDS_KEY, JSON.stringify(videoIds)),
   saveOnDeviceSet: (videos) => useOnDeviceSetStore.setState({ videos }),
-  getEventsUrl: (serverUrl) => api.getEventsUrl(serverUrl),
   audiobooks: kind === "tv" ? noAudiobooks : audiobookMirror,
 };
 

@@ -88,16 +88,34 @@ function createHarness({
     audiobookMirrors: [] as string[],
     audiobookMirrorFails: false,
     heldAudiobookIds: [] as string[],
+    // The desktops listened to for pushed sync events, and how to push one.
+    listening: [] as string[],
+    pushEvent: (_event: string) => {},
+    conditionsChanged: () => {},
   };
   const platform: DeviceMirrorPlatform = {
     getServerUrl: () => state.serverUrl,
     isForeground: () => true,
     isLibraryLoaded: () => state.libraryLoaded,
-    onConditionsChange: () => () => {},
+    onConditionsChange: (listener) => {
+      const previous = state.conditionsChanged;
+      state.conditionsChanged = () => {
+        previous();
+        listener();
+      };
+      return () => {};
+    },
     desktop: {
       getOnDeviceSet: async () => (state.set ? state.set.map(setVideo) : null),
       report: async (_serverUrl, report) => {
         state.reports.push(report);
+      },
+      listen: (serverUrl, onEvent) => {
+        state.listening.push(serverUrl);
+        state.pushEvent = onEvent;
+        return () => {
+          state.listening = state.listening.filter((url) => url !== serverUrl);
+        };
       },
     },
     device: { getId: async () => "device-1", name: "Pixel", kind: "phone" },
@@ -274,39 +292,43 @@ describe("device mirror", () => {
     expect(state.requested).toEqual([]);
   });
 
-  it("subscribes to SSE events on start when EventSource is available", async () => {
-    const listeners: Record<string, () => void> = {};
-    class FakeEventSource {
-      url: string;
-      constructor(url: string) {
-        this.url = url;
-      }
-      addEventListener(event: string, cb: () => void) {
-        listeners[event] = cb;
-      }
-      close() {}
-    }
-    const originalEventSource = globalThis.EventSource;
-    // @ts-expect-error test mock
-    globalThis.EventSource = FakeEventSource;
+  it("syncs when the desktop pushes an On-device set or Audiobooks change", async () => {
+    const { state, mirror } = createHarness({ set: ["a"] });
+    const stop = mirror.start();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(state.listening).toEqual([SERVER]);
+    state.requested = [];
 
-    try {
-      const { state, mirror } = createHarness({ set: ["a"] });
-      const stop = mirror.start();
-      expect(typeof listeners["sync:on-device-set"]).toBe("function");
+    state.pushEvent("sync:on-device-set");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(state.requested).toEqual(["a"]);
 
-      listeners["sync:on-device-set"]();
-      // Allow async syncNow promise to finish
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(state.requested).toEqual(["a"]);
+    const mirrorsBefore = state.audiobookMirrors.length;
+    state.pushEvent("sync:audiobooks");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(state.audiobookMirrors).toHaveLength(mirrorsBefore + 1);
 
-      const mirrorsBefore = state.audiobookMirrors.length;
-      listeners["sync:audiobooks"]?.();
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(state.audiobookMirrors).toHaveLength(mirrorsBefore + 1);
-      stop();
-    } finally {
-      globalThis.EventSource = originalEventSource;
-    }
+    const mirrorsAfter = state.audiobookMirrors.length;
+    state.pushEvent("message");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(state.audiobookMirrors).toHaveLength(mirrorsAfter);
+
+    stop();
+    expect(state.listening).toEqual([]);
+  });
+
+  it("listens to the new desktop when the connection changes, and to none without one", () => {
+    const { state, mirror } = createHarness({ set: [] });
+    const stop = mirror.start();
+    expect(state.listening).toEqual([SERVER]);
+
+    state.serverUrl = "http://other.local:53318";
+    state.conditionsChanged();
+    expect(state.listening).toEqual(["http://other.local:53318"]);
+
+    state.serverUrl = null;
+    state.conditionsChanged();
+    expect(state.listening).toEqual([]);
+    stop();
   });
 });

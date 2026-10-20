@@ -51,7 +51,11 @@ const book: DesktopAudiobook = {
 
 const setup = () => {
   const audio = createSilentAudio();
-  const player = createDesktopBookPlayer({ audio, saveListening: () => undefined });
+  const player = createDesktopBookPlayer({
+    audio,
+    page: { addEventListener: () => undefined },
+    saveListening: () => undefined,
+  });
   const session = createFakeMediaSession();
   connectMediaSession(player, session, (metadata) => metadata);
   return { audio, player, session };

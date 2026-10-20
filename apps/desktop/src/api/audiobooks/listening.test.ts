@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import * as schema from "@/api/db/schema";
 import { loadAudiobookCatalog } from "./catalog";
-import { recordListening } from "./listening";
+import { recordDesktopListening, recordListening } from "./listening";
 import { recordDeviceReport } from "../on-device/store";
 
 const createDb = async () => {
@@ -113,5 +113,51 @@ describe("Recording a Listening position", () => {
     await recordListening(db, listening({ trackId: "not-a-frankl-track" }));
 
     expect((await frankl(db)).listeningPosition).toBeNull();
+  });
+});
+
+describe("Recording the desktop's own Listening position", () => {
+  let db: Db;
+  let announced: number;
+  const announce = () => {
+    announced += 1;
+  };
+  beforeEach(async () => {
+    db = await createDb();
+    announced = 0;
+  });
+
+  it("tells Devices the Audiobooks changed when a meaningful position is kept", async () => {
+    await recordDesktopListening(db, { listening: listening(), announce: true }, announce);
+
+    expect((await frankl(db)).listeningPosition).toEqual({
+      trackId: "cd3",
+      seconds: 754,
+      updatedAt: 1_000,
+    });
+    expect(announced).toBe(1);
+  });
+
+  it("keeps a periodic position quietly", async () => {
+    await recordDesktopListening(db, { listening: listening(), announce: false }, announce);
+
+    expect((await frankl(db)).listeningPosition?.updatedAt).toBe(1_000);
+    expect(announced).toBe(0);
+  });
+
+  it("announces nothing when a newer position is already kept", async () => {
+    await recordListening(db, listening({ updatedAt: 2_000 }));
+
+    await recordDesktopListening(
+      db,
+      { listening: listening({ trackId: "cd1", updatedAt: 1_000 }), announce: true },
+      announce
+    );
+
+    expect((await frankl(db)).listeningPosition).toMatchObject({
+      trackId: "cd3",
+      updatedAt: 2_000,
+    });
+    expect(announced).toBe(0);
   });
 });

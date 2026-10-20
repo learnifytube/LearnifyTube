@@ -68,6 +68,11 @@ export function createBookPlayer(
   const speed = options.speed ?? createSpeedMemory();
   let state: BookPlayerState = { status: "idle" };
   const listeners = new Set<() => void>();
+  const skipListeners = new Set<(tracks: BookTrack[]) => void>();
+  const reportSkipped = (tracks: BookTrack[]) => {
+    if (tracks.length === 0) return;
+    for (const listener of skipListeners) listener(tracks);
+  };
   // Each Track change takes a ticket; a slower, older one gives way.
   let ticket = 0;
   let pending: Promise<void> = Promise.resolve();
@@ -111,7 +116,13 @@ export function createBookPlayer(
       setState({ status: "unavailable", book, trackIndex });
       return;
     }
-    void goTo(book, trackIndex + 1, 0, state.status === "playing");
+    void goTo(
+      book,
+      trackIndex + 1,
+      0,
+      state.status === "playing",
+      book.tracks[trackIndex],
+    );
     skippedTo = ticket;
   };
 
@@ -123,11 +134,18 @@ export function createBookPlayer(
     mine: number,
     // false keeps a paused book paused when a skip crosses into another Track.
     autoplay = true,
+    // The Track left because it couldn't be played.
+    failed?: BookTrack,
   ) => {
     const trackIndex = book.tracks.findIndex(
       (track, index) => index >= fromIndex && !track.missing,
     );
     const track = book.tracks[trackIndex];
+    const passed = book.tracks.slice(
+      fromIndex,
+      trackIndex < 0 ? undefined : trackIndex,
+    );
+    reportSkipped(failed ? [failed, ...passed] : passed);
     if (!track) {
       lastTrack =
         "trackIndex" in state && state.book.id === book.id
@@ -162,8 +180,9 @@ export function createBookPlayer(
     fromIndex: number,
     startAt: number,
     autoplay = true,
+    failed?: BookTrack,
   ) => {
-    pending = startTrack(book, fromIndex, startAt, ++ticket, autoplay);
+    pending = startTrack(book, fromIndex, startAt, ++ticket, autoplay, failed);
     return pending;
   };
 
@@ -313,6 +332,16 @@ export function createBookPlayer(
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
+      };
+    },
+    /**
+     * Called with the Tracks playback passed over because they are missing or
+     * their file couldn't be played, so the app can say which.
+     */
+    onTracksSkipped: (listener: (tracks: BookTrack[]) => void) => {
+      skipListeners.add(listener);
+      return () => {
+        skipListeners.delete(listener);
       };
     },
     /** Resolves once the Track change in flight has happened. */

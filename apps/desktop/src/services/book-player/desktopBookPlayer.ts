@@ -29,6 +29,21 @@ export type DesktopAudiobook = {
   }[];
 };
 
+/** The window's document: every media element's `play` reaches it while capturing. */
+export type MediaPage = {
+  addEventListener: (
+    type: "play",
+    listener: (event: { target: unknown }) => void,
+    capture: true
+  ) => void;
+};
+
+// Media events don't bubble, so a Video's play is caught on its way down.
+const isVideo = (target: unknown): boolean =>
+  typeof target === "object" &&
+  target !== null &&
+  (target as { nodeName?: unknown }).nodeName === "VIDEO";
+
 /** The shared Book player, started with the desktop's Audiobooks. */
 export type DesktopBookPlayer = Omit<BookPlayer, "play" | "jumpTo" | "startOver"> & {
   /** Plays a book from its Listening position; from the start once finished. */
@@ -63,14 +78,17 @@ const resumeFrom = (book: DesktopAudiobook): ListeningPoint | null =>
 /**
  * The shared Book player on the desktop: Tracks play straight from the
  * Audiobook's folder over `local-file://` through one `<audio>` element, and
- * every save of the Listening position goes to `saveListening`.
+ * every save of the Listening position goes to `saveListening`. A Video
+ * starting anywhere on `page` pauses the book; the bar can resume it.
  */
 export function createDesktopBookPlayer({
   audio,
+  page,
   saveListening,
   speed,
 }: {
   audio: AudioOutput;
+  page: MediaPage;
   saveListening: (save: ListeningSave) => void;
   /** Where the desktop's own speed is remembered (the phone keeps its own). */
   speed?: BookSpeedMemory;
@@ -83,6 +101,13 @@ export function createDesktopBookPlayer({
   });
   const player = createBookPlayer(platform, { speed });
   keepListeningPosition(player, saveListening);
+  page.addEventListener(
+    "play",
+    (event) => {
+      if (isVideo(event.target)) player.pause();
+    },
+    true
+  );
 
   const toBook = (book: DesktopAudiobook): Book => {
     for (const track of book.tracks) trackFiles.set(track.id, track.filePath);

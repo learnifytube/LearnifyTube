@@ -48,7 +48,11 @@ const press = (overrides: Partial<BookPlayerKeyEvent> = {}) => {
 };
 
 const setup = () => {
-  const player = createDesktopBookPlayer({ audio: silentAudio(), saveListening: () => undefined });
+  const player = createDesktopBookPlayer({
+    audio: silentAudio(),
+    page: { addEventListener: () => undefined },
+    saveListening: () => undefined,
+  });
   return { player };
 };
 

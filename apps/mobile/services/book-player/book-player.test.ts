@@ -1,5 +1,8 @@
-import { createBookPlayer, type Book } from "./createBookPlayer";
-import { createFakeBookAudioPlatform } from "./fakeBookAudioPlatform";
+import {
+  createBookPlayer,
+  type Book,
+} from "../../../shared/book-player/createBookPlayer";
+import { createFakeBookAudioPlatform } from "../../../shared/book-player/fakeBookAudioPlatform";
 
 const track = (id: string, missing = false) => ({
   id,

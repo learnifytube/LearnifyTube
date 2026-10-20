@@ -1,5 +1,8 @@
-import { createBookPlayer, type Book } from "./createBookPlayer";
-import { createFakeBookAudioPlatform } from "./fakeBookAudioPlatform";
+import {
+  createBookPlayer,
+  type Book,
+} from "../../../shared/book-player/createBookPlayer";
+import { createFakeBookAudioPlatform } from "../../../shared/book-player/fakeBookAudioPlatform";
 
 // Book player controls for listening with the screen off: ±30s across Track
 // boundaries, speed, interruptions from the system, and Tracks that never load.

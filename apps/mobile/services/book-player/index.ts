@@ -15,10 +15,10 @@ import {
   type BookAudioPlatform,
   type ListeningPoint,
   type NowPlaying,
-} from "./createBookPlayer";
+} from "../../../shared/book-player/createBookPlayer";
 import { createExpoAudioStatusReader } from "./expoAudioStatus";
-import { keepListeningPosition } from "./keepListeningPosition";
-import { localFirstTrackUri } from "./localFirstTrackUri";
+import { keepListeningPositionOnPhone } from "./keepListeningPosition";
+import { localFirstTrackUri } from "../../../shared/book-player/localFirstTrackUri";
 
 // One expo-audio player for every book, made on first use so importing this
 // module never touches the native module.
@@ -176,7 +176,7 @@ export const bookPlayer = {
     return player.startOver(book);
   },
 };
-keepListeningPosition(player);
+keepListeningPositionOnPhone(player);
 
 /** The book speed, for screens. */
 export function useBookSpeed() {
@@ -192,4 +192,4 @@ export type {
   BookPlayer,
   BookPlayerState,
   ListeningPoint,
-} from "./createBookPlayer";
+} from "../../../shared/book-player/createBookPlayer";

@@ -1,4 +1,4 @@
-import type { Audiobook } from "../../../shared/mobile-sync-contract";
+import type { Audiobook } from "../mobile-sync-contract";
 
 export type Book = Pick<
   Audiobook,

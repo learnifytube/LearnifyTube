@@ -512,3 +512,156 @@ describe("Book player previous and next Track", () => {
     });
   });
 });
+
+describe("Book player after it stops", () => {
+  it("plays a finished book again from Track 1, 0:00", async () => {
+    const { audio, player } = createHarness();
+    await player.jumpTo(frankl, 2);
+    audio.finishTrack();
+    await player.settled();
+
+    await player.playAgain();
+
+    expect(audio.current()).toMatchObject({
+      uri: "stream://cd1-01",
+      startAt: 0,
+    });
+    expect(player.getState()).toMatchObject({
+      status: "playing",
+      trackIndex: 0,
+    });
+  });
+
+  it("tries a Track that couldn't be played again once its source is back", async () => {
+    const unavailableTrackIds = ["cd1-02"];
+    const { audio, player } = createHarness({ unavailableTrackIds });
+    await player.jumpTo(frankl, 1);
+    expect(player.getState()).toMatchObject({ status: "unavailable" });
+
+    unavailableTrackIds.length = 0;
+    await player.retry();
+
+    expect(audio.current()).toMatchObject({ uri: "stream://cd1-02" });
+    expect(player.getState()).toMatchObject({
+      status: "playing",
+      trackIndex: 1,
+    });
+  });
+
+  it("does nothing on play again or retry while a book plays", async () => {
+    const { audio, player } = createHarness();
+    await player.jumpTo(frankl, 1);
+    audio.setTime(42);
+
+    await player.playAgain();
+    await player.retry();
+
+    expect(audio.loadedUris()).toEqual(["stream://cd1-02"]);
+    expect(audio.time()).toBe(42);
+  });
+
+  it("closes: stops the audio and holds no book", async () => {
+    const { audio, player } = createHarness();
+    await player.play(frankl);
+
+    player.close();
+
+    expect(audio.current()).toBeNull();
+    expect(audio.isPlaying()).toBe(false);
+    expect(player.getState()).toEqual({ status: "idle" });
+    expect(player.listeningPosition()).toBeNull();
+  });
+
+  it("stays closed when a Track change in flight lands after closing", async () => {
+    const { audio, player } = createHarness({ slowTrackIds: ["cd1-02"] });
+    await player.play(frankl);
+
+    const next = player.nextTrack();
+    player.close();
+    audio.releaseSlowTracks();
+    await next;
+
+    expect(audio.current()).toBeNull();
+    expect(player.getState()).toEqual({ status: "idle" });
+  });
+});
+
+describe("Book player Track changes in quick succession", () => {
+  const book: Book = {
+    ...frankl,
+    tracks: [track("a"), track("b"), track("c"), track("d")],
+  };
+
+  it("goes back to the Track it came from on Next then Previous before the next Track loads", async () => {
+    const { audio, player } = createHarness({ slowTrackIds: ["b"] });
+    await player.play(book);
+
+    const next = player.nextTrack();
+    await player.previousTrack();
+    audio.releaseSlowTracks();
+    await next;
+
+    expect(audio.current()).toMatchObject({ uri: "stream://a", startAt: 0 });
+    expect(player.getState()).toMatchObject({
+      status: "playing",
+      trackIndex: 0,
+    });
+  });
+
+  it("moves two Tracks on Next, Next before the first next Track loads", async () => {
+    const { audio, player } = createHarness({ slowTrackIds: ["b", "c"] });
+    await player.play(book);
+
+    const first = player.nextTrack();
+    const second = player.nextTrack();
+    audio.releaseSlowTracks();
+    await Promise.all([first, second]);
+
+    expect(audio.loadedUris()).toEqual(["stream://a", "stream://c"]);
+    expect(player.getState()).toMatchObject({
+      status: "playing",
+      trackIndex: 2,
+    });
+  });
+
+  it("says nothing about Tracks passed by a Track change that was superseded", async () => {
+    const withGap: Book = {
+      ...frankl,
+      tracks: [track("a"), track("gone", true), track("b"), track("c")],
+    };
+    const { audio, player } = createHarness({ slowTrackIds: ["b"] });
+    const skipped: string[][] = [];
+    player.onTracksSkipped((tracks) =>
+      skipped.push(tracks.map((skippedTrack) => skippedTrack.id)),
+    );
+    await player.play(withGap);
+
+    const next = player.nextTrack();
+    await player.jumpTo(withGap, 3);
+    audio.releaseSlowTracks();
+    await next;
+
+    expect(skipped).toEqual([]);
+    expect(audio.current()).toMatchObject({ uri: "stream://c" });
+  });
+
+  it("says which Tracks were passed once the Track change takes effect", async () => {
+    const withGap: Book = {
+      ...frankl,
+      tracks: [track("a"), track("gone", true), track("b")],
+    };
+    const { audio, player } = createHarness({ slowTrackIds: ["b"] });
+    const skipped: string[][] = [];
+    player.onTracksSkipped((tracks) =>
+      skipped.push(tracks.map((skippedTrack) => skippedTrack.id)),
+    );
+    await player.play(withGap);
+
+    const next = player.nextTrack();
+    expect(skipped).toEqual([]);
+    audio.releaseSlowTracks();
+    await next;
+
+    expect(skipped).toEqual([["gone"]]);
+  });
+});

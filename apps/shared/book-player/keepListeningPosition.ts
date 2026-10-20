@@ -27,7 +27,21 @@ export function keepListeningPosition(
     report({ listening: { ...position, updatedAt: Date.now() }, moment });
   };
 
-  const unsubscribe = player.subscribe(() => save("meaningful"));
+  // Only a real transition is meaningful: play or pause (the status changes),
+  // a Track change or a finish. A speed change notifies too, but isn't one.
+  const momentOf = () => {
+    const state = player.getState();
+    const bookId = "book" in state ? state.book.id : null;
+    const trackIndex = "trackIndex" in state ? state.trackIndex : null;
+    return `${state.status}|${bookId}|${trackIndex}`;
+  };
+  let lastMoment = momentOf();
+  const unsubscribe = player.subscribe(() => {
+    const moment = momentOf();
+    if (moment === lastMoment) return;
+    lastMoment = moment;
+    save("meaningful");
+  });
   const interval = setInterval(() => {
     if (player.getState().status === "playing") save("periodic");
   }, WHILE_PLAYING_MS);

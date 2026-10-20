@@ -132,6 +132,50 @@ describe("Listening keeper", () => {
     });
   });
 
+  it("doesn't save a meaningful moment when only the speed changes", async () => {
+    const { player, saves } = createHarness();
+    await player.play(frankl);
+    const before = saves.length;
+
+    player.setSpeed(1.5);
+    player.setSpeed(2);
+
+    expect(saves.length).toBe(before);
+  });
+
+  it("saves one meaningful moment per play, pause or Track change", async () => {
+    const { audio, player, saves } = createHarness();
+
+    await player.play(frankl);
+    player.pause();
+    player.resume();
+    audio.finishTrack();
+    await player.settled();
+
+    expect(saves.map((save) => [save.listening.trackId, save.moment])).toEqual([
+      ["cd1-01", "meaningful"],
+      ["cd1-01", "meaningful"],
+      ["cd1-01", "meaningful"],
+      ["cd1-02", "meaningful"],
+    ]);
+  });
+
+  it("saves where the listener was when the Book player is closed while playing", async () => {
+    const { audio, player, saves } = createHarness();
+    await player.play(frankl);
+    audio.setTime(42);
+    const before = saves.length;
+
+    player.close();
+
+    expect(saves.slice(before)).toEqual([
+      {
+        listening: expect.objectContaining({ trackId: "cd1-01", seconds: 42 }),
+        moment: "meaningful",
+      },
+    ]);
+  });
+
   it("stops saving once stopped", async () => {
     const { audio, player, saves, stop } = createHarness();
     await player.play(frankl);

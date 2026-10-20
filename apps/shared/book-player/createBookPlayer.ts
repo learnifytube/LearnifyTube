@@ -78,6 +78,14 @@ export function createBookPlayer(
   let pending: Promise<void> = Promise.resolve();
   // The Track a finished book ended on, kept for its Listening position.
   let lastTrack: BookTrack | null = null;
+  // Where the Track change in flight is going, until it takes effect: the next
+  // Previous or Next moves from there, not from the Track still playing.
+  let heading: {
+    book: Book;
+    trackIndex: number;
+    startAt: number;
+    autoplay: boolean;
+  } | null = null;
 
   const setState = (next: BookPlayerState) => {
     state = next;
@@ -112,6 +120,7 @@ export function createBookPlayer(
       // Two Tracks in a row: the source is likely gone (no desktop), so stop
       // here rather than rushing through the rest of the book.
       ++ticket;
+      heading = null;
       platform.stop();
       setState({ status: "unavailable", book, trackIndex });
       return;
@@ -145,8 +154,10 @@ export function createBookPlayer(
       fromIndex,
       trackIndex < 0 ? undefined : trackIndex,
     );
-    reportSkipped(failed ? [failed, ...passed] : passed);
+    const skipped = failed ? [failed, ...passed] : passed;
     if (!track) {
+      heading = null;
+      reportSkipped(skipped);
       lastTrack =
         "trackIndex" in state && state.book.id === book.id
           ? (book.tracks[state.trackIndex] ?? null)
@@ -155,8 +166,11 @@ export function createBookPlayer(
       setState({ status: "finished", book });
       return;
     }
+    heading = { book, trackIndex, startAt, autoplay };
     const uri = await platform.trackUri(book, track);
     if (mine !== ticket) return;
+    heading = null;
+    reportSkipped(skipped);
     if (!uri) {
       platform.stop();
       setState({ status: "unavailable", book, trackIndex });
@@ -213,30 +227,38 @@ export function createBookPlayer(
     return Promise.resolve();
   };
 
+  // The Track Previous and Next move from: the one a Track change in flight is
+  // going to, else the one playing.
+  const currentPlace = () => {
+    if (heading) return { ...heading, seconds: heading.startAt, loaded: false };
+    if (state.status !== "playing" && state.status !== "paused") return null;
+    return {
+      book: state.book,
+      trackIndex: state.trackIndex,
+      seconds: platform.currentTime(),
+      autoplay: state.status === "playing",
+      loaded: true,
+    };
+  };
+
   const previousTrack = () => {
-    if (state.status !== "playing" && state.status !== "paused") {
-      return Promise.resolve();
-    }
-    const { book, trackIndex } = state;
+    const place = currentPlace();
+    if (!place) return Promise.resolve();
+    const { book, trackIndex, seconds, autoplay } = place;
     const previous = previousTrackIndex(book, trackIndex);
-    if (previous < 0 || platform.currentTime() > RESTART_TRACK_AFTER_SECONDS) {
+    if (previous < 0 || seconds > RESTART_TRACK_AFTER_SECONDS) {
+      if (!place.loaded) return goTo(book, trackIndex, 0, autoplay);
       platform.seekTo(0);
       return Promise.resolve();
     }
-    return goTo(book, previous, 0, state.status === "playing");
+    return goTo(book, previous, 0, autoplay);
   };
 
   // Past the last Track, the book is finished.
   const nextTrack = () => {
-    if (state.status !== "playing" && state.status !== "paused") {
-      return Promise.resolve();
-    }
-    return goTo(
-      state.book,
-      state.trackIndex + 1,
-      0,
-      state.status === "playing",
-    );
+    const place = currentPlace();
+    if (!place) return Promise.resolve();
+    return goTo(place.book, place.trackIndex + 1, 0, place.autoplay);
   };
 
   platform.onEnded(() => {
@@ -276,6 +298,32 @@ export function createBookPlayer(
     jumpTo: (book: Book, trackIndex: number) => goTo(book, trackIndex, 0),
     /** Plays a book again from Track 1 at 0:00. */
     startOver: (book: Book) => goTo(book, 0, 0),
+    /** Plays the finished book again from Track 1 at 0:00. */
+    playAgain: () => {
+      if (state.status !== "finished") return Promise.resolve();
+      return goTo(state.book, 0, 0);
+    },
+    /** Tries the Track that couldn't be played again, from its start. */
+    retry: () => {
+      if (state.status !== "unavailable") return Promise.resolve();
+      return goTo(state.book, state.trackIndex, 0);
+    },
+    /**
+     * Stops the book and lets it go, back to holding none. A playing book is
+     * paused first, so its Listening position is kept where the listener was.
+     */
+    close: () => {
+      if (state.status === "playing") {
+        platform.pause();
+        setState({ ...state, status: "paused" });
+      }
+      ++ticket;
+      heading = null;
+      lastTrack = null;
+      stopWatching();
+      platform.stop();
+      setState({ status: "idle" });
+    },
     /**
      * Where in the book the listener is now, to keep as its Listening position;
      * null when nothing plays or the Track can't play now.

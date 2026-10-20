@@ -4,7 +4,12 @@ import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import * as schema from "@/api/db/schema";
 import { audiobookCatalogSchema } from "../../../../shared/mobile-sync-contract";
-import { findAudiobookCoverPath, findTrackFilePath, loadAudiobookCatalog } from "./catalog";
+import {
+  findAudiobookCoverPath,
+  findTrackFilePath,
+  isTrackFilePath,
+  loadAudiobookCatalog,
+} from "./catalog";
 
 const createDb = async () => {
   const db = drizzle(createClient({ url: ":memory:" }), { schema });
@@ -118,5 +123,13 @@ describe("Audiobook catalog", () => {
       "/userData/audiobook-covers/frankl.jpg"
     );
     expect(await findAudiobookCoverPath(db, "nope")).toBeNull();
+  });
+
+  it("tells a Track's file from any other file", async () => {
+    await addFrankl(db);
+
+    expect(await isTrackFilePath(db, "/books/Frankl/CD 1/Track 02.mp3")).toBe(true);
+    expect(await isTrackFilePath(db, "/books/Frankl/CD 1/cover.jpg")).toBe(false);
+    expect(await isTrackFilePath(db, "t2")).toBe(false);
   });
 });

@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { Pencil, RefreshCw, Trash2, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpcClient } from "@/utils/trpc";
+import { cn } from "@/lib/utils";
+import { bookPlayer } from "@/services/book-player";
 import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/ui/page-container";
 import {
@@ -18,6 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AudiobookCover } from "./components/AudiobookCover";
 import { AudiobookOnDevices } from "./components/AudiobookOnDevices";
+import { AudiobookPlayButtons, useCurrentTrackId } from "./components/AudiobookPlayButtons";
 import { EditAudiobookDialog } from "./components/EditAudiobookDialog";
 import { SortableTrackList } from "./components/SortableTrackList";
 import { formatListeningTime } from "./format";
@@ -49,6 +52,7 @@ export default function AudiobookPage(): React.JSX.Element {
     enabled: Boolean(id),
   });
   const book = bookQuery.data;
+  const currentTrackId = useCurrentTrackId(book?.id);
   const refresh = (): Promise<void> => queryClient.invalidateQueries({ queryKey: ["audiobooks"] });
 
   const reorder = useMutation({
@@ -99,7 +103,9 @@ export default function AudiobookPage(): React.JSX.Element {
             {book.author && <p className="text-muted-foreground">{book.author}</p>}
             <p className="mt-1 break-all text-xs text-muted-foreground">{book.sourceFolder}</p>
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            <AudiobookPlayButtons book={book} />
+
+            <div className="mt-2 flex flex-wrap gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -133,7 +139,9 @@ export default function AudiobookPage(): React.JSX.Element {
             <AudiobookOnDevices id={book.id} sentToDevices={book.sentToDevices} />
 
             <h2 className="mt-6 text-sm font-semibold">{book.tracks.length} Tracks</h2>
-            <p className="text-xs text-muted-foreground">Drag to change the Track order.</p>
+            <p className="text-xs text-muted-foreground">
+              Click a Track to play it; drag to change the Track order.
+            </p>
             <SortableTrackList
               items={book.tracks}
               getKey={(track) => track.id}
@@ -145,9 +153,22 @@ export default function AudiobookPage(): React.JSX.Element {
                   <span className="w-6 shrink-0 text-right text-xs text-muted-foreground">
                     {index + 1}
                   </span>
-                  <span className="min-w-0 flex-1 truncate" title={track.filePath}>
-                    {insideFolder(book.sourceFolder, track.filePath)}
-                  </span>
+                  <button
+                    type="button"
+                    title={track.filePath}
+                    aria-current={track.id === currentTrackId ? "true" : undefined}
+                    disabled={track.missing}
+                    onClick={() => void bookPlayer.jumpTo(book, index)}
+                    className={cn(
+                      "flex min-w-0 flex-1 items-center gap-2 text-left hover:underline disabled:no-underline",
+                      track.id === currentTrackId && "font-semibold text-primary"
+                    )}
+                  >
+                    {track.id === currentTrackId && <Volume2 className="h-4 w-4 shrink-0" />}
+                    <span className="truncate">
+                      {insideFolder(book.sourceFolder, track.filePath)}
+                    </span>
+                  </button>
                   {track.missing && <span className="text-xs text-destructive">Missing</span>}
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {formatListeningTime(track.durationSeconds)}

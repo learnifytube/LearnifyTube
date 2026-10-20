@@ -9,7 +9,8 @@ import { updateAppLanguage } from "./helpers/language_helpers";
 import { syncThemeWithLocal } from "./helpers/theme_helpers";
 import { router } from "./routes/router";
 import { RouterProvider } from "@tanstack/react-router";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/utils/queryClient";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { getConfig } from "./config/env";
@@ -78,8 +79,6 @@ posthog.register({
     logger.error("Failed to get app version", error);
   }
 })();
-
-const queryClient = new QueryClient({});
 
 // Initialize theme based on saved preference
 syncThemeWithLocal().catch((error) => logger.error("Failed to sync theme", error));

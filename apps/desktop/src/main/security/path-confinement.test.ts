@@ -2,7 +2,11 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import { resolveAudiobookTrackFile, resolveWithinAllowed } from "./path-confinement";
+import {
+  resolveAudiobookTrackFile,
+  resolveAudiobookTrackPath,
+  resolveWithinAllowed,
+} from "./path-confinement";
 
 describe("resolveWithinAllowed", () => {
   let root: string;
@@ -182,6 +186,61 @@ describe("resolveAudiobookTrackFile", () => {
     const dir = path.join(root, "folder.mp3");
     fs.mkdirSync(dir);
     const result = await resolveAudiobookTrackFile("t1", tracks({ t1: dir }));
+    expect(result).toEqual({ ok: false, reason: "not-audio" });
+  });
+});
+
+// An audio file at `name` under `dir`, its folders made as needed.
+const writeAudioFile = (dir: string, name: string): string => {
+  const p = path.join(dir, name);
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, "audio");
+  return p;
+};
+
+describe("resolveAudiobookTrackPath", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "confine-track-path-")));
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  const writeFile = (name: string): string => writeAudioFile(root, name);
+
+  // The Track files of imported Audiobooks, as the database holds them.
+  const trackFiles =
+    (...paths: string[]) =>
+    async (filePath: string): Promise<boolean> =>
+      paths.includes(filePath);
+
+  test("serves the file of a Track of an imported Audiobook, wherever its folder is", async () => {
+    const file = writeFile("Frankl/CD 1/Track 01.mp3");
+    const result = await resolveAudiobookTrackPath(file, trackFiles(file));
+    expect(result).toEqual({ ok: true, realPath: file, contentType: "audio/mpeg" });
+  });
+
+  test("refuses a file that is not a Track, even next to one", async () => {
+    const track = writeFile("Frankl/Track 01.mp3");
+    const other = writeFile("Frankl/Track 02.mp3");
+    const result = await resolveAudiobookTrackPath(other, trackFiles(track));
+    expect(result).toEqual({ ok: false, reason: "unknown-track" });
+  });
+
+  test("returns not-found when the Track's file is gone", async () => {
+    const gone = path.join(root, "gone.mp3");
+    const result = await resolveAudiobookTrackPath(gone, trackFiles(gone));
+    expect(result).toEqual({ ok: false, reason: "not-found" });
+  });
+
+  test("refuses a Track whose file is a symlink to something that is not audio", async () => {
+    const notes = writeFile("notes.txt");
+    const link = path.join(root, "track.mp3");
+    fs.symlinkSync(notes, link);
+    const result = await resolveAudiobookTrackPath(link, trackFiles(link));
     expect(result).toEqual({ ok: false, reason: "not-audio" });
   });
 });

@@ -24,6 +24,8 @@ import {
   saveCoverFromImage,
 } from "@/api/audiobooks/covers";
 import { planRescan } from "@/api/audiobooks/rescan-plan";
+import { recordListening } from "@/api/audiobooks/listening";
+import { audiobookListeningSchema } from "../../../../../shared/mobile-sync-contract";
 import {
   devicesHoldingAudiobook,
   setAudiobookSentToDevices,
@@ -335,6 +337,12 @@ export const audiobooksRouter = t.router({
       const changed = await setAudiobookSentToDevices(ctx.db ?? defaultDb, input.id, input.sent);
       if (changed) await notifyDevices();
     }),
+
+  // The desktop's own Listening position as it plays: kept by the same newest-wins
+  // rule as a Device's, so a phone picks it up at its next catalog refresh.
+  recordListening: publicProcedure
+    .input(audiobookListeningSchema)
+    .mutation(({ input, ctx }) => recordListening(ctx.db ?? defaultDb, input)),
 
   devicesHolding: publicProcedure
     .input(z.object({ id: z.string() }))

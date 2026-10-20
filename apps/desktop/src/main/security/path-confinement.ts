@@ -101,7 +101,26 @@ export const resolveAudiobookTrackFile = async (
   if (!recorded) {
     return { ok: false, reason: "unknown-track" };
   }
+  return resolveAudioFile(recorded);
+};
 
+/**
+ * Decide whether a path asked for over `local-file://` is an Audiobook Track's
+ * file the desktop may play: only a path recorded for a Track of an imported
+ * Audiobook (so a neighbouring file stays out of reach), and only when it is a
+ * regular audio file once symlinks are resolved.
+ */
+export const resolveAudiobookTrackPath = async (
+  requestedPath: string,
+  isTrackFilePath: (filePath: string) => Promise<boolean>
+): Promise<TrackFileResult> => {
+  if (!requestedPath || !(await isTrackFilePath(requestedPath))) {
+    return { ok: false, reason: "unknown-track" };
+  }
+  return resolveAudioFile(requestedPath);
+};
+
+const resolveAudioFile = (recorded: string): TrackFileResult => {
   const realPath = realpathOrNull(path.resolve(recorded));
   if (!realPath) {
     return { ok: false, reason: "not-found" };

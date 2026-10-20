@@ -91,5 +91,9 @@ Looking at an Audiobook's folder again after Import. New files join at the end o
 _Avoid_: re-import, refresh
 
 **Listening position**:
-Where the user is in an Audiobook: one Track and a time inside it, the same on every Device. Playing an Audiobook always resumes from it and carries on to the end. The newest position wins. An Audiobook is finished when its last Track ends.
+Where the user is in an Audiobook: one Track and a time inside it, the same wherever it is played, on the desktop or any Device. Playing an Audiobook always resumes from it and carries on to the end, skipping missing Tracks. The newest position wins, even when the book plays in two places at once: nothing hands playback from one to the other. An Audiobook is finished when its last Track ends.
 _Avoid_: watch state, progress (for Audiobooks)
+
+**Book player**:
+What plays an Audiobook, on the desktop or a phone, with the same rules on both: it resumes from the Listening position, crosses Tracks on its own, pauses and resumes, skips ±30s, and lets the user pick any Track. Previous restarts the Track unless it has only just begun. On the desktop it keeps playing while the user browses or the window is hidden, and pauses when a Video starts.
+_Avoid_: audio player, video player (for Audiobooks)

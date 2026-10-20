@@ -15,7 +15,7 @@ export const bookPlayer = createDesktopBookPlayer({
   audio: document.createElement("audio"),
   saveListening: ({ listening, moment }) => {
     trpcClient.audiobooks.recordListening
-      .mutate(listening)
+      .mutate({ listening, announce: moment === "meaningful" })
       .then(() => {
         // The Audiobook page shows Resume from the new spot.
         if (moment === "meaningful") {

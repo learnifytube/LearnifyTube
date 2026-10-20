@@ -6,6 +6,8 @@ export type AudiobookMirrorDeps = {
   /** The desktop's Audiobooks, or null when the desktop is too old to serve them. */
   loadCatalog: (serverUrl: string) => Promise<Audiobook[] | null>;
   held: Pick<HeldAudiobooks, "hold" | "release" | "allHolds">;
+  /** Keeps the catalog for the Home rows, so they show the desktop's newest Listening positions. */
+  keepCatalog: (serverUrl: string, catalog: Audiobook[]) => void;
 };
 
 /**
@@ -16,10 +18,12 @@ export type AudiobookMirrorDeps = {
 export function createAudiobookMirror({
   loadCatalog,
   held,
+  keepCatalog,
 }: AudiobookMirrorDeps) {
   const mirror = async (serverUrl: string) => {
     const catalog = await loadCatalog(serverUrl);
     if (!catalog) return;
+    keepCatalog(serverUrl, catalog);
     const holds = await held.allHolds();
     const plan = planAudiobookMirror({
       sentIds: catalog

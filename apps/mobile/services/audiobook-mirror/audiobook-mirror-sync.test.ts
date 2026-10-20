@@ -32,9 +32,11 @@ function createHarness() {
   const held = createHeldAudiobooks(fake.platform);
   held.start();
   let catalog: Audiobook[] | null = [];
+  const kept: { serverUrl: string; books: Audiobook[] }[] = [];
   const mirror = createAudiobookMirror({
     loadCatalog: async () => catalog,
     held,
+    keepCatalog: (serverUrl, books) => kept.push({ serverUrl, books }),
   });
   const desktopServes = (books: Audiobook[] | null) => {
     catalog = books;
@@ -43,7 +45,7 @@ function createHarness() {
     await mirror.mirror(SERVER);
     await held.idle();
   };
-  return { fake, held, mirror, desktopServes, sync };
+  return { fake, held, mirror, desktopServes, sync, kept };
 }
 
 describe("Audiobook Mirror", () => {
@@ -123,5 +125,30 @@ describe("Audiobook Mirror", () => {
     await mirror.mirror(SERVER);
 
     expect(await mirror.heldIds()).toEqual([]);
+  });
+
+  it("keeps each catalog it loads, so an open phone shows the desktop's new Listening position", async () => {
+    const { desktopServes, sync, kept } = createHarness();
+    const frankl = book("frankl", ["cd1", "cd3"], false);
+    desktopServes([frankl]);
+    await sync();
+
+    const paused = {
+      ...frankl,
+      listeningPosition: { trackId: "cd3", seconds: 754, updatedAt: 2_000 },
+    };
+    desktopServes([paused]);
+    await sync();
+
+    expect(kept.at(-1)).toEqual({ serverUrl: SERVER, books: [paused] });
+  });
+
+  it("keeps no catalog from a desktop too old to serve Audiobooks", async () => {
+    const { desktopServes, sync, kept } = createHarness();
+    desktopServes(null);
+
+    await sync();
+
+    expect(kept).toEqual([]);
   });
 });

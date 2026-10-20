@@ -24,8 +24,11 @@ import {
   saveCoverFromImage,
 } from "@/api/audiobooks/covers";
 import { planRescan } from "@/api/audiobooks/rescan-plan";
-import { recordListening } from "@/api/audiobooks/listening";
-import { audiobookListeningSchema } from "../../../../../shared/mobile-sync-contract";
+import { recordDesktopListening } from "@/api/audiobooks/listening";
+import {
+  audiobookListeningSchema,
+  type AudiobookListening,
+} from "../../../../../shared/mobile-sync-contract";
 import {
   devicesHoldingAudiobook,
   setAudiobookSentToDevices,
@@ -339,10 +342,21 @@ export const audiobooksRouter = t.router({
     }),
 
   // The desktop's own Listening position as it plays: kept by the same newest-wins
-  // rule as a Device's, so a phone picks it up at its next catalog refresh.
+  // rule as a Device's. Meaningful moments are announced so open phones refresh;
+  // periodic saves wait for the phone's next catalog refresh.
   recordListening: publicProcedure
-    .input(audiobookListeningSchema)
-    .mutation(({ input, ctx }) => recordListening(ctx.db ?? defaultDb, input)),
+    .input(
+      z.object({
+        // The contract's schema is zod 4; this router's zod is 3, so it can't nest directly.
+        listening: z.custom<AudiobookListening>(
+          (value) => audiobookListeningSchema.safeParse(value).success
+        ),
+        announce: z.boolean(),
+      })
+    )
+    .mutation(({ input, ctx }) =>
+      recordDesktopListening(ctx.db ?? defaultDb, input, () => void notifyDevices())
+    ),
 
   devicesHolding: publicProcedure
     .input(z.object({ id: z.string() }))

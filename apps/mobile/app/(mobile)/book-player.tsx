@@ -6,11 +6,18 @@ import {
   bookPlayer,
   useBookPlayerState,
   useBookSpeed,
+  useTrackProgress,
+  type Book,
 } from "../../services/book-player";
 import { BOOK_SPEEDS } from "../../../shared/book-player/createBookPlayer";
+import {
+  formatTimeLeft,
+  timeLeftInBook,
+} from "../../../shared/book-player/timeLeftInBook";
 import { useConnectionStore } from "../../stores/connection";
 import { AudiobookCover } from "../../components/phone/AudiobookCover";
 import { BookTracksSheet } from "../../components/phone/BookTracksSheet";
+import { PlayerProgressBar } from "../../components/phone/PlayerProgressBar";
 import { colors, fontSize, fontWeight, radius, spacing } from "../../theme";
 import {
   ArrowLeft,
@@ -64,6 +71,15 @@ export default function BookPlayerScreen() {
             Track {trackIndex + 1} of {book.tracks.length} · {track.title}
           </Text>
         ) : null}
+        {trackIndex !== null ? (
+          <TrackProgress
+            book={book}
+            trackIndex={trackIndex}
+            active={state.status === "playing" || state.status === "paused"}
+          />
+        ) : (
+          <FinishedProgress book={book} />
+        )}
         {message ? <Text style={styles.message}>{message}</Text> : null}
         {state.status === "playing" || state.status === "paused" ? (
           <View style={styles.controls}>
@@ -133,6 +149,60 @@ export default function BookPlayerScreen() {
         />
       ) : null}
     </SafeAreaView>
+  );
+}
+
+// Where the book is in its Track, a bar to seek within it, and how long the
+// rest of the book takes at this speed (when every Track's length is known).
+function TrackProgress({
+  book,
+  trackIndex,
+  active,
+}: {
+  book: Book;
+  trackIndex: number;
+  active: boolean;
+}) {
+  const { elapsed, duration } = useTrackProgress();
+  const speed = useBookSpeed();
+  const left = active
+    ? timeLeftInBook({
+        tracks: book.tracks,
+        trackIndex,
+        elapsed,
+        trackLength: duration,
+        speed,
+      })
+    : null;
+  return (
+    <View style={styles.progress}>
+      <PlayerProgressBar
+        currentTime={elapsed}
+        duration={duration}
+        onSeek={bookPlayer.seekTo}
+        disabled={!active}
+      />
+      {left !== null ? (
+        <Text style={styles.timeLeft} testID="book-time-left">
+          {formatTimeLeft(left)} left in book
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+// A finished book shows its last Track played to the end.
+function FinishedProgress({ book }: { book: Book }) {
+  const length = book.tracks.at(-1)?.durationSeconds ?? 0;
+  return (
+    <View style={styles.progress}>
+      <PlayerProgressBar
+        currentTime={length}
+        duration={length}
+        onSeek={() => {}}
+        disabled
+      />
+    </View>
   );
 }
 
@@ -208,6 +278,8 @@ const styles = StyleSheet.create({
   },
   author: { color: colors.mutedForeground, fontSize: fontSize.base },
   track: { color: colors.mutedForeground, fontSize: fontSize.sm },
+  progress: { alignSelf: "stretch", alignItems: "center", gap: spacing.xs },
+  timeLeft: { color: colors.mutedForeground, fontSize: fontSize.sm },
   message: {
     color: colors.warning,
     fontSize: fontSize.sm,

@@ -19,6 +19,8 @@ interface PlayerProgressBarProps {
   onSeek: (seconds: number) => void;
   onScrubStart?: () => void;
   onScrubEnd?: () => void;
+  /** Shows the bar dimmed and ignores touches. */
+  disabled?: boolean;
 }
 
 export function PlayerProgressBar({
@@ -27,31 +29,45 @@ export function PlayerProgressBar({
   onSeek,
   onScrubStart,
   onScrubEnd,
+  disabled = false,
 }: PlayerProgressBarProps) {
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [scrubTime, setScrubTime] = useState(0);
 
   const trackRef = useRef<View>(null);
   const trackBoundsRef = useRef({ pageX: 0, width: 0 });
+  // The pan responder is made once; it reads the latest props through here.
+  const latest = useRef({
+    duration,
+    onSeek,
+    onScrubStart,
+    onScrubEnd,
+    disabled,
+  });
+  latest.current = { duration, onSeek, onScrubStart, onScrubEnd, disabled };
 
   const getTargetTimeFromEvent = (evt: GestureResponderEvent): number => {
     const { pageX, width } = trackBoundsRef.current;
     if (width <= 0) return 0;
     const touchX = evt.nativeEvent.pageX - pageX;
-    return calculateScrubTime(touchX, width, duration);
+    return calculateScrubTime(touchX, width, latest.current.duration);
   };
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => !latest.current.disabled,
+      onMoveShouldSetPanResponder: () => !latest.current.disabled,
       onPanResponderGrant: (evt) => {
-        onScrubStart?.();
+        latest.current.onScrubStart?.();
         setIsScrubbing(true);
         trackRef.current?.measure((_x, _y, width, _height, pageX) => {
           trackBoundsRef.current = { pageX, width };
           const touchX = evt.nativeEvent.pageX - pageX;
-          const target = calculateScrubTime(touchX, width, duration);
+          const target = calculateScrubTime(
+            touchX,
+            width,
+            latest.current.duration,
+          );
           setScrubTime(target);
         });
       },
@@ -62,12 +78,12 @@ export function PlayerProgressBar({
       onPanResponderRelease: (evt) => {
         const target = getTargetTimeFromEvent(evt);
         setIsScrubbing(false);
-        onSeek(target);
-        onScrubEnd?.();
+        latest.current.onSeek(target);
+        latest.current.onScrubEnd?.();
       },
       onPanResponderTerminate: () => {
         setIsScrubbing(false);
-        onScrubEnd?.();
+        latest.current.onScrubEnd?.();
       },
     }),
   ).current;
@@ -76,7 +92,10 @@ export function PlayerProgressBar({
   const progressPercent = calculateProgressPercent(displayTime, duration);
 
   return (
-    <View style={styles.container} testID="player-progress-bar">
+    <View
+      style={[styles.container, disabled && styles.disabled]}
+      testID="player-progress-bar"
+    >
       <Text style={styles.timeText}>{formatPlayerTime(displayTime)}</Text>
       <View
         ref={trackRef}
@@ -89,9 +108,7 @@ export function PlayerProgressBar({
         {...panResponder.panHandlers}
       >
         <View style={styles.trackBackground}>
-          <View
-            style={[styles.trackFill, { width: `${progressPercent}%` }]}
-          />
+          <View style={[styles.trackFill, { width: `${progressPercent}%` }]} />
         </View>
 
         {/* Thumb */}
@@ -109,9 +126,7 @@ export function PlayerProgressBar({
             style={[styles.bubble, { left: `${progressPercent}%` }]}
             pointerEvents="none"
           >
-            <Text style={styles.bubbleText}>
-              {formatPlayerTime(scrubTime)}
-            </Text>
+            <Text style={styles.bubbleText}>{formatPlayerTime(scrubTime)}</Text>
           </View>
         )}
       </View>
@@ -128,6 +143,7 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingVertical: spacing.xs,
   },
+  disabled: { opacity: 0.4 },
   timeText: {
     color: colors.foreground,
     fontSize: fontSize.xs,

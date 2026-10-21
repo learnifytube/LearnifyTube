@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { bookPlayer, useBookPlayerState } from "@/services/book-player";
 import { BookSeekBar } from "./BookSeekBar";
 import { BookSpeedMenu } from "./BookSpeedMenu";
+import { BookTimeLeft } from "./BookTimeLeft";
 
 const SKIP_SECONDS = 30;
 
@@ -96,6 +97,7 @@ export function BookPlayerBar(): React.JSX.Element | null {
           {control("Next Track", <SkipForward className="h-4 w-4" />, bookPlayer.nextTrack)}
         </div>
         <BookSeekBar disabled={!active} />
+        <BookTimeLeft />
       </div>
 
       <div className="flex shrink-0 items-center justify-end gap-1">

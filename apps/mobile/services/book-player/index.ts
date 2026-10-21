@@ -12,6 +12,7 @@ import type { Audiobook } from "../../../shared/mobile-sync-contract";
 import { useBookSpeedStore } from "../../stores/bookSpeed";
 import {
   createBookPlayer,
+  type Book,
   type BookAudioPlatform,
   type ListeningPoint,
   type NowPlaying,
@@ -27,6 +28,7 @@ const endedListeners = new Set<() => void>();
 const readyListeners = new Set<() => void>();
 const failedListeners = new Set<() => void>();
 const playingListeners = new Set<(playing: boolean) => void>();
+const progressListeners = new Set<() => void>();
 const statusReader = createExpoAudioStatusReader();
 let lockScreenActive = false;
 // The time a seek is heading to, while expo-audio still reports the old time.
@@ -65,6 +67,7 @@ const getAudio = () => {
   audio = createAudioPlayer(null, { updateInterval: 1000 });
   audio.shouldCorrectPitch = true;
   audio.addListener("playbackStatusUpdate", (status) => {
+    updateProgress();
     for (const event of statusReader.read(status)) {
       if (event === "ended") emit(endedListeners);
       else if (event === "ready") emit(readyListeners);
@@ -161,8 +164,48 @@ const player = createBookPlayer(expoAudioPlatform, {
 
 // Playing a book (from anywhere in it) also fetches the whole book onto the
 // phone (it's pulled), while the Track playing Streams uninterrupted.
+/** How far into its Track the book is, in seconds. */
+export type TrackProgress = { elapsed: number; duration: number };
+
+const NO_PROGRESS: TrackProgress = { elapsed: 0, duration: 0 };
+let progress = NO_PROGRESS;
+
+// The Track's length: its file's once known, else the length its scan found.
+const trackLength = (track: Book["tracks"][number] | undefined) =>
+  audio && Number.isFinite(audio.duration) && audio.duration > 0
+    ? audio.duration
+    : (track?.durationSeconds ?? 0);
+
+function updateProgress() {
+  const state = player.getState();
+  const next =
+    state.status === "playing" || state.status === "paused"
+      ? {
+          elapsed: expoAudioPlatform.currentTime(),
+          duration: trackLength(state.book.tracks[state.trackIndex]),
+        }
+      : NO_PROGRESS;
+  if (next.elapsed === progress.elapsed && next.duration === progress.duration)
+    return;
+  progress = next;
+  emit(progressListeners);
+}
+player.subscribe(updateProgress);
+
 export const bookPlayer = {
   ...player,
+  getProgress: () => progress,
+  subscribeProgress: subscribe(progressListeners),
+  /** Moves within the Track playing, kept inside its length. */
+  seekTo: (seconds: number) => {
+    const state = player.getState();
+    if (state.status !== "playing" && state.status !== "paused") return;
+    const length = trackLength(state.book.tracks[state.trackIndex]);
+    expoAudioPlatform.seekTo(
+      Math.max(0, length > 0 ? Math.min(seconds, length) : seconds),
+    );
+    updateProgress();
+  },
   play: (book: Audiobook, from?: ListeningPoint | null) => {
     heldAudiobooks.pull(book);
     return player.play(book, from);
@@ -191,6 +234,14 @@ export function useBookSpeed() {
 
 export function useBookPlayerState() {
   return useSyncExternalStore(bookPlayer.subscribe, bookPlayer.getState);
+}
+
+/** How far into its Track the book is. */
+export function useTrackProgress() {
+  return useSyncExternalStore(
+    bookPlayer.subscribeProgress,
+    bookPlayer.getProgress,
+  );
 }
 
 export type {

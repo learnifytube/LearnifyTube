@@ -3,7 +3,8 @@ import { z } from "zod";
 // v2: the On-device set and Device reports (Offline copies held, Watch state).
 // v3: Audiobooks (catalog, Track files, covers).
 // v4: Movies and Series (catalog, Movie and Episode files, posters, Movie watch in Device reports).
-export const MOBILE_SYNC_PROTOCOL_VERSION = 4;
+// v5: Resume everywhere (Track positions, Current Videos, each Series' last Episode; ADR-0006).
+export const MOBILE_SYNC_PROTOCOL_VERSION = 5;
 export const MIN_SUPPORTED_DESKTOP_SYNC_PROTOCOL_VERSION = 1;
 export const MIN_SUPPORTED_MOBILE_SYNC_PROTOCOL_VERSION = 1;
 /** The first desktop protocol that serves the On-device set; older desktops leave Devices alone. */
@@ -12,6 +13,11 @@ export const ON_DEVICE_SET_SYNC_PROTOCOL_VERSION = 2;
 export const AUDIOBOOKS_SYNC_PROTOCOL_VERSION = 3;
 /** The first desktop protocol that serves Movies and Series; Devices hide them on older desktops. */
 export const MOVIES_SYNC_PROTOCOL_VERSION = 4;
+/**
+ * The first protocol that shares where each file and collection resumes (Track positions,
+ * Current Videos, each Series' last Episode); neither side sends them to an older peer.
+ */
+export const RESUME_SYNC_PROTOCOL_VERSION = 5;
 
 export const syncServerInfoSchema = z.object({
   name: z.string(),

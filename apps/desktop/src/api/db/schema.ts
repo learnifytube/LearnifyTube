@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index, unique } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, index, unique, primaryKey } from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
 
 export const channels = sqliteTable(
@@ -156,7 +156,6 @@ export const channelPlaylists = sqliteTable(
     // Playback stats
     viewCount: integer("view_count").default(0), // Number of times playlist was opened
     lastViewedAt: integer("last_viewed_at"), // Last time playlist was viewed
-    currentVideoIndex: integer("current_video_index").default(0), // Current position in playlist
     totalWatchTimeSeconds: integer("total_watch_time_seconds").default(0), // Total watch time across all videos
 
     createdAt: integer("created_at").notNull(),
@@ -503,7 +502,6 @@ export const customPlaylists = sqliteTable(
     // Playback tracking (consistent with channelPlaylists)
     viewCount: integer("view_count").default(0),
     lastViewedAt: integer("last_viewed_at"),
-    currentVideoIndex: integer("current_video_index").default(0),
     totalWatchTimeSeconds: integer("total_watch_time_seconds").default(0),
 
     createdAt: integer("created_at").notNull(),
@@ -560,6 +558,21 @@ export type NewCustomPlaylist = typeof customPlaylists.$inferInsert;
 
 export type CustomPlaylistItem = typeof customPlaylistItems.$inferSelect;
 export type NewCustomPlaylistItem = typeof customPlaylistItems.$inferInsert;
+
+// The Current Video of each List, Favorites and YouTube playlist (ADR-0006): a Video, not a slot.
+// collection_id is a custom playlist id, "favorites", or a YouTube playlist id.
+export const collectionCurrentVideos = sqliteTable(
+  "collection_current_videos",
+  {
+    collectionKind: text("collection_kind", {
+      enum: ["list", "favorites", "youtube_playlist"],
+    }).notNull(),
+    collectionId: text("collection_id").notNull(),
+    videoId: text("video_id").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.collectionKind, table.collectionId] })]
+);
 
 // Favorites table for videos, custom playlists, and channel playlists
 export const favorites = sqliteTable(
@@ -642,6 +655,12 @@ export const audiobookTracks = sqliteTable(
     position: integer("position").notNull(),
     durationSeconds: integer("duration_seconds"),
     missing: integer("missing", { mode: "boolean" }).notNull().default(false),
+    // Track position (ADR-0006): where the user stopped in this Track, whether
+    // it was played to its end, and when that last changed (newest wins).
+    // Null before the Track was ever played.
+    resumeSeconds: integer("resume_seconds"),
+    playedToEnd: integer("played_to_end", { mode: "boolean" }).notNull().default(false),
+    resumeUpdatedAt: integer("resume_updated_at"),
   },
   (table) => [index("audiobook_tracks_book_position_idx").on(table.audiobookId, table.position)]
 );

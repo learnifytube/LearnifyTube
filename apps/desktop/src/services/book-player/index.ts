@@ -33,6 +33,23 @@ export const bookPlayer = createDesktopBookPlayer({
         logger.warn("[BookPlayer] Saving the Listening position failed", { error });
       });
   },
+  saveTrackPosition: (position) => {
+    trpcClient.audiobooks.recordTrackPosition
+      .mutate(position)
+      // The Track list shows the Track's new state.
+      .then(() => queryClient.invalidateQueries({ queryKey: ["audiobooks", "get"] }))
+      .catch((error: unknown) => {
+        logger.warn("[BookPlayer] Saving a Track position failed", { error });
+      });
+  },
+  saveStartOver: (audiobookId, at) => {
+    trpcClient.audiobooks.startOver
+      .mutate({ id: audiobookId, at })
+      .then(() => queryClient.invalidateQueries({ queryKey: ["audiobooks", "get"] }))
+      .catch((error: unknown) => {
+        logger.warn("[BookPlayer] Starting the book over failed", { error });
+      });
+  },
   speed: {
     get: () => {
       try {

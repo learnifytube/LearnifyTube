@@ -176,6 +176,20 @@
       "when": 1792677436853,
       "tag": "0024_series_last_episode",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1792687332285,
+      "tag": "0025_current_videos",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1792687432543,
+      "tag": "0026_track_positions",
+      "breakpoints": true
     }
   ]
 }

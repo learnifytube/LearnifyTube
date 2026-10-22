@@ -64,6 +64,31 @@ export const audiobookListeningSchema = listeningPositionSchema.extend({
 
 export type AudiobookListening = z.infer<typeof audiobookListeningSchema>;
 
+/**
+ * Where the user stopped in one Track, and whether it was played to its end
+ * (ADR-0006). The newest updatedAt wins; a Start over records one too, so older
+ * positions lose to it. A Track played to its end starts again from 0.
+ */
+export const trackPositionSchema = z.object({
+  seconds: z.number().min(0),
+  playedToEnd: z.boolean(),
+  updatedAt: z.number(),
+});
+
+export type TrackPosition = z.infer<typeof trackPositionSchema>;
+
+/**
+ * A Device's Track position in one Track of an Audiobook. Sent in the Device
+ * report and, while playing, to POST /api/audiobook/:id/track-position.
+ * Only sent to desktops at RESUME_SYNC_PROTOCOL_VERSION or newer.
+ */
+export const audiobookTrackPositionSchema = trackPositionSchema.extend({
+  audiobookId: z.string(),
+  trackId: z.string(),
+});
+
+export type AudiobookTrackPosition = z.infer<typeof audiobookTrackPositionSchema>;
+
 /** Whether a played file is a Movie or an Episode of a Series (ADR-0005). */
 export const movieKindSchema = z.enum(["movie", "episode"]);
 
@@ -83,6 +108,37 @@ export const movieWatchSchema = z.object({
 });
 
 export type MovieWatch = z.infer<typeof movieWatchSchema>;
+
+/** The collections that remember a Current Video (ADR-0006); Channels don't. */
+export const collectionKindSchema = z.enum([
+  "list",
+  "favorites",
+  "youtube_playlist",
+]);
+
+export type CollectionKind = z.infer<typeof collectionKindSchema>;
+
+/**
+ * The Video a List (Favorites included) or YouTube playlist was last playing.
+ * Sent in the Device report; the newest updatedAt wins. Favorites' id is "favorites".
+ */
+export const currentVideoSchema = z.object({
+  collectionKind: collectionKindSchema,
+  collectionId: z.string(),
+  videoId: z.string(),
+  updatedAt: z.number(),
+});
+
+export type CurrentVideo = z.infer<typeof currentVideoSchema>;
+
+/**
+ * GET /api/playlist/:id/videos and GET /api/mylist/:id/videos ("favorites" for
+ * Favorites) carry `currentVideo` beside `videos`: the collection's Current Video,
+ * or null when none is set. Absent from desktops older than RESUME_SYNC_PROTOCOL_VERSION.
+ */
+export const collectionVideosCurrentVideoSchema = z.object({
+  currentVideo: currentVideoSchema.nullable().optional(),
+});
 
 /**
  * The Episode a Series last played (ADR-0006), and when that changed. Null
@@ -121,12 +177,16 @@ export const deviceReportSchema = z.object({
   listening: z.array(audiobookListeningSchema).optional(),
   /** Audiobooks wholly on the Device (every Track that isn't missing); absent from older Devices. */
   heldAudiobookIds: z.array(z.string()).optional(),
+  /** Track positions kept on the Device; absent from Devices older than resume (v5). */
+  trackPositions: z.array(audiobookTrackPositionSchema).optional(),
   /** Watch progress of Movies and Episodes played on the Device; absent from Devices older than Movies. */
   movieWatch: z.array(movieWatchSchema).optional(),
   /** Movies with an Offline copy on the Device, sent or downloaded there; absent from Devices older than Movies. */
   heldMovieIds: z.array(z.string()).optional(),
   /** Episodes with an Offline copy on the Device; absent from Devices older than Movies. */
   heldEpisodeIds: z.array(z.string()).optional(),
+  /** Current Videos of Lists and YouTube playlists played on the Device; absent from Devices older than resume. */
+  currentVideos: z.array(currentVideoSchema).optional(),
   /** Each Series' last Episode as the Device has it; absent from Devices older than resume. */
   seriesLastEpisodes: z.array(seriesLastEpisodeSchema).optional(),
 });
@@ -149,6 +209,8 @@ export const audiobookTrackSchema = z.object({
   durationSeconds: z.number().min(0).nullable(),
   /** The file was gone at the last Rescan; Devices skip it. */
   missing: z.boolean(),
+  /** Where this Track resumes; null before it was played. Absent from desktops older than resume (v5). */
+  trackPosition: trackPositionSchema.nullable().optional(),
 });
 
 export type AudiobookTrack = z.infer<typeof audiobookTrackSchema>;

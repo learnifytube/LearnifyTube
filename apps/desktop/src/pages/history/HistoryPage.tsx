@@ -21,23 +21,26 @@ export default function HistoryPage(): React.JSX.Element {
     queryFn: () => trpcClient.playlists.listAll.query({ limit: 30 }),
   });
 
-  const recentPlaylists = (playlistsQuery.data ?? []).filter(
-    (p) => p.lastViewedAt !== null
-  );
+  const recentPlaylists = (playlistsQuery.data ?? []).filter((p) => p.lastViewedAt !== null);
 
+  // Resumes where the playlist picks up: its Current Video, or the next unwatched one.
   const handleResumePlaylist = async (playlist: {
     playlistId: string;
     url: string | null;
-    currentVideoIndex: number | null;
   }): Promise<void> => {
     try {
-      const details = await trpcClient.playlists.getDetails.query({
-        playlistId: playlist.playlistId,
-        playlistUrl: playlist.url ?? undefined,
-      });
+      const [details, pickUp] = await Promise.all([
+        trpcClient.playlists.getDetails.query({
+          playlistId: playlist.playlistId,
+          playlistUrl: playlist.url ?? undefined,
+        }),
+        trpcClient.collections.pickUp.query({
+          kind: "youtube_playlist",
+          id: playlist.playlistId,
+        }),
+      ]);
       const videos = details?.videos ?? [];
-      const startIndex = playlist.currentVideoIndex ?? 0;
-      const video = videos[startIndex] ?? videos[0];
+      const video = videos.find((v) => v.videoId === pickUp?.videoId) ?? videos[0];
       if (!video) {
         toast.error("This playlist has no videos to resume.");
         return;
@@ -107,7 +110,7 @@ export default function HistoryPage(): React.JSX.Element {
                 const itemCount = p.itemCount ?? 0;
                 const resumePosition = (p.currentVideoIndex ?? 0) + 1;
                 const resumeLabel =
-                  itemCount > 0
+                  itemCount > 0 && p.currentVideoIndex !== null
                     ? `Resume video ${Math.min(resumePosition, itemCount)} of ${itemCount}`
                     : "Resume";
                 return (
@@ -120,7 +123,6 @@ export default function HistoryPage(): React.JSX.Element {
                       handleResumePlaylist({
                         playlistId: p.playlistId,
                         url: p.url,
-                        currentVideoIndex: p.currentVideoIndex,
                       })
                     }
                     onKeyDown={(e) => {
@@ -129,7 +131,6 @@ export default function HistoryPage(): React.JSX.Element {
                         handleResumePlaylist({
                           playlistId: p.playlistId,
                           url: p.url,
-                          currentVideoIndex: p.currentVideoIndex,
                         });
                       }
                     }}

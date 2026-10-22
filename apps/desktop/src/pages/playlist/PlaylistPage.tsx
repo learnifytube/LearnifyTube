@@ -89,6 +89,17 @@ export default function PlaylistPage(): React.JSX.Element {
 
   const query = isCustomPlaylist ? customQuery : youtubeQuery;
 
+  // Where Resume starts: the Current Video, or the next unwatched one (ADR-0006).
+  const pickUpQuery = useQuery({
+    queryKey: ["collections", "pickUp", isCustomPlaylist ? "list" : "youtube_playlist", playlistId],
+    queryFn: () =>
+      trpcClient.collections.pickUp.query({
+        kind: isCustomPlaylist ? "list" : "youtube_playlist",
+        id: playlistId!,
+      }),
+    enabled: !!playlistId,
+  });
+
   const downloadMutation = useMutation({
     mutationFn: (urls: string[]) => trpcClient.queue.addToQueue.mutate({ urls }),
     onSuccess: (res) => {
@@ -142,7 +153,7 @@ export default function PlaylistPage(): React.JSX.Element {
         thumbnailUrl: customQuery.data.thumbnailUrl,
         thumbnailPath: customQuery.data.thumbnailPath,
         itemCount: customQuery.data.itemCount,
-        currentVideoIndex: customQuery.data.currentVideoIndex ?? 0,
+        currentVideoIndex: customQuery.data.currentVideoIndex,
         url: null,
         videos: customQuery.data.videos ?? [],
       };
@@ -202,24 +213,22 @@ export default function PlaylistPage(): React.JSX.Element {
     }
   };
 
-  const handlePlayAll = (): void => {
+  const handleResume = async (): Promise<void> => {
     if (!data?.videos || data.videos.length === 0) {
       toast.error("No videos in playlist");
       return;
     }
-    const startIndex = data.currentVideoIndex || 0;
-    const video = data.videos[startIndex];
-    if (video && playlistId) {
-      navigate({
-        to: "/player",
-        search: {
-          videoId: video.videoId,
-          playlistId: isCustomPlaylist ? playlistId : playlistId,
-          playlistUrl: isCustomPlaylist ? undefined : (data?.url ?? playlistUrl),
-          playlistIndex: startIndex,
-        },
-      });
+    const pickUp = (await pickUpQuery.refetch()).data;
+    const index = pickUp ? data.videos.findIndex((video) => video.videoId === pickUp.videoId) : -1;
+    handlePlayVideo(index >= 0 ? index : 0);
+  };
+
+  const handlePlayFromStart = (): void => {
+    if (!data?.videos || data.videos.length === 0) {
+      toast.error("No videos in playlist");
+      return;
     }
+    handlePlayVideo(0);
   };
 
   const handlePlayVideo = (index: number): void => {
@@ -388,11 +397,12 @@ export default function PlaylistPage(): React.JSX.Element {
         thumbnailUrl={data.thumbnailUrl}
         thumbnailPath={data.thumbnailPath}
         itemCount={stats.total}
-        currentVideoIndex={data.currentVideoIndex || 0}
+        currentVideoIndex={data.currentVideoIndex}
         downloadedCount={stats.downloaded}
         isRefreshing={query.isFetching || isRefreshing}
         lastUpdated={query.dataUpdatedAt}
-        onPlayAll={handlePlayAll}
+        onResume={handleResume}
+        onPlayFromStart={handlePlayFromStart}
         onRefresh={handleRefresh}
       />
 
@@ -440,7 +450,7 @@ export default function PlaylistPage(): React.JSX.Element {
                     index={originalIndex}
                     playlistId={playlistId}
                     totalVideos={data.videos?.length ?? 0}
-                    isCurrentVideo={originalIndex === (data.currentVideoIndex || 0)}
+                    isCurrentVideo={originalIndex === data.currentVideoIndex}
                     isSelected={selectedVideoIds.has(video.videoId)}
                     onPlay={() => handlePlayVideo(originalIndex)}
                     onToggleSelect={() => handleToggleVideo(video.videoId)}

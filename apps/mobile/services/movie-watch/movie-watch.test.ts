@@ -1,4 +1,4 @@
-import { currentMovieWatch, resumeAt } from "./movieWatch";
+import { currentMovieWatch, resumeAt, watchStateOf } from "./movieWatch";
 
 const desktop = (
   positionSeconds: number,
@@ -70,5 +70,67 @@ describe("Movie watch", () => {
       updatedAt: 70,
     });
     expect(currentMovieWatch(null, undefined)).toBeNull();
+  });
+
+  describe("Watch state", () => {
+    it("is unwatched before anything was played", () => {
+      expect(
+        watchStateOf({ watch: null, kept: undefined, durationSeconds: 6000 }),
+      ).toEqual({ state: "unwatched", updatedAt: null });
+    });
+
+    it("is in progress once played part of the way on any device", () => {
+      expect(
+        watchStateOf({
+          watch: null,
+          kept: kept(2400, 60),
+          durationSeconds: 6000,
+        }),
+      ).toEqual({ state: "in-progress", updatedAt: 60 });
+      expect(
+        watchStateOf({
+          watch: desktop(1200, 50),
+          kept: undefined,
+          durationSeconds: 6000,
+        }),
+      ).toEqual({ state: "in-progress", updatedAt: 50 });
+    });
+
+    it("is watched once about 90% was played", () => {
+      expect(
+        watchStateOf({
+          watch: null,
+          kept: kept(5500, 60),
+          durationSeconds: 6000,
+        }),
+      ).toEqual({ state: "watched", updatedAt: 60 });
+    });
+
+    it("follows a desktop mark made after this phone last played", () => {
+      expect(
+        watchStateOf({
+          watch: desktop(0, 70, true),
+          kept: kept(2400, 60),
+          durationSeconds: 6000,
+        }),
+      ).toEqual({ state: "watched", updatedAt: 70 });
+      expect(
+        watchStateOf({
+          watch: desktop(0, 70),
+          kept: kept(2400, 60),
+          durationSeconds: 6000,
+        }),
+      ).toEqual({ state: "unwatched", updatedAt: 70 });
+    });
+
+    it("is in progress again when this phone plays it after the desktop's mark", () => {
+      expect(
+        watchStateOf({
+          watch: desktop(0, 50, true),
+          kept: kept(600, 60),
+          durationSeconds: 6000,
+        }),
+      ).toEqual({ state: "in-progress", updatedAt: 60 });
+    });
   });
 });

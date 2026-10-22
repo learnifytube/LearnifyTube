@@ -1,14 +1,20 @@
 import { useEffect } from "react";
 import { AppState } from "react-native";
-import { offlineCopy } from "../services/offline-copy";
+import { movieOfflineCopy, offlineCopy } from "../services/offline-copy";
 import { subscribeToVideoStorageLocation } from "../services/storage-location";
+
+// Videos' and Movies' Offline copies, each in its own folder.
+const scanAll = () => {
+  void offlineCopy.scan();
+  void movieOfflineCopy.scan();
+};
 
 // Scans run once the database is ready (this hook mounts inside the database
 // gate), when the Storage location changes, and when the app returns to the
 // foreground, which catches a USB drive being plugged back in.
 export function useOfflineCopyScans() {
   useEffect(() => {
-    void offlineCopy.scan();
+    scanAll();
 
     let appState = AppState.currentState;
     const appStateSubscription = AppState.addEventListener(
@@ -18,14 +24,12 @@ export function useOfflineCopyScans() {
           appState.match(/inactive|background/) &&
           nextAppState === "active"
         ) {
-          void offlineCopy.scan();
+          scanAll();
         }
         appState = nextAppState;
       },
     );
-    const unsubscribeLocation = subscribeToVideoStorageLocation(() => {
-      void offlineCopy.scan();
-    });
+    const unsubscribeLocation = subscribeToVideoStorageLocation(scanAll);
 
     return () => {
       appStateSubscription.remove();

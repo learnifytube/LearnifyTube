@@ -33,7 +33,11 @@ function summary(id: string) {
   };
 }
 
-function createHarness({ saved = [] as StoredDownload[] } = {}) {
+function createHarness({
+  saved = [] as StoredDownload[],
+  // Files already on the desktop (Movies): no Desktop fetch to wait for.
+  noDesktopFetch = false,
+} = {}) {
   const device = createFakeOfflineCopyPlatform();
   const offlineCopy = createOfflineCopy(device.platform);
   const listeners = new Set<() => void>();
@@ -56,7 +60,7 @@ function createHarness({ saved = [] as StoredDownload[] } = {}) {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    desktopFetch: createDesktopFetch(desktop.platform),
+    desktopFetch: noDesktopFetch ? null : createDesktopFetch(desktop.platform),
     desktop: {
       transfer: (_serverUrl, videoId, destUri, onProgress, signal) =>
         new Promise((resolve, reject) => {
@@ -548,5 +552,41 @@ describe("Download queue", () => {
     await jest.advanceTimersByTimeAsync(150);
     transfer.progress(30);
     expect(h.queue.getDownload("v1")?.progress).toBe(30);
+  });
+});
+
+describe("Download queue for files already on the desktop", () => {
+  it("transfers at once, never asking the desktop to fetch", async () => {
+    const h = await started(createHarness({ noDesktopFetch: true }));
+
+    h.queue.request(summary("up"));
+    expect(h.queue.getDownload("up")?.phase).not.toBe("waiting-for-desktop");
+    await flush();
+    await h.transfers[0].finish();
+
+    expect(h.statusRequests).toEqual([]);
+    expect(h.offlineCopy.getUri("up")).not.toBeNull();
+    expect(h.queue.getDownload("up")).toBeNull();
+  });
+
+  it("restores a Download saved while waiting for the desktop as ready to transfer", async () => {
+    const h = await started(
+      createHarness({
+        noDesktopFetch: true,
+        saved: [
+          {
+            videoId: "up",
+            title: "Up",
+            channelTitle: "",
+            duration: 60,
+            status: "waiting-for-desktop",
+            addedAt: 1,
+          },
+        ],
+      }),
+    );
+    await flush();
+
+    expect(h.transfers.map((t) => t.videoId)).toEqual(["up"]);
   });
 });

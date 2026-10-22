@@ -56,7 +56,15 @@ function splitUri(uri: string) {
   return { parent: trimmed.slice(0, index), name: trimmed.slice(index + 1) };
 }
 
-export function createOfflineCopy(platform: OfflineCopyPlatform) {
+/**
+ * `folder` is where this kind of Offline copy lives in each Storage location:
+ * `videos` for Videos, `movies` for Movies and Episodes (ADR-0005), beside it,
+ * so neither scan ever sees the other's files.
+ */
+export function createOfflineCopy(
+  platform: OfflineCopyPlatform,
+  { folder = VIDEOS_DIR }: { folder?: string } = {},
+) {
   // Saved record per Video, and the current answer (null when unreachable).
   const savedUris = new Map<string, string>();
   const currentUris = new Map<string, string | null>();
@@ -65,7 +73,7 @@ export function createOfflineCopy(platform: OfflineCopyPlatform) {
   let loaded = false;
   let scanQueue = Promise.resolve();
 
-  const internalDir = () => `${platform.documentsDir()}/${VIDEOS_DIR}`;
+  const internalDir = () => `${platform.documentsDir()}/${folder}`;
   const internalUri = (videoId: string) => `${internalDir()}/${videoId}.mp4`;
   const tempUriFor = (videoId: string) =>
     `${internalDir()}/${videoId}.mp4.download`;
@@ -116,13 +124,14 @@ export function createOfflineCopy(platform: OfflineCopyPlatform) {
 
   const locationVideosDir = async (location: StorageLocation) => {
     if (location.kind === "saf" && location.directoryUri) {
-      return platform.ensureDir(location.directoryUri, VIDEOS_DIR);
+      return platform.ensureDir(location.directoryUri, folder);
     }
     if (location.kind === "file" && location.directoryUri) {
+      // A USB Storage location is the Videos' folder itself; others go beside it.
       const { parent, name } = splitUri(location.directoryUri);
-      return platform.ensureDir(parent, name);
+      return platform.ensureDir(parent, folder === VIDEOS_DIR ? name : folder);
     }
-    return platform.ensureDir(platform.documentsDir(), VIDEOS_DIR);
+    return platform.ensureDir(platform.documentsDir(), folder);
   };
 
   const listCopies = async (dirUri: string) => {
@@ -194,7 +203,7 @@ export function createOfflineCopy(platform: OfflineCopyPlatform) {
   };
 
   const tempFileUri = async (videoId: string) => {
-    await platform.ensureDir(platform.documentsDir(), VIDEOS_DIR);
+    await platform.ensureDir(platform.documentsDir(), folder);
     return tempUriFor(videoId);
   };
 

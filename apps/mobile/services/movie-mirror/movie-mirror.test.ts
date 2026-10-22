@@ -49,6 +49,20 @@ describe("planMovieMirror", () => {
     expect(plan.release).toEqual(["up"]);
   });
 
+  it("removes a title the Mirror brought once the catalog no longer lists it", () => {
+    // A title switched off Shown on Devices, or forgotten, is left out of the
+    // catalog entirely: the Device never sees it marked as not sent.
+    const plan = planMovieMirror({
+      sent: sentTitles({ movies: [movie("alien")], series: [] }),
+      holds: [
+        { id: "up", reasons: ["mirrored"] },
+        { id: "alien", reasons: ["mirrored"] },
+      ],
+    });
+
+    expect(plan.release).toEqual(["up"]);
+  });
+
   it("never claims or removes a Movie the user downloaded to this phone", () => {
     const whileSent = planMovieMirror({
       sent: [sent("up")],

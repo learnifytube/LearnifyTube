@@ -3,28 +3,18 @@ import type { HeldMovies } from "../held-movies/createHeldMovies";
 import { planMovieMirror, sentTitles } from "./planMovieMirror";
 
 export type MovieMirrorDeps = {
-  /** The desktop's Movies and Series, or null when the desktop is too old to serve them. */
-  loadCatalog: (serverUrl: string) => Promise<MovieCatalog | null>;
   held: Pick<HeldMovies, "hold" | "release" | "holds" | "heldIds">;
-  /** Keeps the catalog for the Home rows and the players. */
-  keepCatalog: (serverUrl: string, catalog: MovieCatalog) => void;
 };
 
 /**
  * Mirrors the Movies (and Seasons' Episodes) sent to Devices onto this Device:
  * holds every sent title for the Mirror, so the Download queue fetches it, and
- * lets go of what it brought once it is no longer sent. Titles the user
- * downloaded stay.
+ * lets go of what it brought once it is no longer sent or no longer listed.
+ * Titles the user downloaded stay.
  */
-export function createMovieMirror({
-  loadCatalog,
-  held,
-  keepCatalog,
-}: MovieMirrorDeps) {
-  const mirror = async (serverUrl: string) => {
-    const catalog = await loadCatalog(serverUrl);
-    if (!catalog) return;
-    keepCatalog(serverUrl, catalog);
+export function createMovieMirror({ held }: MovieMirrorDeps) {
+  /** Plans from the catalog the Device mirror just fetched from the desktop. */
+  const mirror = async (catalog: MovieCatalog) => {
     const sent = sentTitles(catalog);
     const plan = planMovieMirror({
       sent,

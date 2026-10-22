@@ -39,7 +39,11 @@ export type DownloadQueuePlatform = {
   isForeground: () => boolean;
   /** Called when the desktop connection or the app's foreground state changes. */
   onConditionsChange: (listener: () => void) => () => void;
-  desktopFetch: DesktopFetch;
+  /**
+   * Waits until the desktop has the file; null when every file is on the
+   * desktop already (Movies and Episodes), so a Download goes straight to its transfer.
+   */
+  desktopFetch: DesktopFetch | null;
   desktop: {
     /** Writes the Video's file to destUri; "missing" when the desktop lost it and is fetching it again. */
     transfer: (
@@ -99,6 +103,8 @@ const toStored = ({
 });
 
 export function createDownloadQueue(platform: DownloadQueuePlatform) {
+  const firstPhase = (): DownloadPhase =>
+    platform.desktopFetch ? "waiting-for-desktop" : "queued";
   let downloads: Download[] = [];
   const listeners = new Set<() => void>();
   // Downloads with work in flight: a desktop wait or a transfer.
@@ -144,7 +150,7 @@ export function createDownloadQueue(platform: DownloadQueuePlatform) {
     const { videoId } = download;
     desktopWaits.add(videoId);
     try {
-      await platform.desktopFetch.waitUntilFetched(serverUrl, videoId, {
+      await platform.desktopFetch?.waitUntilFetched(serverUrl, videoId, {
         signal,
         onProgress: (progress) => update(videoId, { progress }),
       });
@@ -226,6 +232,7 @@ export function createDownloadQueue(platform: DownloadQueuePlatform) {
     );
     if (result === "missing") {
       await platform.offlineCopy.discardTemp(videoId).catch(() => {});
+      if (!platform.desktopFetch) throw new Error("The desktop doesn't have this file");
       update(videoId, { phase: "waiting-for-desktop", progress: null });
       return;
     }
@@ -311,6 +318,11 @@ export function createDownloadQueue(platform: DownloadQueuePlatform) {
         const restored = stored
           .map(restore)
           .filter((download): download is Download => download !== null)
+          .map((download) =>
+            download.phase === "waiting-for-desktop"
+              ? { ...download, phase: firstPhase() }
+              : download,
+          )
           .filter((download) => !find(download.videoId));
         downloads = [...restored, ...downloads];
         save();
@@ -331,7 +343,7 @@ export function createDownloadQueue(platform: DownloadQueuePlatform) {
     const existing = find(video.id);
     if (existing?.phase === "failed") {
       retries.delete(video.id);
-      update(video.id, { phase: "waiting-for-desktop", error: undefined });
+      update(video.id, { phase: firstPhase(), error: undefined });
       pump();
       return;
     }
@@ -344,7 +356,7 @@ export function createDownloadQueue(platform: DownloadQueuePlatform) {
         channelTitle: video.channelTitle,
         duration: video.duration,
         thumbnailUrl: video.thumbnailUrl ?? undefined,
-        phase: "waiting-for-desktop",
+        phase: firstPhase(),
         progress: null,
         addedAt: Date.now(),
       },

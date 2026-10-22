@@ -12,6 +12,8 @@ import { useListeningPositionsStore } from "../../stores/listeningPositions";
 import { useMovieWatchStore } from "../../stores/movieWatch";
 import { getWatchHistory } from "../../db/repositories/watchHistory";
 import { audiobookMirror } from "../audiobook-mirror";
+import { heldMovies } from "../held-movies";
+import { movieMirror } from "../movie-mirror";
 import { heldAudiobooks } from "../held-audiobooks";
 import { refreshMovieCatalog } from "../movie-catalog";
 import { listenToSyncEvents } from "../sync-events";
@@ -34,6 +36,19 @@ const model =
 const noAudiobooks: DeviceMirrorPlatform["audiobooks"] = {
   mirror: async () => {},
   heldIds: async () => [],
+};
+
+// Until the TV Mirrors Movies, it holds and reports none.
+const noMovieMirror: Pick<DeviceMirrorPlatform["movies"], "mirror" | "heldIds"> =
+  {
+    mirror: async () => {},
+    heldIds: () => ({ movieIds: [], episodeIds: [] }),
+  };
+
+// Changes whenever a Movie or Episode's Offline copy arrives or goes.
+const heldMoviesKey = () => {
+  const { movieIds, episodeIds } = heldMovies.heldIds();
+  return [...movieIds, ...episodeIds].sort().join(",");
 };
 
 // Changes whenever an Audiobook becomes wholly held on the phone or leaves it.
@@ -76,7 +91,16 @@ const platform: DeviceMirrorPlatform = {
       heldKey = next;
       listener();
     });
+    // The same for a Movie arriving, so the desktop shows it held.
+    let moviesKey = heldMoviesKey();
+    const unsubscribeMovies = heldMovies.subscribe(() => {
+      const next = heldMoviesKey();
+      if (next === moviesKey) return;
+      moviesKey = next;
+      listener();
+    });
     return () => {
+      unsubscribeMovies();
       appStateSubscription.remove();
       unsubscribeConnection();
       unsubscribeLibrary();
@@ -133,8 +157,11 @@ const platform: DeviceMirrorPlatform = {
     AsyncStorage.setItem(MIRRORED_IDS_KEY, JSON.stringify(videoIds)),
   saveOnDeviceSet: (videos) => useOnDeviceSetStore.setState({ videos }),
   audiobooks: kind === "tv" ? noAudiobooks : audiobookMirror,
-  // The TV keeps the Movie catalog too: it holds Movies, unlike Audiobooks.
-  movies: { refreshCatalog: refreshMovieCatalog },
+  // The TV keeps the Movie catalog too; it Mirrors Movies from #57 on.
+  movies: {
+    refreshCatalog: refreshMovieCatalog,
+    ...(kind === "tv" ? noMovieMirror : movieMirror),
+  },
 };
 
 export const deviceMirror = createDeviceMirror(platform);

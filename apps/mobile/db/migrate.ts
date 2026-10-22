@@ -197,6 +197,20 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS favorites_entity_idx ON favorites (entity_type, entity_id);`,
   `CREATE INDEX IF NOT EXISTS favorites_pending_action_idx ON favorites (pending_action);`,
 
+  // Movies and Episodes held on this Device (ADR-0005)
+  `
+  CREATE TABLE IF NOT EXISTS held_movies (
+    id TEXT PRIMARY KEY NOT NULL,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    poster_url TEXT,
+    duration_seconds INTEGER,
+    reasons_json TEXT NOT NULL,
+    local_path TEXT,
+    held_at INTEGER NOT NULL
+  );
+  `,
+
   // Schema version tracking
   `
   CREATE TABLE IF NOT EXISTS schema_version (

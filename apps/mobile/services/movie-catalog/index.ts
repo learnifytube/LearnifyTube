@@ -12,6 +12,9 @@ export const movieCatalog = createMovieCatalog({
  * focus, and on every Device mirror sync (so on the `sync:movies` event).
  */
 export const refreshMovieCatalog = async (serverUrl: string) => {
-  const { movies, series } = await movieCatalog.load(serverUrl);
+  const served = await movieCatalog.served(serverUrl);
+  const { movies, series } = served ?? { movies: [], series: [] };
   useMovieCatalogStore.setState({ serverUrl, movies, series });
+  // Null on a desktop too old to serve Movies, so the Movie Mirror leaves the Device alone.
+  return served;
 };

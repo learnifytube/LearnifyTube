@@ -13,6 +13,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { useDatabase } from "../hooks/useDatabase";
 import { downloadQueue } from "../services/download-queue";
+import { movieDownloadQueue } from "../services/held-movies";
 import { deviceMirror } from "../services/device-mirror";
 import { heldAudiobooks } from "../services/held-audiobooks";
 import { startDesktopConnection } from "../services/desktop-connection";
@@ -33,6 +34,7 @@ if (verifyDesktopUrl) LogBox.ignoreAllLogs();
 
 function DownloadQueueRunner() {
   useEffect(() => downloadQueue.start(), []);
+  useEffect(() => movieDownloadQueue.start(), []);
   return null;
 }
 

@@ -389,3 +389,53 @@ describe("Offline copy", () => {
     expect(await offlineCopy.readBytes("missing")).toBeNull();
   });
 });
+
+describe("Offline copy of Movies and Episodes", () => {
+  const forMovies = (fake: ReturnType<typeof createFakeOfflineCopyPlatform>) =>
+    createOfflineCopy(fake.platform, { folder: "movies" });
+
+  it("keeps Movies in a movies folder of internal storage, never among Videos", async () => {
+    const fake = createFakeOfflineCopyPlatform();
+    const movies = forMovies(fake);
+
+    await downloadInto(movies, fake, "up");
+
+    expect(movies.getUri("up")).toBe(
+      "file:///container-a/Documents/movies/up.mp4",
+    );
+    expect([...fake.files]).toEqual([
+      "file:///container-a/Documents/movies/up.mp4",
+    ]);
+  });
+
+  it("keeps Movies in a movies folder beside videos in a picked folder", async () => {
+    const fake = createFakeOfflineCopyPlatform({ location: PICKED });
+    const movies = forMovies(fake);
+
+    await downloadInto(movies, fake, "up");
+
+    expect(movies.getUri("up")).toBe("content://picked/movies/up.mp4");
+  });
+
+  it("keeps Movies in a movies folder beside videos on a USB drive", async () => {
+    const fake = createFakeOfflineCopyPlatform({ location: USB });
+    const movies = forMovies(fake);
+
+    await downloadInto(movies, fake, "up");
+
+    expect(movies.getUri("up")).toBe(
+      "file:///storage/USB1/LearnifyTube/movies/up.mp4",
+    );
+  });
+
+  it("a Video scan never takes a Movie for a Video", async () => {
+    const fake = createFakeOfflineCopyPlatform();
+    const movies = forMovies(fake);
+    const videos = createOfflineCopy(fake.platform);
+    await downloadInto(movies, fake, "up");
+
+    await videos.scan();
+
+    expect(videos.getUri("up")).toBeNull();
+  });
+});

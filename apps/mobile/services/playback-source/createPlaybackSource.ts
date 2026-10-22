@@ -45,7 +45,12 @@ export type PlaybackSourcePlatform = {
     getUri: (videoId: string) => string | null;
     subscribe: (listener: () => void) => () => void;
   };
-  desktopFetch: DesktopFetch;
+  /**
+   * Has the desktop fetch a Video before it Streams. Null is Stream-only, for
+   * Movies and Episodes (ADR-0005): their files are already on the desktop, so a
+   * connected desktop Streams at once and nothing is fetched or warmed.
+   */
+  desktopFetch: DesktopFetch | null;
   streamUrl: (serverUrl: string, videoId: string) => string;
   log: (message: string, data?: Record<string, unknown>) => void;
 };
@@ -127,7 +132,11 @@ export function createPlaybackSource(platform: PlaybackSourcePlatform) {
     const initialSource = (): PlaybackSourceKind => {
       const uri = offlineCopy.getUri(videoId);
       if (uri) return { kind: "offline", uri, resumeAt: null };
-      if (desktopUrl()) return { kind: "preparing", progress: null };
+      const serverUrl = desktopUrl();
+      if (serverUrl && !desktopFetch) {
+        return { kind: "stream", uri: platform.streamUrl(serverUrl, videoId) };
+      }
+      if (serverUrl) return { kind: "preparing", progress: null };
       return {
         kind: "failed",
         failure: { kind: "notOnThisTV" },
@@ -160,6 +169,13 @@ export function createPlaybackSource(platform: PlaybackSourcePlatform) {
     };
 
     const startPreparing = (serverUrl: string) => {
+      if (!desktopFetch) {
+        setSource({
+          kind: "stream",
+          uri: platform.streamUrl(serverUrl, videoId),
+        });
+        return;
+      }
       const controller = new AbortController();
       prepare = controller;
       if (state.source.kind !== "preparing") {
@@ -241,7 +257,7 @@ export function createPlaybackSource(platform: PlaybackSourcePlatform) {
         setUpNext("none");
         return;
       }
-      if (warmedId === next.id) {
+      if (!desktopFetch || warmedId === next.id) {
         setUpNext("ready");
         return;
       }

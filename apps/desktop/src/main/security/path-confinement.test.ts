@@ -7,6 +7,7 @@ import {
   createTrackFileAllowlist,
   localFileKey,
   resolveAudiobookTrackFile,
+  resolveMovieFile,
   resolveWithinAllowed,
 } from "./path-confinement";
 
@@ -15,6 +16,8 @@ import {
 // the file only where the file system ignores case.
 const caseInsensitiveFs = fs.existsSync(os.tmpdir().toUpperCase());
 const testOnCaseInsensitiveFs = caseInsensitiveFs ? test : test.skip;
+
+const UNKNOWN_FILE = { ok: false, reason: "unknown-track" };
 
 describe("resolveWithinAllowed", () => {
   let root: string;
@@ -174,13 +177,13 @@ describe("resolveAudiobookTrackFile", () => {
   test("refuses an id that is not a Track of an imported Audiobook", async () => {
     writeFile("book.mp3");
     const result = await resolveAudiobookTrackFile("t2", tracks({ t1: writeFile("a.mp3") }));
-    expect(result).toEqual({ ok: false, reason: "unknown-track" });
+    expect(result).toEqual(UNKNOWN_FILE);
   });
 
   test("refuses a path given in place of a Track id", async () => {
     const other = writeFile("Other/book.mp3");
     const result = await resolveAudiobookTrackFile(other, tracks({ t1: writeFile("a.mp3") }));
-    expect(result).toEqual({ ok: false, reason: "unknown-track" });
+    expect(result).toEqual(UNKNOWN_FILE);
   });
 
   test("returns not-found when the Track's file is gone", async () => {
@@ -204,6 +207,64 @@ describe("resolveAudiobookTrackFile", () => {
     fs.mkdirSync(dir);
     const result = await resolveAudiobookTrackFile("t1", tracks({ t1: dir }));
     expect(result).toEqual({ ok: false, reason: "not-audio" });
+  });
+});
+
+describe("resolveMovieFile", () => {
+  let root: string;
+  let films: string;
+
+  beforeEach(() => {
+    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "confine-movie-")));
+    films = path.join(root, "Films");
+    fs.mkdirSync(films);
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  const writeFile = (name: string): string => {
+    const p = path.join(root, name);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, "video");
+    return p;
+  };
+
+  // The Movies Shown on Devices, as the database holds them: file and imported folder.
+  const shown =
+    (byId: Record<string, string>) =>
+    async (id: string): Promise<{ filePath: string; folder: string } | null> =>
+      byId[id] ? { filePath: byId[id], folder: films } : null;
+
+  test("serves a Movie's file by its id, inside the folder it was imported from", async () => {
+    const file = writeFile("Films/Alien (1979)/Alien.mkv");
+    const result = await resolveMovieFile("m1", shown({ m1: file }));
+    expect(result).toEqual({ ok: true, realPath: file, contentType: "video/x-matroska" });
+  });
+
+  test("refuses an id that isn't a title Shown on Devices", async () => {
+    const result = await resolveMovieFile("m2", shown({ m1: writeFile("Films/Up.mp4") }));
+    expect(result).toEqual(UNKNOWN_FILE);
+  });
+
+  test("returns not-found when the file is gone", async () => {
+    const result = await resolveMovieFile("m1", shown({ m1: path.join(films, "gone.mp4") }));
+    expect(result).toEqual({ ok: false, reason: "not-found" });
+  });
+
+  test("refuses a file that a symlink takes outside the imported folder", async () => {
+    const elsewhere = writeFile("Private/home.mp4");
+    const link = path.join(films, "Up.mp4");
+    fs.symlinkSync(elsewhere, link);
+    const result = await resolveMovieFile("m1", shown({ m1: link }));
+    expect(result).toEqual({ ok: false, reason: "outside-folder" });
+  });
+
+  test("refuses a file that isn't video", async () => {
+    const notes = writeFile("Films/notes.txt");
+    const result = await resolveMovieFile("m1", shown({ m1: notes }));
+    expect(result).toEqual({ ok: false, reason: "not-video" });
   });
 });
 
@@ -269,7 +330,7 @@ describe("Track file allowlist", () => {
     const track = writeFile("Frankl/Track 01.mp3");
     const other = writeFile("Frankl/Track 02.mp3");
     const allowlist = createTrackFileAllowlist(trackFiles(track).load);
-    expect(await allowlist.resolve(other)).toEqual({ ok: false, reason: "unknown-track" });
+    expect(await allowlist.resolve(other)).toEqual(UNKNOWN_FILE);
   });
 
   test("matches a Track asked for with .. in its path, and nothing beside it", async () => {
@@ -318,7 +379,7 @@ describe("Track file allowlist", () => {
     const later = writeFile("Orwell/1984.mp3");
     const paths = [first];
     const allowlist = createTrackFileAllowlist(async () => [...paths]);
-    expect(await allowlist.resolve(later)).toEqual({ ok: false, reason: "unknown-track" });
+    expect(await allowlist.resolve(later)).toEqual(UNKNOWN_FILE);
 
     paths.push(later);
     allowlist.tracksChanged();

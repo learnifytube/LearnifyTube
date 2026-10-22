@@ -45,6 +45,8 @@ export type DeviceMirrorPlatform = {
   getWatchProgress: () => DeviceReport["watch"];
   /** Listening positions kept on this Device. */
   getListening: () => NonNullable<DeviceReport["listening"]>;
+  /** Where this Device stopped in each Movie and Episode it played. */
+  getMovieWatch: () => NonNullable<DeviceReport["movieWatch"]>;
   loadMirroredIds: () => Promise<string[]>;
   saveMirroredIds: (videoIds: string[]) => Promise<void>;
   /** Keeps the latest On-device set, which the TV shows as "Sent to this TV" in Offline mode too. */
@@ -135,6 +137,7 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
       watch: platform.getWatchProgress(),
       listening: platform.getListening(),
       heldAudiobookIds: await platform.audiobooks.heldIds(),
+      movieWatch: platform.getMovieWatch(),
     });
 
     // Videos held from before thumbnails were stored with Offline copies;

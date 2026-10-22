@@ -86,7 +86,9 @@ const remoteVideoWithStatusSchema = z.object({
   channelTitle: z.string(),
   duration: z.number(),
   thumbnailUrl: z.string().nullable(),
-  downloadStatus: z.enum(["completed", "downloading", "queued", "pending"]).nullable(),
+  downloadStatus: z
+    .enum(["completed", "downloading", "queued", "pending"])
+    .nullable(),
   downloadProgress: z.number().nullable(),
   fileSize: z.number().nullable(),
 });
@@ -111,7 +113,7 @@ interface TranscriptsResponse {
 export class PairingRequiredError extends Error {
   constructor() {
     super(
-      "The desktop needs its pairing code. On the Connect screen, enter the code shown in desktop Settings → Sync."
+      "The desktop needs its pairing code. On the Connect screen, enter the code shown in desktop Settings → Sync.",
     );
     this.name = "PairingRequiredError";
   }
@@ -132,7 +134,7 @@ function withPairingToken(url: string) {
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
-  timeout = DEFAULT_TIMEOUT
+  timeout = DEFAULT_TIMEOUT,
 ): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
@@ -176,7 +178,7 @@ async function fetchWithTimeout(
 export const api = {
   async getInfo(
     serverUrl: string,
-    options?: { timeoutMs?: number }
+    options?: { timeoutMs?: number },
   ): Promise<ServerInfo> {
     const timeoutMs = options?.timeoutMs ?? CONNECTION_INFO_TIMEOUT;
     logger.info("[Mobile API] Fetching desktop info", {
@@ -186,7 +188,7 @@ export const api = {
     const response = await fetchWithTimeout(
       `${serverUrl}/api/info`,
       {},
-      timeoutMs
+      timeoutMs,
     );
     if (!response.ok) {
       logger.warn("[Mobile API] Desktop info request returned HTTP error", {
@@ -227,6 +229,27 @@ export const api = {
     );
   },
 
+  /** The raw Movie catalog; `services/movie-catalog/` parses it. */
+  async getMovies(serverUrl: string): Promise<unknown> {
+    const response = await fetchWithTimeout(`${serverUrl}/api/movies`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  },
+
+  /** A Movie's video file, Streamed with byte ranges. */
+  getMovieFileUrl(serverUrl: string, movieId: string): string {
+    return withPairingToken(
+      `${serverUrl}/api/movie/${encodeURIComponent(movieId)}/file`,
+    );
+  },
+
+  /** An Episode's video file, Streamed with byte ranges. */
+  getEpisodeFileUrl(serverUrl: string, episodeId: string): string {
+    return withPairingToken(
+      `${serverUrl}/api/episode/${encodeURIComponent(episodeId)}/file`,
+    );
+  },
+
   /** Tells the desktop where this phone is in an Audiobook; the desktop keeps the newest. */
   async reportListening(
     serverUrl: string,
@@ -245,14 +268,11 @@ export const api = {
 
   /** Tells the desktop what this Device holds and what was watched on it. */
   async reportDevice(serverUrl: string, report: DeviceReport): Promise<void> {
-    const response = await fetchWithTimeout(
-      `${serverUrl}/api/devices/report`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(report),
-      }
-    );
+    const response = await fetchWithTimeout(`${serverUrl}/api/devices/report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(report),
+    });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
   },
 
@@ -266,7 +286,7 @@ export const api = {
 
   async getVideoMeta(serverUrl: string, videoId: string): Promise<VideoMeta> {
     const response = await fetchWithTimeout(
-      `${serverUrl}/api/video/${videoId}/meta`
+      `${serverUrl}/api/video/${videoId}/meta`,
     );
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -292,18 +312,18 @@ export const api = {
 
   getPlaylistThumbnailUrl(serverUrl: string, playlistId: string): string {
     return withPairingToken(
-      `${serverUrl}/api/playlist/${encodeURIComponent(playlistId)}/thumbnail`
+      `${serverUrl}/api/playlist/${encodeURIComponent(playlistId)}/thumbnail`,
     );
   },
 
   // Fetch all transcripts for a video (multiple languages)
   async getVideoTranscripts(
     serverUrl: string,
-    videoId: string
+    videoId: string,
   ): Promise<Transcript[]> {
     try {
       const response = await fetchWithTimeout(
-        `${serverUrl}/api/video/${videoId}/transcripts`
+        `${serverUrl}/api/video/${videoId}/transcripts`,
       );
       if (!response.ok) {
         // Fall back to single transcript if multi-transcript endpoint doesn't exist
@@ -318,7 +338,7 @@ export const api = {
     } catch (error) {
       // Fall back to single transcript from meta
       console.log(
-        "[API] Multi-transcript endpoint failed, falling back to meta"
+        "[API] Multi-transcript endpoint failed, falling back to meta",
       );
       const meta = await this.getVideoMeta(serverUrl, videoId);
       return meta.transcripts ?? (meta.transcript ? [meta.transcript] : []);
@@ -327,9 +347,7 @@ export const api = {
 
   // === Sync API Methods ===
 
-  async getChannels(
-    serverUrl: string
-  ): Promise<{ channels: RemoteChannel[] }> {
+  async getChannels(serverUrl: string): Promise<{ channels: RemoteChannel[] }> {
     const response = await fetchWithTimeout(`${serverUrl}/api/channels`);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -339,10 +357,10 @@ export const api = {
 
   async getChannelVideos(
     serverUrl: string,
-    channelId: string
+    channelId: string,
   ): Promise<{ videos: RemoteVideoWithStatus[] }> {
     const response = await fetchWithTimeout(
-      `${serverUrl}/api/channel/${encodeURIComponent(channelId)}/videos`
+      `${serverUrl}/api/channel/${encodeURIComponent(channelId)}/videos`,
     );
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -351,7 +369,7 @@ export const api = {
   },
 
   async getPlaylists(
-    serverUrl: string
+    serverUrl: string,
   ): Promise<{ playlists: RemotePlaylist[] }> {
     const response = await fetchWithTimeout(`${serverUrl}/api/playlists`);
     if (!response.ok) {
@@ -362,10 +380,10 @@ export const api = {
 
   async getPlaylistVideos(
     serverUrl: string,
-    playlistId: string
+    playlistId: string,
   ): Promise<{ videos: RemoteVideoWithStatus[] }> {
     const response = await fetchWithTimeout(
-      `${serverUrl}/api/playlist/${encodeURIComponent(playlistId)}/videos`
+      `${serverUrl}/api/playlist/${encodeURIComponent(playlistId)}/videos`,
     );
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -374,7 +392,7 @@ export const api = {
   },
 
   async getFavorites(
-    serverUrl: string
+    serverUrl: string,
   ): Promise<{ favorites: RemoteFavorite[] }> {
     const response = await fetchWithTimeout(`${serverUrl}/api/favorites`);
     if (!response.ok) {
@@ -386,7 +404,7 @@ export const api = {
   async addFavorite(
     serverUrl: string,
     entityType: "video" | "custom_playlist" | "channel_playlist",
-    entityId: string
+    entityId: string,
   ): Promise<{ success: boolean; id: string }> {
     const response = await fetchWithTimeout(`${serverUrl}/api/favorites`, {
       method: "POST",
@@ -402,11 +420,11 @@ export const api = {
   async removeFavorite(
     serverUrl: string,
     entityType: "video" | "custom_playlist" | "channel_playlist",
-    entityId: string
+    entityId: string,
   ): Promise<{ success: boolean }> {
     const response = await fetchWithTimeout(
       `${serverUrl}/api/favorites/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}`,
-      { method: "DELETE" }
+      { method: "DELETE" },
     );
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -416,15 +434,20 @@ export const api = {
 
   async requestServerDownload(
     serverUrl: string,
-    params: { videoId?: string; url?: string }
-  ): Promise<{ success: boolean; videoId: string | null; status: string | null; message: string }> {
+    params: { videoId?: string; url?: string },
+  ): Promise<{
+    success: boolean;
+    videoId: string | null;
+    status: string | null;
+    message: string;
+  }> {
     const response = await fetchWithTimeout(
       `${serverUrl}/api/download/request`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(params),
-      }
+      },
     );
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -434,10 +457,10 @@ export const api = {
 
   async getServerDownloadStatus(
     serverUrl: string,
-    videoId: string
+    videoId: string,
   ): Promise<ServerDownloadStatus> {
     const response = await fetchWithTimeout(
-      `${serverUrl}/api/download/status/${encodeURIComponent(videoId)}`
+      `${serverUrl}/api/download/status/${encodeURIComponent(videoId)}`,
     );
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -449,7 +472,7 @@ export const api = {
   async requestTranscriptDownload(
     serverUrl: string,
     videoId: string,
-    lang?: string
+    lang?: string,
   ): Promise<{
     success: boolean;
     videoId: string;
@@ -464,7 +487,7 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lang: lang ?? "en" }),
       },
-      30000 // Longer timeout for download operations
+      30000, // Longer timeout for download operations
     );
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -475,7 +498,7 @@ export const api = {
   // === Subscriptions API Methods ===
 
   async getSubscriptions(
-    serverUrl: string
+    serverUrl: string,
   ): Promise<{ videos: RemoteVideoWithStatus[] }> {
     try {
       const response = await fetchWithTimeout(`${serverUrl}/api/subscriptions`);
@@ -487,7 +510,10 @@ export const api = {
         throw new Error(`HTTP ${response.status}`);
       }
       const payload: unknown = await response.json();
-      const data = parseWithSchema(remoteVideosWithStatusResponseSchema, payload);
+      const data = parseWithSchema(
+        remoteVideosWithStatusResponseSchema,
+        payload,
+      );
       return { videos: data.videos ?? [] };
     } catch (error) {
       // Graceful fallback for not-yet-implemented endpoint
@@ -498,11 +524,11 @@ export const api = {
 
   async getSubscriptionVideos(
     serverUrl: string,
-    channelId: string
+    channelId: string,
   ): Promise<{ videos: RemoteVideoWithStatus[] }> {
     try {
       const response = await fetchWithTimeout(
-        `${serverUrl}/api/subscription/${encodeURIComponent(channelId)}/videos`
+        `${serverUrl}/api/subscription/${encodeURIComponent(channelId)}/videos`,
       );
       if (!response.ok) {
         if (response.status === 404) {
@@ -537,11 +563,11 @@ export const api = {
 
   async getMyListVideos(
     serverUrl: string,
-    listId: string
+    listId: string,
   ): Promise<{ videos: RemoteVideoWithStatus[] }> {
     try {
       const response = await fetchWithTimeout(
-        `${serverUrl}/api/mylist/${encodeURIComponent(listId)}/videos`
+        `${serverUrl}/api/mylist/${encodeURIComponent(listId)}/videos`,
       );
       if (!response.ok) {
         if (response.status === 404) {
@@ -560,12 +586,10 @@ export const api = {
 
   async getFlashcards(
     serverUrl: string,
-    dueOnly = false
+    dueOnly = false,
   ): Promise<{ flashcards: import("../types").RemoteFlashcard[] }> {
     const query = dueOnly ? "?due=true" : "";
-    const res = await fetchWithTimeout(
-      `${serverUrl}/api/flashcards${query}`
-    );
+    const res = await fetchWithTimeout(`${serverUrl}/api/flashcards${query}`);
     if (!res.ok) throw new Error(`Failed to get flashcards: ${res.status}`);
     const payload: unknown = await res.json();
     return parseWithSchema(flashcardsResponseSchema, payload);
@@ -574,7 +598,7 @@ export const api = {
   async reviewFlashcard(
     serverUrl: string,
     id: string,
-    grade: number
+    grade: number,
   ): Promise<{ success: boolean; nextReview: string }> {
     const res = await fetchWithTimeout(`${serverUrl}/api/flashcards/review`, {
       method: "POST",
@@ -587,7 +611,7 @@ export const api = {
   },
 
   async getSavedWords(
-    serverUrl: string
+    serverUrl: string,
   ): Promise<{ words: import("../types").RemoteSavedWord[] }> {
     const res = await fetchWithTimeout(`${serverUrl}/api/saved-words`);
     if (!res.ok) throw new Error(`Failed to get saved words: ${res.status}`);
@@ -604,7 +628,7 @@ export const api = {
       videoId?: string;
       timestampSeconds?: number;
       contextText?: string;
-    }
+    },
   ): Promise<import("../types").TranslateResult> {
     const res = await fetchWithTimeout(`${serverUrl}/api/translate`, {
       method: "POST",
@@ -626,7 +650,7 @@ export const api = {
   async saveWord(
     serverUrl: string,
     translationId: string,
-    notes?: string
+    notes?: string,
   ): Promise<{ success: boolean; alreadySaved: boolean; id: string }> {
     const res = await fetchWithTimeout(`${serverUrl}/api/saved-words/save`, {
       method: "POST",

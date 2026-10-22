@@ -1,6 +1,7 @@
 import {
   SYNC_SSE_EVENT_AUDIOBOOKS,
   SYNC_SSE_EVENT_ON_DEVICE_SET,
+  type MovieWatch,
   type OnDeviceSet,
 } from "../../../shared/mobile-sync-contract";
 import {
@@ -95,6 +96,7 @@ function createHarness({
     audiobookMirrors: [] as string[],
     audiobookMirrorFails: false,
     heldAudiobookIds: [] as string[],
+    movieWatch: [] as MovieWatch[],
     // The desktops listened to for pushed sync events, and how to push one.
     listening: [] as string[],
     pushEvent: (_event: string) => {},
@@ -160,6 +162,7 @@ function createHarness({
     getWatchProgress: () => [
       { videoId: "a", lastPositionSeconds: 60, lastWatchedAt: 10 },
     ],
+    getMovieWatch: () => state.movieWatch,
     loadMirroredIds: async () => state.mirrored,
     saveMirroredIds: async (ids) => {
       state.mirrored = ids;
@@ -224,6 +227,18 @@ describe("device mirror", () => {
     expect([...state.library]).toEqual(["pulled"]);
   });
 
+  it("reports Movie and Episode watch progress made on the Device", async () => {
+    const { state, mirror } = createHarness({ set: [] });
+    state.movieWatch = [
+      { kind: "movie", id: "up", lastPositionSeconds: 600, lastWatchedAt: 30 },
+      { kind: "episode", id: "e1", lastPositionSeconds: 90, lastWatchedAt: 40 },
+    ];
+    await mirror.syncNow();
+    expect(state.reports).toEqual([
+      expect.objectContaining({ movieWatch: state.movieWatch }),
+    ]);
+  });
+
   it("reports what the Device holds, its watch progress and Listening positions", async () => {
     const { state, mirror } = createHarness({ set: [], library: ["x"] });
     state.heldAudiobookIds = ["orwell"];
@@ -245,6 +260,7 @@ describe("device mirror", () => {
           },
         ],
         heldAudiobookIds: ["orwell"],
+        movieWatch: [],
       },
     ]);
   });

@@ -1,7 +1,5 @@
-import * as fs from "fs";
 import * as http from "http";
 import * as path from "path";
-import { pipeline } from "stream";
 import { logger } from "../helpers/logger";
 import type { Database } from "../api/db";
 import {
@@ -13,7 +11,7 @@ import { recordListening } from "../api/audiobooks/listening";
 import { audiobookListeningSchema } from "../../../shared/mobile-sync-contract";
 import { resolveAudiobookTrackFile, resolveWithinAllowed } from "./security/path-confinement";
 import { getAllowedBaseDirs } from "./security/allowed-dirs";
-import { parseByteRange, type ByteRange } from "./byte-range";
+import { IMAGE_CONTENT_TYPES, serveFileWithRanges, serveImage } from "./serve-file";
 
 type AudiobookSyncRoutesDeps = {
   db: Database;
@@ -22,20 +20,6 @@ type AudiobookSyncRoutesDeps = {
   sendJson: (res: http.ServerResponse, data: unknown, statusCode?: number) => void;
   sendError: (res: http.ServerResponse, message: string, statusCode?: number) => void;
   readBody: (req: http.IncomingMessage) => Promise<string>;
-};
-
-const COVER_CONTENT_TYPES: Record<string, string> = {
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".png": "image/png",
-  ".webp": "image/webp",
-};
-
-const streamFile = (res: http.ServerResponse, filePath: string, range?: ByteRange): void => {
-  pipeline(fs.createReadStream(filePath, range), res, (err) => {
-    if (!err || err.code === "ERR_STREAM_PREMATURE_CLOSE") return;
-    logger.error("[MobileSyncServer] Audiobook stream error", { filePath, error: err });
-  });
 };
 
 /**
@@ -67,30 +51,7 @@ export const createAudiobookSyncRoutes = ({
       sendError(res, "Track not found", 404);
       return;
     }
-    const size = fs.statSync(file.realPath).size;
-    const headers = {
-      "Accept-Ranges": "bytes",
-      "Content-Type": file.contentType,
-      "Cache-Control": "no-cache",
-    };
-    const rangeHeader = req.headers.range;
-    if (!rangeHeader) {
-      res.writeHead(200, { ...headers, "Content-Length": size });
-      streamFile(res, file.realPath);
-      return;
-    }
-    const range = parseByteRange(rangeHeader, size);
-    if (!range) {
-      res.writeHead(416, { "Content-Range": `bytes */${size}` });
-      res.end();
-      return;
-    }
-    res.writeHead(206, {
-      ...headers,
-      "Content-Range": `bytes ${range.start}-${range.end}/${size}`,
-      "Content-Length": range.end - range.start + 1,
-    });
-    streamFile(res, file.realPath, range);
+    serveFileWithRanges(req, res, file.realPath, file.contentType);
   };
 
   const handleCover = async (res: http.ServerResponse, audiobookId: string): Promise<void> => {
@@ -100,14 +61,11 @@ export const createAudiobookSyncRoutes = ({
       sendError(res, "Cover not found", 404);
       return;
     }
-    res.writeHead(200, {
-      "Content-Length": fs.statSync(cover.realPath).size,
-      "Content-Type":
-        COVER_CONTENT_TYPES[path.extname(cover.realPath).toLowerCase()] ??
-        "application/octet-stream",
-      "Cache-Control": "max-age=86400",
-    });
-    streamFile(res, cover.realPath);
+    serveImage(
+      res,
+      cover.realPath,
+      IMAGE_CONTENT_TYPES[path.extname(cover.realPath).toLowerCase()] ?? "application/octet-stream"
+    );
   };
 
   // A Device's Listening position while it plays; the newest one is kept.

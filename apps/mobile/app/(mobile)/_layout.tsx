@@ -26,6 +26,13 @@ export default function MobileLayout() {
         }}
       />
       <Stack.Screen
+        name="movie-player"
+        options={{
+          headerShown: false,
+          presentation: "fullScreenModal",
+        }}
+      />
+      <Stack.Screen
         name="share"
         options={{
           title: "Share",

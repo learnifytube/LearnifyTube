@@ -32,6 +32,7 @@ import {
   AudiobooksRow,
   ContinueListeningRow,
 } from "../../../components/phone/AudiobooksRow";
+import { MoviesRow } from "../../../components/phone/MoviesRow";
 import { resumePoint } from "../../../services/listening-position/listeningPosition";
 import { useListeningPositionsStore } from "../../../stores/listeningPositions";
 import {
@@ -46,7 +47,7 @@ import { colors, spacing, fontSize, fontWeight } from "../../../theme";
 import { ArrowLeft, Smartphone } from "../../../theme/icons";
 import type { StreamingVideo } from "../../../stores/playback";
 import type { RemoteVideoWithStatus } from "../../../types";
-import type { Audiobook } from "../../../../shared/mobile-sync-contract";
+import type { Audiobook, Movie } from "../../../../shared/mobile-sync-contract";
 
 const POSTER_WIDTH = 168;
 
@@ -117,6 +118,11 @@ function playAudiobook(book: Audiobook) {
 
 function openAudiobook(book: Audiobook) {
   router.push({ pathname: "/audiobook", params: { id: book.id } });
+}
+
+// Tapping a Movie Streams it; it is never Downloaded from here (ADR-0005).
+function playMovie(movie: Movie) {
+  router.push({ pathname: "/movie-player", params: { id: movie.id } });
 }
 
 export default function HomeScreen() {
@@ -357,6 +363,7 @@ export default function HomeScreen() {
               onPlay={playAudiobook}
               onOpen={openAudiobook}
             />
+            <MoviesRow serverUrl={serverUrl} onPlay={playMovie} />
           </>
         }
         renderItem={({ item: row }) => (

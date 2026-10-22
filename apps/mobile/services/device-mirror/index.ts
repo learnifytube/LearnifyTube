@@ -9,6 +9,7 @@ import { useConnectionStore } from "../../stores/connection";
 import { useLibraryStore } from "../../stores/library";
 import { useOnDeviceSetStore } from "../../stores/onDeviceSet";
 import { useListeningPositionsStore } from "../../stores/listeningPositions";
+import { useMovieWatchStore } from "../../stores/movieWatch";
 import { getWatchHistory } from "../../db/repositories/watchHistory";
 import { audiobookMirror } from "../audiobook-mirror";
 import { heldAudiobooks } from "../held-audiobooks";
@@ -122,6 +123,7 @@ const platform: DeviceMirrorPlatform = {
     Object.values(useListeningPositionsStore.getState().positions).flatMap(
       (listening) => (listening ? [listening] : []),
     ),
+  getMovieWatch: () => Object.values(useMovieWatchStore.getState().progress),
   loadMirroredIds: async () => {
     const raw = await AsyncStorage.getItem(MIRRORED_IDS_KEY);
     return raw ? (JSON.parse(raw) as string[]) : [];

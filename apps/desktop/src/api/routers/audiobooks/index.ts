@@ -15,6 +15,7 @@ import {
   type ProposedTrack,
 } from "@/api/audiobooks/import-plan";
 import { scanFolder } from "@/api/audiobooks/scan-folder";
+import { classifyFolder } from "@/api/movies/import-plan";
 import { audiobookCoversDir } from "@/api/audiobooks/covers-dir";
 import {
   COVER_IMAGE_EXTENSIONS,
@@ -98,6 +99,8 @@ export const audiobooksRouter = t.router({
         );
       return {
         folderPath: input.folderPath,
+        // Lets the preview flag a folder that mixes audio and video.
+        folder: classifyFolder(listing),
         suggestedMode: planImport(listing).suggestedMode,
         plans: {
           "one-book": await toPreview("one-book"),

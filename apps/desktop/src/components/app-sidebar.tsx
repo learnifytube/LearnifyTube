@@ -12,6 +12,7 @@ import {
   Library,
   Plus,
   BookAudio,
+  Film,
 } from "lucide-react";
 import { Link, useMatches } from "@tanstack/react-router";
 import { logger } from "@/helpers/logger";
@@ -96,6 +97,10 @@ const SIDEBAR_GROUPS: Array<{
     items: [{ id: "audiobooks", title: "Audiobooks", icon: BookAudio, url: "/audiobooks" }],
   },
   {
+    label: "MOVIES",
+    items: [{ id: "movies", title: "Movies", icon: Film, url: "/movies" }],
+  },
+  {
     items: [{ id: "mobile-sync", title: "Devices", icon: Smartphone, url: "/mobile-sync" }],
   },
   {
@@ -113,6 +118,7 @@ const ALWAYS_VISIBLE: SidebarItem[] = [
   "library",
   "my-playlists",
   "audiobooks",
+  "movies",
   "mobile-sync",
   "settings",
 ];

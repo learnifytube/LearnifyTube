@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpcClient } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
@@ -85,6 +85,15 @@ export function ImportPreviewDialog({
           <DialogDescription className="break-all">{preview.folderPath}</DialogDescription>
         </DialogHeader>
 
+        {preview.folder.mixed && (
+          <p className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            This folder mixes {preview.folder.audioFiles} audio and {preview.folder.videoFiles}{" "}
+            video files. Only the audio files are imported as Audiobooks; import the video from
+            Movies.
+          </p>
+        )}
+
         <Tabs value={mode} onValueChange={(value) => setMode(value as ImportMode)}>
           <TabsList>
             <TabsTrigger value="one-book">One Audiobook</TabsTrigger>
@@ -95,7 +104,9 @@ export function ImportPreviewDialog({
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
           {books.length === 0 && (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              No audio files found in this folder.
+              {preview.folder.kind === "movies"
+                ? "This folder holds video files. Import it from Movies."
+                : "No audio files found in this folder."}
             </p>
           )}
           {books.map((book) => (

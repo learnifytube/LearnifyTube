@@ -21,6 +21,7 @@ import AudiobooksPage from "@/pages/audiobooks/AudiobooksPage";
 import AudiobookPage from "@/pages/audiobooks/AudiobookPage";
 import MoviesPage from "@/pages/movies/MoviesPage";
 import MoviePage from "@/pages/movies/MoviePage";
+import SeriesPage from "@/pages/movies/SeriesPage";
 import { LEARNING_FEATURES_ENABLED } from "@/lib/features";
 
 // Check if we're in development mode
@@ -186,6 +187,15 @@ const MovieRoute = createRoute({
   }),
 });
 
+const SeriesRoute = createRoute({
+  getParentRoute: () => RootRoute,
+  path: "/series",
+  component: SeriesPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    id: typeof search.id === "string" ? search.id : "",
+  }),
+});
+
 const MobileSyncRoute = createRoute({
   getParentRoute: () => RootRoute,
   path: "/mobile-sync",
@@ -211,6 +221,7 @@ const baseRoutes = [
   AudiobookRoute,
   MoviesRoute,
   MovieRoute,
+  SeriesRoute,
   MobileSyncRoute,
 ];
 

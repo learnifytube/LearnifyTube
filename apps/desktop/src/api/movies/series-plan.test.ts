@@ -1,5 +1,12 @@
 import type { FolderListing } from "@/api/audiobooks/import-plan";
-import { planSeriesImport, reorderSeries, suggestVideoLayout } from "./series-plan";
+import {
+  moveEpisode,
+  moveSeason,
+  planSeriesImport,
+  reorderSeries,
+  suggestVideoLayout,
+  type SeriesOrder,
+} from "./series-plan";
 
 const files = (...paths: string[]): FolderListing["files"] => paths.map((path) => ({ path }));
 
@@ -200,5 +207,40 @@ describe("suggestVideoLayout", () => {
     expect(
       suggestVideoLayout({ name: "Films", files: files("Up (2009).mp4", "Alien (1979).mkv") })
     ).toBe("movie-per-file");
+  });
+});
+
+describe("moving in the preview", () => {
+  const order: SeriesOrder = [
+    { key: "s1", episodes: ["a", "b"] },
+    { key: "s2", episodes: ["c"] },
+  ];
+
+  it("moves an Episode up or down within its Season", () => {
+    expect(moveEpisode(order, "b", -1)).toEqual([
+      { key: "s1", episodes: ["b", "a"] },
+      { key: "s2", episodes: ["c"] },
+    ]);
+  });
+
+  it("moves an Episode past the end of its Season into the next or previous one", () => {
+    expect(moveEpisode(order, "b", 1)).toEqual([
+      { key: "s1", episodes: ["a"] },
+      { key: "s2", episodes: ["b", "c"] },
+    ]);
+    expect(moveEpisode(order, "c", -1)).toEqual([
+      { key: "s1", episodes: ["a", "b", "c"] },
+      { key: "s2", episodes: [] },
+    ]);
+  });
+
+  it("leaves the first and last Episodes of the Series where they are", () => {
+    expect(moveEpisode(order, "a", -1)).toEqual(order);
+    expect(moveEpisode(order, "c", 1)).toEqual(order);
+  });
+
+  it("moves a Season up or down", () => {
+    expect(moveSeason(order, "s2", -1).map((season) => season.key)).toEqual(["s2", "s1"]);
+    expect(moveSeason(order, "s2", 1)).toEqual(order);
   });
 });

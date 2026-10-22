@@ -14,6 +14,7 @@ interface VideoPlayerProps {
   onError?: () => void;
   className?: string;
   autoPlay?: boolean;
+  onEnded?: () => void;
 }
 
 export function VideoPlayer({
@@ -24,6 +25,7 @@ export function VideoPlayer({
   onError,
   className,
   autoPlay = true,
+  onEnded,
 }: VideoPlayerProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const isSeekingRef = useRef<boolean>(false);
@@ -447,6 +449,7 @@ export function VideoPlayer({
             className={cn("aspect-video w-full rounded border bg-black object-contain", className)}
             onTimeUpdate={onTimeUpdate}
             onError={handleVideoError}
+            onEnded={onEnded}
           />
         )}
 

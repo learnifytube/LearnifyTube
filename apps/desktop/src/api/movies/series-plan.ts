@@ -197,6 +197,40 @@ export const reorderSeries = (plan: SeriesImportPlan, order: SeriesOrder): Serie
   return { ...plan, seasons: [...result.values()].filter((season) => season.episodes.length > 0) };
 };
 
+/**
+ * Moves an Episode one place up (-1) or down (1) in the preview's order; past
+ * the edge of its Season it joins the end of the previous Season or the start
+ * of the next one.
+ */
+export const moveEpisode = (order: SeriesOrder, path: string, by: -1 | 1): SeriesOrder => {
+  const seasonIndex = order.findIndex((season) => season.episodes.includes(path));
+  if (seasonIndex < 0) return order;
+  const episodes = order[seasonIndex].episodes;
+  const index = episodes.indexOf(path);
+  const target = index + by;
+  const next = order.map((season) => ({ ...season, episodes: [...season.episodes] }));
+  if (target >= 0 && target < episodes.length) {
+    next[seasonIndex].episodes.splice(index, 1);
+    next[seasonIndex].episodes.splice(target, 0, path);
+    return next;
+  }
+  const neighbour = next[seasonIndex + by];
+  if (!neighbour) return order;
+  next[seasonIndex].episodes.splice(index, 1);
+  if (by < 0) neighbour.episodes.push(path);
+  else neighbour.episodes.unshift(path);
+  return next;
+};
+
+export const moveSeason = (order: SeriesOrder, key: string, by: -1 | 1): SeriesOrder => {
+  const index = order.findIndex((season) => season.key === key);
+  const target = index + by;
+  if (index < 0 || target < 0 || target >= order.length) return order;
+  const next = [...order];
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
+};
+
 const stemWithoutNumbers = (path: string): string =>
   baseNameOf(path).replace(/\d+/g, "#").toLowerCase();
 

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpcClient } from "@/utils/trpc";
@@ -15,50 +15,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { MovieLayout } from "@/api/movies/import-plan";
-import type { CodecWarning } from "@/api/movies/codec-warnings";
+import type { SeriesOrder, VideoLayout } from "@/api/movies/series-plan";
 import { formatListeningTime } from "@/pages/audiobooks/format";
-import { MoviePoster } from "./MoviePoster";
+import { CodecWarnings, PreviewPoster } from "./ImportPreviewParts";
+import { SeriesImportPreview, orderOfPlan } from "./SeriesImportPreview";
 
 type ImportPreview = Awaited<ReturnType<typeof trpcClient.movies.previewImport.mutate>>;
-type PreviewMovie = ImportPreview["plans"][MovieLayout][number];
 
-function PreviewPoster({
-  folderPath,
-  movie,
-}: {
-  folderPath: string;
-  movie: PreviewMovie;
-}): React.JSX.Element {
-  const poster = useQuery({
-    queryKey: ["movies", "previewPoster", folderPath, movie.poster],
-    queryFn: () =>
-      trpcClient.movies.previewPoster.query({
-        folderPath,
-        poster: movie.poster,
-        durationSeconds: movie.durationSeconds,
-      }),
-    staleTime: Infinity,
-  });
-  return <MoviePoster posterDataUrl={poster.data} title={movie.title} />;
-}
-
-const PART_LABELS: Record<CodecWarning["part"], string> = {
-  container: "file type",
-  video: "video",
-  audio: "audio",
+const confirmLabel = (layout: VideoLayout, movieCount: number): string => {
+  if (layout === "series") return "Import Series";
+  return movieCount === 1 ? "Import 1 Movie" : `Import ${movieCount} Movies`;
 };
-
-// Import only warns; the file is saved as it is and may still play on some Devices.
-function CodecWarnings({ warnings }: { warnings: CodecWarning[] }): React.JSX.Element | null {
-  if (warnings.length === 0) return null;
-  const parts = warnings.map((warning) => `${warning.name} ${PART_LABELS[warning.part]}`);
-  return (
-    <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
-      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-      May not play on Android phones and TVs: {parts.join(", ")}.
-    </p>
-  );
-}
 
 // Shows what Import would create; nothing is saved until the user confirms.
 export function MovieImportDialog({
@@ -69,25 +36,41 @@ export function MovieImportDialog({
   onClose: () => void;
 }): React.JSX.Element {
   const queryClient = useQueryClient();
-  const [layout, setLayout] = useState<MovieLayout>(preview.suggestedLayout);
+  const [layout, setLayout] = useState<VideoLayout>(preview.suggestedLayout);
   // Edited titles by layout and then video path; untouched Movies keep their planned title.
   const [titles, setTitles] = useState<Record<MovieLayout, Record<string, string>>>({
     "one-movie": {},
     "movie-per-file": {},
   });
-  const movies = preview.plans[layout];
+  const [seriesTitle, setSeriesTitle] = useState(preview.seriesPlan.title);
+  const [seriesOrder, setSeriesOrder] = useState<SeriesOrder>(() =>
+    orderOfPlan(preview.seriesPlan)
+  );
+  const movies = layout === "series" ? [] : preview.plans[layout];
+  const nothingToImport =
+    layout === "series" ? preview.seriesPlan.seasons.length === 0 : movies.length === 0;
   const { folder } = preview;
 
   const confirm = useMutation({
-    mutationFn: () =>
-      trpcClient.movies.confirmImport.mutate({
+    mutationFn: async () => {
+      if (layout === "series") {
+        await trpcClient.movies.series.confirmImport.mutate({
+          folderPath: preview.folderPath,
+          title: seriesTitle,
+          order: seriesOrder,
+        });
+        return "Imported the Series";
+      }
+      const { ids } = await trpcClient.movies.confirmImport.mutate({
         folderPath: preview.folderPath,
         layout,
         titles: titles[layout],
-      }),
-    onSuccess: async ({ ids }) => {
-      await queryClient.invalidateQueries({ queryKey: ["movies", "list"] });
-      toast.success(ids.length === 1 ? "Imported 1 Movie" : `Imported ${ids.length} Movies`);
+      });
+      return ids.length === 1 ? "Imported 1 Movie" : `Imported ${ids.length} Movies`;
+    },
+    onSuccess: async (message) => {
+      await queryClient.invalidateQueries({ queryKey: ["movies"] });
+      toast.success(message);
       onClose();
     },
     onError: () => toast.error("Import failed"),
@@ -109,46 +92,63 @@ export function MovieImportDialog({
           </p>
         )}
 
-        <Tabs value={layout} onValueChange={(value) => setLayout(value as MovieLayout)}>
+        <Tabs value={layout} onValueChange={(value) => setLayout(value as VideoLayout)}>
           <TabsList>
             <TabsTrigger value="one-movie">One Movie</TabsTrigger>
             <TabsTrigger value="movie-per-file">One Movie per file</TabsTrigger>
+            <TabsTrigger value="series">One Series</TabsTrigger>
           </TabsList>
         </Tabs>
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-          {movies.length === 0 && (
+          {nothingToImport && (
             <p className="py-8 text-center text-sm text-muted-foreground">
               {folder.kind === "audiobooks"
                 ? "This folder holds audio files. Import it from Audiobooks."
                 : "No video files found in this folder."}
             </p>
           )}
-          {movies.map((movie) => (
-            <div key={movie.path} className="flex gap-4 rounded-lg border p-3">
-              <div className="w-20 shrink-0">
-                <PreviewPoster folderPath={preview.folderPath} movie={movie} />
+          {layout === "series" && !nothingToImport && (
+            <SeriesImportPreview
+              folderPath={preview.folderPath}
+              plan={preview.seriesPlan}
+              title={seriesTitle}
+              onTitleChange={setSeriesTitle}
+              order={seriesOrder}
+              onOrderChange={setSeriesOrder}
+            />
+          )}
+          {layout !== "series" &&
+            movies.map((movie) => (
+              <div key={movie.path} className="flex gap-4 rounded-lg border p-3">
+                <div className="w-20 shrink-0">
+                  <PreviewPoster
+                    folderPath={preview.folderPath}
+                    poster={movie.poster}
+                    durationSeconds={movie.durationSeconds}
+                    title={movie.title}
+                  />
+                </div>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Input
+                    aria-label="Title"
+                    value={titles[layout][movie.path] ?? movie.title}
+                    onChange={(event) =>
+                      setTitles((current) => ({
+                        ...current,
+                        [layout]: { ...current[layout], [movie.path]: event.target.value },
+                      }))
+                    }
+                  />
+                  <p className="truncate text-xs text-muted-foreground" title={movie.path}>
+                    {[movie.path, formatListeningTime(movie.durationSeconds)]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                  <CodecWarnings warnings={movie.codecWarnings} />
+                </div>
               </div>
-              <div className="min-w-0 flex-1 space-y-2">
-                <Input
-                  aria-label="Title"
-                  value={titles[layout][movie.path] ?? movie.title}
-                  onChange={(event) =>
-                    setTitles((current) => ({
-                      ...current,
-                      [layout]: { ...current[layout], [movie.path]: event.target.value },
-                    }))
-                  }
-                />
-                <p className="truncate text-xs text-muted-foreground" title={movie.path}>
-                  {[movie.path, formatListeningTime(movie.durationSeconds)]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-                <CodecWarnings warnings={movie.codecWarnings} />
-              </div>
-            </div>
-          ))}
+            ))}
         </div>
 
         <DialogFooter>
@@ -157,11 +157,11 @@ export function MovieImportDialog({
           </Button>
           <Button
             onClick={() => confirm.mutate()}
-            disabled={movies.length === 0 || confirm.isPending}
+            disabled={nothingToImport || confirm.isPending}
             className="gap-2"
           >
             {confirm.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            {movies.length === 1 ? "Import 1 Movie" : `Import ${movies.length} Movies`}
+            {confirmLabel(layout, movies.length)}
           </Button>
         </DialogFooter>
       </DialogContent>

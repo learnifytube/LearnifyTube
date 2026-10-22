@@ -169,6 +169,13 @@
       "when": 1792650219281,
       "tag": "0023_captions",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1792677436766,
+      "tag": "0024_track_positions",
+      "breakpoints": true
     }
   ]
 }

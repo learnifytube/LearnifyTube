@@ -1,8 +1,9 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { Database } from "@/api/db";
 import { audiobooks, audiobookTracks } from "@/api/db/schema";
 import type { AudiobookListening } from "../../../../shared/mobile-sync-contract";
 import { newestListening } from "../../../../shared/listening-position";
+import { recordTrackPosition } from "./track-positions";
 
 /**
  * Keeps a Device's Listening position when it is newer than the Audiobook's.
@@ -31,6 +32,15 @@ export const recordListening = async (
       .limit(1),
   ]);
   if (!book || !track) return false;
+  // Its Track's own Track position, so older Devices that only send the
+  // Listening position still move it (ADR-0006).
+  await recordTrackPosition(db, {
+    audiobookId: reported.audiobookId,
+    trackId: reported.trackId,
+    seconds: reported.seconds,
+    playedToEnd: reported.finished,
+    updatedAt: reported.updatedAt,
+  });
   const existing = book.updatedAt === null ? null : { updatedAt: book.updatedAt };
   if (newestListening(existing, reported) !== reported) return false;
   // updated_at is left alone: it versions the cover URL, not the Listening position.
@@ -44,6 +54,41 @@ export const recordListening = async (
     })
     .where(eq(audiobooks.id, reported.audiobookId));
   return true;
+};
+
+/**
+ * Start over: every Track back to 0 and not played to its end, and the
+ * Listening position at the first Track, all at `now`, so Device positions
+ * from before it lose.
+ */
+export const startBookOver = async (
+  db: Database,
+  audiobookId: string,
+  now: number
+): Promise<void> => {
+  const tracks = await db
+    .select({ id: audiobookTracks.id })
+    .from(audiobookTracks)
+    .where(eq(audiobookTracks.audiobookId, audiobookId))
+    .orderBy(asc(audiobookTracks.position));
+  for (const track of tracks) {
+    await recordTrackPosition(db, {
+      audiobookId,
+      trackId: track.id,
+      seconds: 0,
+      playedToEnd: false,
+      updatedAt: now,
+    });
+  }
+  const [first] = tracks;
+  if (!first) return;
+  await recordListening(db, {
+    audiobookId,
+    trackId: first.id,
+    seconds: 0,
+    finished: false,
+    updatedAt: now,
+  });
 };
 
 export type DesktopListening = { listening: AudiobookListening; announce: boolean };

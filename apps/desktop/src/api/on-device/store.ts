@@ -13,6 +13,7 @@ import {
 import { computeOnDeviceSet } from "./on-device-set";
 import { mergeDeviceWatch } from "./device-watch";
 import { recordListening } from "../audiobooks/listening";
+import { recordTrackPosition } from "../audiobooks/track-positions";
 import { recordDeviceMovieWatch } from "../movies/device-watch";
 
 import { FAVORITES_LIST_ID } from "@/lib/lists";
@@ -128,6 +129,8 @@ export const recordDeviceReport = async (
     .onConflictDoUpdate({ target: syncDevices.id, set: device });
 
   for (const entry of report.listening ?? []) await recordListening(db, entry);
+  // Devices older than resume (v5) don't say.
+  for (const entry of report.trackPositions ?? []) await recordTrackPosition(db, entry);
   // Devices older than Movies don't say.
   await recordDeviceMovieWatch(db, report.movieWatch ?? [], now);
 

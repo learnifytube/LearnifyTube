@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "51d54f97-5515-4999-ae40-12cac399ddd9",
+  "id": "486db538-fcdd-49b8-bf39-69038a8e819c",
   "prevId": "fc3bf227-d0b9-4191-88ea-7baf8e046950",
   "tables": {
     "audiobook_tracks": {
@@ -49,28 +49,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
-        },
-        "resume_seconds": {
-          "name": "resume_seconds",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "played_to_end": {
-          "name": "played_to_end",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "resume_updated_at": {
-          "name": "resume_updated_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {
@@ -1876,6 +1854,20 @@
           "notNull": true,
           "autoincrement": false,
           "default": true
+        },
+        "last_episode_id": {
+          "name": "last_episode_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_episode_updated_at": {
+          "name": "last_episode_updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",

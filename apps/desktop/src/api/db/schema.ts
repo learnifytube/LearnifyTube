@@ -699,6 +699,11 @@ export const series = sqliteTable("series", {
   sourceFolder: text("source_folder").notNull(),
   posterPath: text("poster_path"),
   shownOnDevices: integer("shown_on_devices", { mode: "boolean" }).notNull().default(true),
+  // The Episode last played (ADR-0006); null before any was, or once forgotten
+  // by marking the Series or its Season unwatched.
+  lastEpisodeId: text("last_episode_id"),
+  // When the last Episode last changed, set or forgotten; newest wins with Devices.
+  lastEpisodeUpdatedAt: integer("last_episode_updated_at"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at"),
 });

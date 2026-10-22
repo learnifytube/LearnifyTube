@@ -8,33 +8,41 @@ export type NextUpEpisode = {
   // The file is gone, so it can't play; it is skipped.
   missing?: boolean;
   watchState: "unwatched" | "in-progress" | "watched";
-  // When its Watch progress last changed, to pick between Episodes in progress.
-  watchUpdatedAt?: number | null;
 };
 
 const playable = <T extends NextUpEpisode>(episodes: readonly T[]): T[] =>
   episodes.filter((episode) => !episode.missing);
 
+const notWatched = <T extends NextUpEpisode>(
+  episodes: readonly T[],
+): T | null =>
+  playable(episodes).find((episode) => episode.watchState !== "watched") ??
+  null;
+
 /**
- * The Episode in progress (the one that changed last, if several), else the
- * first unwatched Episode, skipping missing ones; null once all are watched.
+ * Where a Series picks up (ADR-0006): the last Episode played, unless it is
+ * watched or missing; else the next Episode after it that isn't watched and can
+ * play; else (none played, or none left after it) the first such Episode. Null
+ * once every Episode that can play is watched.
  */
-export const nextUpEpisode = <T extends NextUpEpisode>(episodes: readonly T[]): T | null => {
-  const candidates = playable(episodes);
-  const inProgress = candidates
-    .filter((episode) => episode.watchState === "in-progress")
-    .reduce<T | null>(
-      (latest, episode) =>
-        !latest || (episode.watchUpdatedAt ?? 0) > (latest.watchUpdatedAt ?? 0) ? episode : latest,
-      null
-    );
-  return inProgress ?? candidates.find((episode) => episode.watchState === "unwatched") ?? null;
+export const nextUpEpisode = <T extends NextUpEpisode>(
+  episodes: readonly T[],
+  lastEpisodeId: string | null,
+): T | null => {
+  const index =
+    lastEpisodeId === null
+      ? -1
+      : episodes.findIndex((e) => e.id === lastEpisodeId);
+  return (
+    (index < 0 ? null : notWatched(episodes.slice(index))) ??
+    notWatched(episodes)
+  );
 };
 
 /** The Episode that autoplays when `episodeId` ends: the next one in order that can play. */
 export const episodeAfter = <T extends NextUpEpisode>(
   episodes: readonly T[],
-  episodeId: string
+  episodeId: string,
 ): T | null => {
   const index = episodes.findIndex((episode) => episode.id === episodeId);
   if (index < 0) return null;

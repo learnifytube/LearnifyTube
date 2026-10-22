@@ -43,7 +43,8 @@ export function seriesNextUp(
   keptEpisode: (episodeId: string) => MovieWatch | undefined,
 ): { episode: Episode; lastWatchedAt: number | null } | null {
   const episodes = episodesWithWatchState(series, keptEpisode);
-  const next = nextUpEpisode(episodes);
+  // The desktop's last Episode; the Device's own comes with #67.
+  const next = nextUpEpisode(episodes, series.lastEpisode?.episodeId ?? null);
   if (!next) return null;
   const lastWatchedAt = episodes.reduce<number | null>(
     (latest, { watchUpdatedAt }) =>

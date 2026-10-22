@@ -10,6 +10,7 @@ import {
   getSeries,
   listSeries,
   recordEpisodePlayback,
+  recordEpisodeStarted,
   renameSeries,
   saveImportedSeries,
   setEpisodesWatched,
@@ -133,11 +134,12 @@ describe("Series catalog", () => {
     ]);
   });
 
-  it("picks up from the first Episode, then the one in progress, then the next unwatched", async () => {
+  it("picks up from the first Episode, then the one last played, then the next unwatched after it", async () => {
     const id = await importOffice(db);
     const [e1, e2, e3] = await episodeIds(db, id);
     expect((await getSeries(db, id))?.nextUpEpisodeId).toBe(e1);
 
+    await recordEpisodeStarted(db, e2, 2000);
     await recordEpisodePlayback(db, { episodeId: e2, positionSeconds: 300.6 }, 2000);
     expect((await getSeries(db, id))?.nextUpEpisodeId).toBe(e2);
     expect((await getSeries(db, id))?.watchState).toBe("in-progress");
@@ -154,7 +156,7 @@ describe("Series catalog", () => {
       ],
       ["Season 2", "unwatched", [["S02E01", "unwatched"]]],
     ]);
-    expect((await getSeries(db, id))?.nextUpEpisodeId).toBe(e1);
+    expect((await getSeries(db, id))?.nextUpEpisodeId).toBe(e3);
 
     // Unknown length is never watched, until the player learns it.
     await recordEpisodePlayback(db, { episodeId: e3, positionSeconds: 1500 }, 4000);

@@ -52,6 +52,10 @@ export const loadMovieCatalog = async (
       id: series.id,
       title: series.title,
       posterUrl: posterUrl("series", series),
+      lastEpisode:
+        series.lastEpisodeUpdatedAt === null
+          ? null
+          : { episodeId: series.lastEpisodeId, updatedAt: series.lastEpisodeUpdatedAt },
       seasons: seasonRows
         .filter((season) => season.seriesId === series.id)
         .map((season) => ({

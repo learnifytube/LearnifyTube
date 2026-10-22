@@ -160,6 +160,7 @@ describe("Movie catalog for Devices", () => {
         id: "office",
         title: "The Office",
         posterUrl: "http://desktop:53318/api/series/office/poster?v=1000",
+        lastEpisode: null,
         seasons: [
           {
             id: "s1",

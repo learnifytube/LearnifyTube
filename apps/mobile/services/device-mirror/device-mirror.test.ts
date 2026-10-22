@@ -3,8 +3,11 @@ import {
   SYNC_SSE_EVENT_MOVIES,
   SYNC_SSE_EVENT_ON_DEVICE_SET,
   type MovieCatalog,
+  type CurrentVideo,
   type MovieWatch,
   type OnDeviceSet,
+  MOVIES_SYNC_PROTOCOL_VERSION,
+  RESUME_SYNC_PROTOCOL_VERSION,
 } from "../../../shared/mobile-sync-contract";
 import {
   createDeviceMirror,
@@ -99,6 +102,9 @@ function createHarness({
     audiobookMirrorFails: false,
     heldAudiobookIds: [] as string[],
     movieWatch: [] as MovieWatch[],
+    currentVideos: [] as CurrentVideo[],
+    // The desktop's sync protocol version.
+    desktopVersion: RESUME_SYNC_PROTOCOL_VERSION,
     movieCatalogRefreshes: [] as string[],
     movieCatalogFails: false,
     // What the desktop serves as its Movie catalog; null for a desktop too old.
@@ -126,6 +132,7 @@ function createHarness({
     },
     desktop: {
       getOnDeviceSet: async () => (state.set ? state.set.map(setVideo) : null),
+      getSyncProtocolVersion: async () => state.desktopVersion,
       report: async (_serverUrl, report) => {
         state.reports.push(report);
       },
@@ -172,6 +179,7 @@ function createHarness({
       { videoId: "a", lastPositionSeconds: 60, lastWatchedAt: 10 },
     ],
     getMovieWatch: () => state.movieWatch,
+    getCurrentVideos: () => state.currentVideos,
     loadMirroredIds: async () => state.mirrored,
     saveMirroredIds: async (ids) => {
       state.mirrored = ids;
@@ -284,8 +292,47 @@ describe("device mirror", () => {
         movieWatch: [],
         heldMovieIds: [],
         heldEpisodeIds: [],
+        currentVideos: [],
       },
     ]);
+  });
+
+  it("reports the Current Videos kept on the Device, Offline ones included", async () => {
+    const { state, mirror } = createHarness({ set: [] });
+    // Kept while the Device was in Offline mode; nothing was sent then.
+    state.serverUrl = null;
+    state.currentVideos = [
+      {
+        collectionKind: "list",
+        collectionId: "course",
+        videoId: "b",
+        updatedAt: 50,
+      },
+    ];
+    await mirror.syncNow();
+    expect(state.reports).toEqual([]);
+
+    state.serverUrl = SERVER;
+    await mirror.syncNow();
+    expect(state.reports).toEqual([
+      expect.objectContaining({ currentVideos: state.currentVideos }),
+    ]);
+  });
+
+  it("sends no Current Videos to a desktop older than resume", async () => {
+    const { state, mirror } = createHarness({ set: [] });
+    state.desktopVersion = MOVIES_SYNC_PROTOCOL_VERSION;
+    state.currentVideos = [
+      {
+        collectionKind: "list",
+        collectionId: "course",
+        videoId: "b",
+        updatedAt: 50,
+      },
+    ];
+    await mirror.syncNow();
+    expect(state.reports).toHaveLength(1);
+    expect(state.reports[0]).not.toHaveProperty("currentVideos");
   });
 
   it("Mirrors the sent Audiobooks on every sync", async () => {

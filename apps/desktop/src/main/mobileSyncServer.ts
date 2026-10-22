@@ -40,9 +40,15 @@ import {
   type SyncServerInfo,
   type OnDeviceSet,
   deviceReportSchema,
+  currentVideoSchema,
+  COLLECTION_CURRENT_VIDEO_PATH,
 } from "../../../shared/mobile-sync-contract";
 import { loadOnDeviceSet, recordDeviceReport } from "../api/on-device/store";
-import { loadCollection, type CollectionRef } from "../api/collections/current-video";
+import {
+  loadCollection,
+  recordCurrentVideo,
+  type CollectionRef,
+} from "../api/collections/current-video";
 import { FAVORITES_LIST_ID } from "../lib/lists";
 import { createAudiobookSyncRoutes } from "./audiobookSyncRoutes";
 import { createMovieSyncRoutes } from "./movieSyncRoutes";
@@ -550,14 +556,41 @@ const createMobileSyncServer = (): MobileSyncServer => {
 
   const movieRoutes = createMovieSyncRoutes({ db: defaultDb, assetUrl, sendJson, sendError });
 
+  // POST /api/collection/current-video - a Device started a Video in a List or
+  // YouTube playlist while connected; the newest Current Video is kept (ADR-0006).
+  const routeCurrentVideo = async (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    url: string
+  ): Promise<boolean> => {
+    if (req.method !== "POST" || url !== COLLECTION_CURRENT_VIDEO_PATH) return false;
+    try {
+      const body = await readBody(req);
+      const parsed = currentVideoSchema.safeParse(parseJsonUnknown(body));
+      if (!parsed.success) {
+        sendError(res, "Invalid Current Video", 400);
+        return true;
+      }
+      const kept = await recordCurrentVideo(defaultDb, parsed.data);
+      sendJson(res, { success: true, kept });
+    } catch (error) {
+      logger.error("[MobileSyncServer] Error recording Current Video", error);
+      sendError(res, "Failed to record Current Video");
+    }
+    return true;
+  };
+
   // GET /api/audiobooks, /api/audiobook-track/:id/file, /api/audiobook/:id/cover;
-  // GET /api/movies, /api/(movie|episode)/:id/file, /api/(movie|series)/:id/poster.
+  // GET /api/movies, /api/(movie|episode)/:id/file, /api/(movie|series)/:id/poster;
+  // POST /api/collection/current-video.
   const routeAudiobooksAndMovies = async (
     req: http.IncomingMessage,
     res: http.ServerResponse,
     url: string
   ): Promise<boolean> =>
-    (await audiobookRoutes.route(req, res, url)) || (await movieRoutes.route(req, res, url));
+    (await audiobookRoutes.route(req, res, url)) ||
+    (await movieRoutes.route(req, res, url)) ||
+    (await routeCurrentVideo(req, res, url));
 
   const handleApiInfo = async (res: http.ServerResponse): Promise<void> => {
     try {
@@ -1485,7 +1518,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
     const collection = await loadCollection(defaultDb, ref);
     if (!collection) return false;
     const videos: RemoteVideoWithStatus[] = collection.videos.map(videoToRemoteVideoWithStatus);
-    sendJson(res, { videos, currentVideo: collection.currentVideo });
+    sendJson(res, { videos, collection: ref, currentVideo: collection.currentVideo });
     return true;
   };
 

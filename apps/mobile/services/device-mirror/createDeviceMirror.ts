@@ -1,4 +1,5 @@
 import {
+  RESUME_SYNC_PROTOCOL_VERSION,
   SYNC_SSE_EVENT_AUDIOBOOKS,
   SYNC_SSE_EVENT_MOVIES,
   SYNC_SSE_EVENT_ON_DEVICE_SET,
@@ -19,6 +20,8 @@ export type DeviceMirrorPlatform = {
   desktop: {
     /** The On-device set, or null when the desktop is too old to serve one. */
     getOnDeviceSet: (serverUrl: string) => Promise<SetVideo[] | null>;
+    /** The desktop's sync protocol version; nothing newer than it is sent. */
+    getSyncProtocolVersion: (serverUrl: string) => Promise<number>;
     report: (serverUrl: string, report: DeviceReport) => Promise<void>;
     /**
      * Listens to the desktop's pushed sync events, and says when the stream
@@ -49,6 +52,8 @@ export type DeviceMirrorPlatform = {
   getListening: () => NonNullable<DeviceReport["listening"]>;
   /** Where this Device stopped in each Movie and Episode it played. */
   getMovieWatch: () => NonNullable<DeviceReport["movieWatch"]>;
+  /** The Current Video of each List and YouTube playlist, as kept on this Device. */
+  getCurrentVideos: () => NonNullable<DeviceReport["currentVideos"]>;
   loadMirroredIds: () => Promise<string[]>;
   saveMirroredIds: (videoIds: string[]) => Promise<void>;
   /** Keeps the latest On-device set, which the TV shows as "Sent to this TV" in Offline mode too. */
@@ -155,6 +160,10 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
       });
     }
     const heldMovies = platform.movies.heldIds();
+    // An older desktop gets nothing it doesn't know.
+    const servesResume =
+      (await platform.desktop.getSyncProtocolVersion(serverUrl)) >=
+      RESUME_SYNC_PROTOCOL_VERSION;
 
     await platform.desktop.report(serverUrl, {
       deviceId: await platform.device.getId(),
@@ -167,6 +176,7 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
       movieWatch: platform.getMovieWatch(),
       heldMovieIds: heldMovies.movieIds,
       heldEpisodeIds: heldMovies.episodeIds,
+      ...(servesResume ? { currentVideos: platform.getCurrentVideos() } : {}),
     });
 
     // Videos held from before thumbnails were stored with Offline copies;

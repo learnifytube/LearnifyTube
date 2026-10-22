@@ -22,6 +22,7 @@ import {
 } from "../../../services/playback-source";
 import { api } from "../../../services/api";
 import { bookPlayer } from "../../../services/book-player";
+import { playQueue } from "../../../services/play-queue";
 import { videoThumbnails } from "../../../services/video-thumbnails";
 import { useWatchProgressRecorder } from "../../../hooks/useWatchProgressRecorder";
 import { videoStartPosition } from "../../../db/repositories/watchHistory";
@@ -115,6 +116,11 @@ export default function PlayerScreen() {
 
   // A Video and a book never play at once.
   useEffect(() => bookPlayer.pause(), []);
+
+  // Started from a List, the Video becomes the List's Current Video.
+  useEffect(() => {
+    if (id) playQueue.videoStarted(id);
+  }, [id]);
 
   useEffect(() => {
     setFullScreenBars(isLandscape);

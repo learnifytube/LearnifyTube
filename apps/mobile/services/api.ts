@@ -11,9 +11,13 @@ import type {
   RemoteMyList,
 } from "../types";
 import {
+  COLLECTION_CURRENT_VIDEO_PATH,
+  collectionVideosCurrentVideoSchema,
   onDeviceSetSchema,
   syncServerInfoSchema,
   type AudiobookListening,
+  type CollectionRef,
+  type CurrentVideo,
   type DeviceReport,
   type OnDeviceSet,
 } from "../../shared/mobile-sync-contract";
@@ -21,6 +25,27 @@ import { parseWithSchema } from "../../shared/schema-utils";
 import { logger } from "./logger";
 import { useConnectionStore } from "../stores/connection";
 import { z } from "zod";
+
+/**
+ * A List's or YouTube playlist's Videos; a desktop that serves resume also says
+ * which collection the id named and its Current Video.
+ */
+export type CollectionVideos = {
+  videos: RemoteVideoWithStatus[];
+  collection: CollectionRef | null;
+  currentVideo: CurrentVideo | null;
+};
+
+const toCollectionVideos = (json: {
+  videos: RemoteVideoWithStatus[];
+}): CollectionVideos => {
+  const resume = collectionVideosCurrentVideoSchema.safeParse(json);
+  return {
+    videos: json.videos,
+    collection: resume.success ? (resume.data.collection ?? null) : null,
+    currentVideo: resume.success ? (resume.data.currentVideo ?? null) : null,
+  };
+};
 
 const remoteFlashcardSchema = z.object({
   id: z.string(),
@@ -275,6 +300,22 @@ export const api = {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
   },
 
+  /** Tells the desktop a Video started in a List or YouTube playlist (its Current Video). */
+  async reportCurrentVideo(
+    serverUrl: string,
+    currentVideo: CurrentVideo,
+  ): Promise<void> {
+    const response = await fetchWithTimeout(
+      `${serverUrl}${COLLECTION_CURRENT_VIDEO_PATH}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(currentVideo),
+      },
+    );
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  },
+
   /** Tells the desktop what this Device holds and what was watched on it. */
   async reportDevice(serverUrl: string, report: DeviceReport): Promise<void> {
     const response = await fetchWithTimeout(`${serverUrl}/api/devices/report`, {
@@ -390,14 +431,14 @@ export const api = {
   async getPlaylistVideos(
     serverUrl: string,
     playlistId: string,
-  ): Promise<{ videos: RemoteVideoWithStatus[] }> {
+  ): Promise<CollectionVideos> {
     const response = await fetchWithTimeout(
       `${serverUrl}/api/playlist/${encodeURIComponent(playlistId)}/videos`,
     );
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-    return response.json();
+    return toCollectionVideos(await response.json());
   },
 
   async getFavorites(
@@ -573,21 +614,21 @@ export const api = {
   async getMyListVideos(
     serverUrl: string,
     listId: string,
-  ): Promise<{ videos: RemoteVideoWithStatus[] }> {
+  ): Promise<CollectionVideos> {
     try {
       const response = await fetchWithTimeout(
         `${serverUrl}/api/mylist/${encodeURIComponent(listId)}/videos`,
       );
       if (!response.ok) {
         if (response.status === 404) {
-          return { videos: [] };
+          return { videos: [], collection: null, currentVideo: null };
         }
         throw new Error(`HTTP ${response.status}`);
       }
-      return response.json();
+      return toCollectionVideos(await response.json());
     } catch (error) {
       console.log("[API] My list videos endpoint not available");
-      return { videos: [] };
+      return { videos: [], collection: null, currentVideo: null };
     }
   },
 

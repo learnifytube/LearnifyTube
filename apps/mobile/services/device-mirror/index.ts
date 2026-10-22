@@ -10,6 +10,8 @@ import { useLibraryStore } from "../../stores/library";
 import { useOnDeviceSetStore } from "../../stores/onDeviceSet";
 import { useListeningPositionsStore } from "../../stores/listeningPositions";
 import { useMovieWatchStore } from "../../stores/movieWatch";
+import { useCurrentVideosStore } from "../../stores/currentVideos";
+import { desktopSyncProtocolVersion } from "../desktop-protocol";
 import { getWatchHistory } from "../../db/repositories/watchHistory";
 import { audiobookMirror } from "../audiobook-mirror";
 import { heldMovies } from "../held-movies";
@@ -107,6 +109,7 @@ const platform: DeviceMirrorPlatform = {
         return null;
       return (await api.getOnDeviceSet(serverUrl)).videos;
     },
+    getSyncProtocolVersion: desktopSyncProtocolVersion,
     report: (serverUrl, report) => api.reportDevice(serverUrl, report),
     listen: (serverUrl, handlers) =>
       listenToSyncEvents(api.getEventsUrl(serverUrl), handlers),
@@ -142,6 +145,8 @@ const platform: DeviceMirrorPlatform = {
       (listening) => (listening ? [listening] : []),
     ),
   getMovieWatch: () => Object.values(useMovieWatchStore.getState().progress),
+  getCurrentVideos: () =>
+    Object.values(useCurrentVideosStore.getState().currentVideos),
   loadMirroredIds: async () => {
     const raw = await AsyncStorage.getItem(MIRRORED_IDS_KEY);
     return raw ? (JSON.parse(raw) as string[]) : [];

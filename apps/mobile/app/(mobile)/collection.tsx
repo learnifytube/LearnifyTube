@@ -19,10 +19,11 @@ import {
   resolveRemoteAssetUrl,
 } from "../../services/browseCache";
 import { markBrowseCacheChanged, useSyncStore } from "../../stores/sync";
+import { useCurrentVideosStore } from "../../stores/currentVideos";
 import { videoThumbnails } from "../../services/video-thumbnails";
 import { offlineCopy } from "../../services/offline-copy";
 import { VideoGridCard } from "../../components/VideoGridCard";
-import { colors, spacing, fontSize, fontWeight } from "../../theme";
+import { colors, spacing, fontSize, fontWeight, radius } from "../../theme";
 import { ArrowLeft } from "../../theme/icons";
 import type { RemoteVideoWithStatus } from "../../types";
 import type { StreamingVideo } from "../../stores/playback";
@@ -40,6 +41,15 @@ export default function CollectionScreen() {
   const browseCacheVersion = useSyncStore((state) => state.browseCacheVersion);
   const getOfflineUri = offlineCopy.useLookup();
   const getStoredThumbnail = videoThumbnails.useLookup();
+
+  const screenKey = `${kind}-${id}`;
+  // The List or YouTube playlist this screen shows, once a desktop that
+  // knows Current Videos said so (null for a Channel or an older desktop).
+  const collection = useCurrentVideosStore(
+    (state) => state.collections[screenKey] ?? null,
+  );
+  // Re-renders Resume when a Current Video changes.
+  useCurrentVideosStore((state) => state.currentVideos);
 
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -62,12 +72,16 @@ export default function CollectionScreen() {
       if (kind === "channel") {
         const res = await api.getChannelVideos(serverUrl, id);
         remoteVideos = res.videos;
-      } else if (kind === "playlist") {
-        const res = await api.getPlaylistVideos(serverUrl, id);
+      } else if (kind === "playlist" || kind === "mylist") {
+        const res =
+          kind === "playlist"
+            ? await api.getPlaylistVideos(serverUrl, id)
+            : await api.getMyListVideos(serverUrl, id);
         remoteVideos = res.videos;
-      } else if (kind === "mylist") {
-        const res = await api.getMyListVideos(serverUrl, id);
-        remoteVideos = res.videos;
+        const currentVideos = useCurrentVideosStore.getState();
+        if (res.collection)
+          currentVideos.rememberCollection(`${kind}-${id}`, res.collection);
+        if (res.currentVideo) currentVideos.keep(res.currentVideo);
       }
 
       await cacheRemoteCollectionVideos(serverUrl, {
@@ -117,20 +131,28 @@ export default function CollectionScreen() {
           getStoredThumbnail(video.id) ??
           (serverUrl && !video.thumbnailUrl?.startsWith("data:")
             ? api.getThumbnailUrl(serverUrl, video.id)
-            : resolveRemoteAssetUrl(serverUrl, video.thumbnailUrl) ?? undefined),
+            : (resolveRemoteAssetUrl(serverUrl, video.thumbnailUrl) ??
+              undefined)),
       }));
   }, [videos, connected, getOfflineUri, getStoredThumbnail, serverUrl]);
 
-  const playAt = (startIndex: number) => {
-    const video = playQueue.start({
-      id: `${kind}-${id}`,
-      title: title ?? "Collection",
-      videos: streamingVideos,
-      startIndex,
-    });
-    if (!video) return;
-    router.push(`/player/${video.id}`);
+  const queue = {
+    id: screenKey,
+    title: title ?? "Collection",
+    videos: streamingVideos,
+    collection,
   };
+
+  const open = (video: StreamingVideo | null) => {
+    if (video) router.push(`/player/${video.id}`);
+  };
+
+  const playAt = (startIndex: number) =>
+    open(playQueue.start({ ...queue, startIndex }));
+
+  const resumeVideo = collection
+    ? playQueue.whereResumes({ videos: streamingVideos, collection })
+    : null;
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -147,6 +169,27 @@ export default function CollectionScreen() {
           {title ?? id}
         </Text>
       </View>
+
+      {collection && resumeVideo ? (
+        <View style={styles.actions}>
+          <Pressable
+            testID="collection-resume"
+            style={[styles.action, styles.resumeAction]}
+            onPress={() => open(playQueue.resume({ ...queue, collection }))}
+          >
+            <Text style={styles.resumeText} numberOfLines={1}>
+              Resume · {resumeVideo.title}
+            </Text>
+          </Pressable>
+          <Pressable
+            testID="collection-play-from-start"
+            style={styles.action}
+            onPress={() => playAt(0)}
+          >
+            <Text style={styles.actionText}>Play from start</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {loading && streamingVideos.length === 0 ? (
         <View style={styles.loaderWrap}>
@@ -208,6 +251,30 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xl,
     fontWeight: fontWeight.semibold,
     flex: 1,
+  },
+  actions: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  action: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.muted,
+    justifyContent: "center",
+  },
+  resumeAction: { flex: 1, backgroundColor: colors.primary },
+  resumeText: {
+    color: colors.primaryForeground,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+  },
+  actionText: {
+    color: colors.foreground,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
   },
   loaderWrap: {
     paddingTop: spacing.xl,

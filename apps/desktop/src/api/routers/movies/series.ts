@@ -17,6 +17,7 @@ import {
 import { savePoster } from "@/api/movies/posters";
 import { moviePostersDir } from "@/api/movies/posters-dir";
 import { movieFiles } from "@/main/security/movie-files";
+import { broadcastMoviesChanged } from "./notify-devices";
 import { previewedListings } from "./previewed-listings";
 
 // Series in the Movies section (ADR-0005): Import, list, play and mark Episodes.
@@ -58,6 +59,7 @@ export const seriesRouter = t.router({
       });
       previewedListings.done(input.folderPath);
       movieFiles.tracksChanged();
+      await broadcastMoviesChanged();
       return { id };
     }),
 
@@ -69,7 +71,10 @@ export const seriesRouter = t.router({
 
   rename: publicProcedure
     .input(z.object({ id: z.string(), title: z.string().trim().min(1) }))
-    .mutation(({ input, ctx }) => renameSeries(ctx.db ?? defaultDb, input.id, input.title)),
+    .mutation(async ({ input, ctx }) => {
+      await renameSeries(ctx.db ?? defaultDb, input.id, input.title);
+      await broadcastMoviesChanged();
+    }),
 
   // The desktop player's progress on an Episode.
   recordPlayback: publicProcedure
@@ -94,6 +99,7 @@ export const seriesRouter = t.router({
     const forgotten = await forgetSeries(ctx.db ?? defaultDb, input.id);
     if (!forgotten) return;
     movieFiles.tracksChanged();
+    await broadcastMoviesChanged();
     await removeAppCover(forgotten.posterPath, moviePostersDir(app.getPath("userData")));
   }),
 });

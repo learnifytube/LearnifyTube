@@ -48,6 +48,7 @@ export type MovieListItem = {
   durationSeconds: number | null;
   missing: boolean;
   positionSeconds: number | null;
+  shownOnDevices: boolean;
   watchState: WatchState;
 };
 
@@ -60,6 +61,7 @@ export const listMovies = async (db: Database): Promise<MovieListItem[]> => {
     durationSeconds: movie.durationSeconds,
     missing: movie.missing,
     positionSeconds: movie.positionSeconds,
+    shownOnDevices: movie.shownOnDevices,
     watchState: watchStateOf(movie),
   }));
 };

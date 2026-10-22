@@ -101,6 +101,7 @@ export type SeriesDetail = {
   title: string;
   posterPath: string | null;
   sourceFolder: string;
+  shownOnDevices: boolean;
   watchState: WatchState;
   seasons: SeriesSeason[];
   // The Episode playing the Series starts: in progress, else the first unwatched.
@@ -144,6 +145,7 @@ export const getSeries = async (db: Database, id: string): Promise<SeriesDetail 
     title: row.title,
     posterPath: row.posterPath,
     sourceFolder: row.sourceFolder,
+    shownOnDevices: row.shownOnDevices,
     watchState: watchStateOfAll(inOrder),
     seasons: seasonList,
     nextUpEpisodeId: nextUpEpisode(inOrder)?.id ?? null,
@@ -156,6 +158,7 @@ export type SeriesListItem = {
   posterPath: string | null;
   seasonCount: number;
   episodeCount: number;
+  shownOnDevices: boolean;
   watchState: WatchState;
 };
 
@@ -175,6 +178,7 @@ export const listSeries = async (db: Database): Promise<SeriesListItem[]> => {
       posterPath: row.posterPath,
       seasonCount: seasonRows.filter((season) => season.seriesId === row.id).length,
       episodeCount: own.length,
+      shownOnDevices: row.shownOnDevices,
       watchState: watchStateOfAll(own),
     };
   });

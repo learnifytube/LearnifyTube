@@ -119,29 +119,48 @@ export const desktopGoneMovie: TVMessageContent = {
   canRetry: false,
 };
 
+export const seriesNotFound: TVMessageContent = {
+  title: "Series not found",
+  text: "The desktop doesn't show this Series any more. Go back and pick another one.",
+  canRetry: false,
+};
+
+export const desktopGoneEpisode: TVMessageContent = {
+  title: "The desktop went away",
+  text: "This Episode isn't on this TV, so it stopped. It picks up where it left off next time.",
+  canRetry: false,
+};
+
 /** Why a Movie isn't playing: the Playback source's failure, or the TV's player refusing the file. */
 export type MovieProblem = PlaybackFailure | { kind: "playerRejected" };
 
-/** What the TV says when a Movie can't play. Movies are files, so there's no fetch to wait for. */
-export function describeMovieProblem(problem: MovieProblem): TVMessageContent {
+/**
+ * What the TV says when a Movie, or an Episode (`kind`), can't play. They are
+ * files, so there's no fetch to wait for.
+ */
+export function describeMovieProblem(
+  problem: MovieProblem,
+  kind: "movie" | "episode" = "movie",
+): TVMessageContent {
+  const what = kind === "episode" ? "Episode" : "Movie";
   if (problem.kind === "playerRejected") {
     return {
       title: "Can't play this on this TV",
-      text: "This TV can't play this Movie's file. Try it on the desktop, or convert the file to a format Android plays.",
+      text: `This TV can't play this ${what}'s file. Try it on the desktop, or convert the file to a format Android plays.`,
       canRetry: false,
     };
   }
   if (problem.kind === "notOnThisTV") {
     return {
       title: "Not on this TV",
-      text: "This Movie isn't on this TV. Connect to the desktop to watch it.",
+      text: `This ${what} isn't on this TV. Connect to the desktop to watch it.`,
       canRetry: false,
     };
   }
   if (problem.kind === "videoNotFound") {
     return {
-      title: "Movie not found",
-      text: "Go back and pick another Movie.",
+      title: `${what} not found`,
+      text: `Go back and pick another ${what}.`,
       canRetry: false,
     };
   }

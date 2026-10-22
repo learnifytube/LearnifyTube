@@ -92,6 +92,7 @@ const TABS: Array<{ mode: TVBrowseMode; label: string }> = [
   { mode: "mylists", label: "My Lists" },
   { mode: "channels", label: "Channels" },
   { mode: "movies", label: "Movies" },
+  { mode: "series", label: "Series" },
   { mode: "history", label: "History" },
 ];
 
@@ -211,6 +212,7 @@ export default function TVHomeScreen() {
     mylists: 0,
     channels: 0,
     movies: 0,
+    series: 0,
     history: 0,
   });
   const [focusedGridIndex, setFocusedGridIndex] = useState(0);
@@ -402,6 +404,12 @@ export default function TVHomeScreen() {
           : [],
       keptMovieWatch: (movieId) =>
         movieProgress[movieWatchKey("movie", movieId)],
+      series:
+        movieCatalogState.serverUrl === serverUrl
+          ? movieCatalogState.series
+          : [],
+      keptEpisodeWatch: (episodeId) =>
+        movieProgress[movieWatchKey("episode", episodeId)],
     }),
     [
       cachedCollections,
@@ -520,6 +528,20 @@ export default function TVHomeScreen() {
     }
     if (action.kind === "movie") {
       router.push(`/(tv)/movie/${action.movieId}` as Href);
+      return;
+    }
+    if (action.kind === "episode") {
+      router.push({
+        pathname: "/(tv)/movie/[id]",
+        params: { id: action.episodeId, kind: "episode" },
+      } as Href);
+      return;
+    }
+    if (action.kind === "series") {
+      router.push({
+        pathname: "/(tv)/series/[id]",
+        params: { id: action.seriesId },
+      } as Href);
       return;
     }
     router.push({

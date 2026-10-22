@@ -1,9 +1,10 @@
 import type {
   Episode,
+  Movie,
   MovieWatch,
   Series,
 } from "../../../shared/mobile-sync-contract";
-import { seriesEpisodeAfter, seriesNextUp } from "./seriesWatch";
+import { findTitle, seriesEpisodeAfter, seriesNextUp } from "./seriesWatch";
 
 const episode = (id: string, overrides: Partial<Episode> = {}): Episode => ({
   id,
@@ -114,5 +115,45 @@ describe("Series next up", () => {
     expect(
       seriesNextUp(series([episode("e1")]), keptOnPhone({ e1: [950, 20] })),
     ).toBeNull();
+  });
+});
+
+describe("findTitle", () => {
+  const movie: Movie = {
+    id: "m1",
+    title: "The Matrix",
+    posterUrl: "/api/movie/m1/poster",
+    durationSeconds: 6000,
+    missing: false,
+    captions: [],
+    sentToDevices: false,
+    watch: null,
+  };
+  const office = {
+    ...series([episode("e1")], [episode("e2")]),
+    posterUrl: "/api/series/office/poster",
+  };
+  const catalog = { movies: [movie], series: [office] };
+
+  it("finds a Movie, which belongs to no Series", () => {
+    expect(findTitle(catalog, "movie", "m1")).toEqual({
+      ...movie,
+      series: null,
+    });
+  });
+
+  it("finds an Episode in any Season, named and pictured by its Series", () => {
+    expect(findTitle(catalog, "episode", "e2")).toEqual({
+      ...episode("e2"),
+      title: "The Office · e2",
+      posterUrl: "/api/series/office/poster",
+      series: office,
+    });
+  });
+
+  it("finds nothing of the other kind, or an id the catalog doesn't list", () => {
+    expect(findTitle(catalog, "episode", "m1")).toBeNull();
+    expect(findTitle(catalog, "movie", "e1")).toBeNull();
+    expect(findTitle(catalog, "episode", "nope")).toBeNull();
   });
 });

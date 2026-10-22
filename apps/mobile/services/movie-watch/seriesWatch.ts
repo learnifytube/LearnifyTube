@@ -1,5 +1,6 @@
 import type {
   Episode,
+  Movie,
   MovieWatch,
   Series,
 } from "../../../shared/mobile-sync-contract";
@@ -52,6 +53,34 @@ export function seriesNextUp(
     null,
   );
   return { episode: next.episode, lastWatchedAt };
+}
+
+/**
+ * The Movie or Episode a player was opened on, from the last catalog the
+ * desktop served. An Episode is named "Series · Episode" and shows the Series'
+ * poster; `series` is null for a Movie.
+ */
+export function findTitle(
+  catalog: { movies: Movie[]; series: Series[] },
+  kind: MovieWatch["kind"],
+  id: string,
+) {
+  if (kind === "movie") {
+    const movie = catalog.movies.find((item) => item.id === id);
+    return movie ? { ...movie, series: null } : null;
+  }
+  for (const series of catalog.series) {
+    const episode = seriesEpisodes(series).find((item) => item.id === id);
+    if (episode) {
+      return {
+        ...episode,
+        title: `${series.title} · ${episode.title}`,
+        posterUrl: series.posterUrl,
+        series,
+      };
+    }
+  }
+  return null;
 }
 
 /** The Episode that autoplays after `episodeId` ends, skipping missing ones. */

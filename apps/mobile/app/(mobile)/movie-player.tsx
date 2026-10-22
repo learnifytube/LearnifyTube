@@ -23,8 +23,8 @@ import { bookPlayer } from "../../services/book-player";
 import { useMovieProgressRecorder } from "../../hooks/useMovieProgressRecorder";
 import { resumeAt } from "../../services/movie-watch/movieWatch";
 import {
+  findTitle,
   seriesEpisodeAfter,
-  seriesEpisodes,
 } from "../../services/movie-watch/seriesWatch";
 import { resolveRemoteAssetUrl } from "../../services/remoteAssetUrl";
 import { PlayerProgressBar } from "../../components/phone/PlayerProgressBar";
@@ -34,11 +34,7 @@ import {
   toggleFullScreen,
 } from "../../components/phone/playerOrientation";
 import { colors, fontSize, fontWeight, spacing } from "../../theme";
-import type {
-  Movie,
-  MovieWatch,
-  Series,
-} from "../../../shared/mobile-sync-contract";
+import type { MovieWatch } from "../../../shared/mobile-sync-contract";
 import {
   ArrowLeft,
   Maximize,
@@ -60,30 +56,6 @@ function failureText(failure: PlaybackFailure, kind: TitleKind) {
     return `This ${what} needs the desktop.`;
   }
   return `Couldn't play this ${what}. Try again when the desktop is around.`;
-}
-
-// The Movie or Episode `id` names, from the last catalog the desktop served.
-function findTitle(
-  catalog: { movies: Movie[]; series: Series[] },
-  kind: TitleKind,
-  id: string,
-) {
-  if (kind === "movie") {
-    const movie = catalog.movies.find((item) => item.id === id);
-    return movie ? { ...movie, series: null } : null;
-  }
-  for (const series of catalog.series) {
-    const episode = seriesEpisodes(series).find((item) => item.id === id);
-    if (episode) {
-      return {
-        ...episode,
-        title: `${series.title} · ${episode.title}`,
-        posterUrl: series.posterUrl,
-        series,
-      };
-    }
-  }
-  return null;
 }
 
 /**

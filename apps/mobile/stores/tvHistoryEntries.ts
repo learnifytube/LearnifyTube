@@ -15,8 +15,7 @@ export type TVRecentPlaylist = {
 
 /**
  * A Movie played on the TV. Where it resumes isn't kept here: pressing it
- * reads the Movie's Watch progress then. A Series entry (#53) joins this union
- * the same way, with the Episode to play chosen at press time.
+ * reads the Movie's Watch progress then.
  */
 export type TVRecentMovie = {
   kind: "movie";
@@ -25,15 +24,28 @@ export type TVRecentMovie = {
   updatedAt: number;
 };
 
+/**
+ * A Series an Episode of which played on the TV. Like a Movie it keeps no
+ * position: pressing it plays the Series' next-up Episode then.
+ */
+export type TVRecentSeries = {
+  kind: "series";
+  seriesId: string;
+  title: string;
+  updatedAt: number;
+};
+
 /** What a played title records; the time is added when it's recorded. */
-export type TVPlayedTitle = Omit<TVRecentMovie, "updatedAt">;
+export type TVPlayedTitle =
+  Omit<TVRecentMovie, "updatedAt"> | Omit<TVRecentSeries, "updatedAt">;
 
 /** One History card: a Video queue or a title. */
-export type TVHistoryEntry = TVRecentPlaylist | TVRecentMovie;
+export type TVHistoryEntry = TVRecentPlaylist | TVRecentMovie | TVRecentSeries;
 
 /** An entry's identity in History; a title can't collide with a queue id. */
 export function historyKey(entry: TVHistoryEntry | TVPlayedTitle) {
   if (entry.kind === "movie") return `movie:${entry.movieId}`;
+  if (entry.kind === "series") return `series:${entry.seriesId}`;
   return entry.playlistId;
 }
 
@@ -91,7 +103,7 @@ export function recordPlayedQueue(
   });
 }
 
-/** History after a Movie started playing. */
+/** History after a Movie, or an Episode of a Series, started playing. */
 export function recordPlayedTitle(
   entries: TVHistoryEntry[],
   title: TVPlayedTitle,
@@ -130,6 +142,7 @@ export function recordQueueProgress(
 type SavedEntry = Partial<Omit<TVRecentPlaylist, "kind">> & {
   kind?: TVHistoryEntry["kind"];
   movieId?: string;
+  seriesId?: string;
   serverUrl?: string | null;
 };
 
@@ -145,7 +158,15 @@ export function migrateTVHistory(persisted: unknown): {
   const saved = state?.entries ?? state?.recentPlaylists ?? [];
   return {
     entries: saved.map((entry): TVHistoryEntry => {
-      // Kept for later versions: from v3 an entry can be a Movie.
+      // Kept for later versions: from v3 an entry can be a Movie or a Series.
+      if (entry.kind === "series") {
+        return {
+          kind: "series",
+          seriesId: entry.seriesId ?? "",
+          title: entry.title ?? "",
+          updatedAt: entry.updatedAt ?? 0,
+        };
+      }
       if (entry.kind === "movie") {
         return {
           kind: "movie",

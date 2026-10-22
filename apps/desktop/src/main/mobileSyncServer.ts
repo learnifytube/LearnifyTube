@@ -42,6 +42,8 @@ import {
   deviceReportSchema,
 } from "../../../shared/mobile-sync-contract";
 import { loadOnDeviceSet, recordDeviceReport } from "../api/on-device/store";
+import { loadCollection, type CollectionRef } from "../api/collections/current-video";
+import { FAVORITES_LIST_ID } from "../lib/lists";
 import { createAudiobookSyncRoutes } from "./audiobookSyncRoutes";
 import { createMovieSyncRoutes } from "./movieSyncRoutes";
 import { parseByteRange } from "./byte-range";
@@ -1474,6 +1476,19 @@ const createMobileSyncServer = (): MobileSyncServer => {
     }
   };
 
+  // A collection's Videos with download status, and its Current Video (ADR-0006).
+  // Resolves false for an unknown collection, sending nothing.
+  const sendCollectionVideos = async (
+    res: http.ServerResponse,
+    ref: CollectionRef
+  ): Promise<boolean> => {
+    const collection = await loadCollection(defaultDb, ref);
+    if (!collection) return false;
+    const videos: RemoteVideoWithStatus[] = collection.videos.map(videoToRemoteVideoWithStatus);
+    sendJson(res, { videos, currentVideo: collection.currentVideo });
+    return true;
+  };
+
   // GET /api/playlist/:id/videos - Videos in a playlist with download status
   const handlePlaylistVideos = async (
     res: http.ServerResponse,
@@ -1503,68 +1518,14 @@ const createMobileSyncServer = (): MobileSyncServer => {
           }
         }
 
-        const videoIds = items.map((i) => i.videoId);
-        if (videoIds.length === 0) {
-          sendJson(res, { videos: [] });
-          return;
-        }
-
-        const videoList = await defaultDb
-          .select()
-          .from(youtubeVideos)
-          .where(inArray(youtubeVideos.videoId, videoIds));
-
-        // Create map for ordering
-        const videoMap = new Map(videoList.map((v) => [v.videoId, v]));
-
-        const videos: RemoteVideoWithStatus[] = videoIds
-          .map((id) => videoMap.get(id))
-          .filter((v): v is typeof youtubeVideos.$inferSelect => v !== undefined)
-          .map(videoToRemoteVideoWithStatus);
-
-        sendJson(res, { videos });
+        await sendCollectionVideos(res, { kind: "youtube_playlist", id: playlistId });
         return;
       }
 
-      // Check if it's a custom playlist
-      const customPlaylist = await defaultDb
-        .select()
-        .from(customPlaylists)
-        .where(eq(customPlaylists.id, playlistId))
-        .limit(1);
-
-      if (customPlaylist.length > 0) {
-        // Get videos from custom playlist
-        const items = await defaultDb
-          .select()
-          .from(customPlaylistItems)
-          .where(eq(customPlaylistItems.playlistId, playlistId))
-          .orderBy(customPlaylistItems.position);
-
-        const videoIds = items.map((i) => i.videoId);
-        if (videoIds.length === 0) {
-          sendJson(res, { videos: [] });
-          return;
-        }
-
-        const videoList = await defaultDb
-          .select()
-          .from(youtubeVideos)
-          .where(inArray(youtubeVideos.videoId, videoIds));
-
-        // Create map for ordering
-        const videoMap = new Map(videoList.map((v) => [v.videoId, v]));
-
-        const videos: RemoteVideoWithStatus[] = videoIds
-          .map((id) => videoMap.get(id))
-          .filter((v): v is typeof youtubeVideos.$inferSelect => v !== undefined)
-          .map(videoToRemoteVideoWithStatus);
-
-        sendJson(res, { videos });
-        return;
+      // Otherwise a custom playlist (a List)
+      if (!(await sendCollectionVideos(res, { kind: "list", id: playlistId }))) {
+        sendError(res, "Playlist not found", 404);
       }
-
-      sendError(res, "Playlist not found", 404);
     } catch (error) {
       logger.error("[MobileSyncServer] Error getting playlist videos", { playlistId, error });
       sendError(res, "Failed to get playlist videos");
@@ -1575,71 +1536,12 @@ const createMobileSyncServer = (): MobileSyncServer => {
   const handleMyListVideos = async (res: http.ServerResponse, listId: string): Promise<void> => {
     try {
       const channelFavoritePrefix = "fav_channel_playlist:";
-      if (listId.startsWith(channelFavoritePrefix)) {
-        const channelPlaylistId = listId.slice(channelFavoritePrefix.length);
-        const items = await defaultDb
-          .select()
-          .from(playlistItems)
-          .where(eq(playlistItems.playlistId, channelPlaylistId))
-          .orderBy(playlistItems.position);
-
-        const videoIds = items.map((i) => i.videoId);
-        if (videoIds.length === 0) {
-          sendJson(res, { videos: [] });
-          return;
-        }
-
-        const videoList = await defaultDb
-          .select()
-          .from(youtubeVideos)
-          .where(inArray(youtubeVideos.videoId, videoIds));
-
-        const videoMap = new Map(videoList.map((v) => [v.videoId, v]));
-        const videos: RemoteVideoWithStatus[] = videoIds
-          .map((id) => videoMap.get(id))
-          .filter((v): v is typeof youtubeVideos.$inferSelect => v !== undefined)
-          .map(videoToRemoteVideoWithStatus);
-
-        sendJson(res, { videos });
-        return;
-      }
-
-      const customPlaylist = await defaultDb
-        .select()
-        .from(customPlaylists)
-        .where(eq(customPlaylists.id, listId))
-        .limit(1);
-
-      if (customPlaylist.length === 0) {
-        sendError(res, "List not found", 404);
-        return;
-      }
-
-      const items = await defaultDb
-        .select()
-        .from(customPlaylistItems)
-        .where(eq(customPlaylistItems.playlistId, listId))
-        .orderBy(customPlaylistItems.position);
-
-      const videoIds = items.map((i) => i.videoId);
-      if (videoIds.length === 0) {
-        sendJson(res, { videos: [] });
-        return;
-      }
-
-      const videoList = await defaultDb
-        .select()
-        .from(youtubeVideos)
-        .where(inArray(youtubeVideos.videoId, videoIds));
-
-      const videoMap = new Map(videoList.map((v) => [v.videoId, v]));
-
-      const videos: RemoteVideoWithStatus[] = videoIds
-        .map((id) => videoMap.get(id))
-        .filter((v): v is typeof youtubeVideos.$inferSelect => v !== undefined)
-        .map(videoToRemoteVideoWithStatus);
-
-      sendJson(res, { videos });
+      const ref: CollectionRef = listId.startsWith(channelFavoritePrefix)
+        ? { kind: "youtube_playlist", id: listId.slice(channelFavoritePrefix.length) }
+        : listId === FAVORITES_LIST_ID
+          ? { kind: "favorites", id: listId }
+          : { kind: "list", id: listId };
+      if (!(await sendCollectionVideos(res, ref))) sendError(res, "List not found", 404);
     } catch (error) {
       logger.error("[MobileSyncServer] Error getting my list videos", { listId, error });
       sendError(res, "Failed to get my list videos");

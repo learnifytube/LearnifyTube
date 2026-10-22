@@ -14,6 +14,7 @@ import {
   type NewYoutubeVideo,
 } from "@/api/db/schema";
 import defaultDb, { type Database } from "@/api/db";
+import { loadCurrentVideo, loadCurrentVideoIndexes } from "@/api/collections/current-video";
 import { spawnYtDlpWithLogging } from "../../utils/ytdlp-utils/ytdlp";
 import { downloadImageToCache } from "../../utils/ytdlp-utils/cache";
 import { getBinaryFilePath } from "../binary";
@@ -83,7 +84,8 @@ export interface PlaylistDetailsResult {
   thumbnailUrl: string | null;
   thumbnailPath: string | null;
   itemCount: number | null;
-  currentVideoIndex: number;
+  /** The Current Video's place in the playlist; null when none is set or it left. */
+  currentVideoIndex: number | null;
   url: string;
   lastFetchedAt: number | null;
   videos: PlaylistDetailsVideo[];
@@ -93,6 +95,20 @@ export async function getPlaylistDetailsForServer(
   input: PlaylistDetailsInput,
   db: Database = defaultDb
 ): Promise<PlaylistDetailsResult | null> {
+  const details = await loadPlaylistDetails(input, db);
+  if (!details) return null;
+  const current = await loadCurrentVideo(db, {
+    kind: "youtube_playlist",
+    id: details.playlistId,
+  });
+  const index = current ? details.videos.findIndex((v) => v.videoId === current.videoId) : -1;
+  return { ...details, currentVideoIndex: index >= 0 ? index : null };
+}
+
+async function loadPlaylistDetails(
+  input: PlaylistDetailsInput,
+  db: Database
+): Promise<Omit<PlaylistDetailsResult, "currentVideoIndex"> | null> {
   // Reject UUID-formatted playlist IDs - these are custom playlists, not YouTube playlists
   if (UUID_REGEX.test(input.playlistId)) {
     logger.warn("[playlists] Rejected UUID playlist ID - use custom playlists router", {
@@ -162,7 +178,6 @@ export async function getPlaylistDetailsForServer(
           thumbnailUrl: playlistMeta.thumbnailUrl,
           thumbnailPath: playlistMeta.thumbnailPath,
           itemCount: playlistMeta.itemCount,
-          currentVideoIndex: playlistMeta.currentVideoIndex ?? 0,
           url:
             playlistMeta.url ?? `https://www.youtube.com/playlist?list=${playlistMeta.playlistId}`,
           lastFetchedAt: playlistMeta.lastFetchedAt,
@@ -184,7 +199,6 @@ export async function getPlaylistDetailsForServer(
           thumbnailUrl: playlistMeta.thumbnailUrl,
           thumbnailPath: playlistMeta.thumbnailPath,
           itemCount: playlistMeta.itemCount,
-          currentVideoIndex: playlistMeta.currentVideoIndex ?? 0,
           url:
             playlistMeta.url ?? `https://www.youtube.com/playlist?list=${playlistMeta.playlistId}`,
           lastFetchedAt: playlistMeta.lastFetchedAt,
@@ -450,7 +464,6 @@ export async function getPlaylistDetailsForServer(
     itemCount: Array.isArray(data?.entries)
       ? data.entries.length
       : (playlistMeta?.itemCount ?? null),
-    currentVideoIndex: playlistMeta?.currentVideoIndex ?? 0,
     url,
     lastFetchedAt: Date.now(),
     videos: videos.map((v: YoutubeVideo) => ({
@@ -505,7 +518,6 @@ export const playlistsRouter = t.router({
             url: channelPlaylists.url,
             viewCount: channelPlaylists.viewCount,
             lastViewedAt: channelPlaylists.lastViewedAt,
-            currentVideoIndex: channelPlaylists.currentVideoIndex,
             totalWatchTimeSeconds: channelPlaylists.totalWatchTimeSeconds,
             createdAt: channelPlaylists.createdAt,
             updatedAt: channelPlaylists.updatedAt,
@@ -530,11 +542,14 @@ export const playlistsRouter = t.router({
             : [];
 
         const channelMap = new Map(channelsData.map((c) => [c.channelId, c]));
+        const currentVideoIndexes = await loadCurrentVideoIndexes(db, "youtube_playlist");
 
         return playlists.map((p) => {
           const channel = p.channelId ? channelMap.get(p.channelId) : null;
           return {
             ...p,
+            // The Current Video's place in the playlist, for card progress; null when none.
+            currentVideoIndex: currentVideoIndexes.get(p.playlistId) ?? null,
             channelTitle: channel?.channelTitle || null,
           };
         });
@@ -635,54 +650,6 @@ export const playlistsRouter = t.router({
       } catch (e) {
         logger.error("[playlists] updateView failed", e);
         return { success: false, message: "Failed to update view stats" };
-      }
-    }),
-
-  // Update playlist playback position
-  updatePlayback: publicProcedure
-    .input(
-      z.object({
-        playlistId: z.string(),
-        currentVideoIndex: z.number().min(0),
-        watchTimeSeconds: z.number().min(0).optional(),
-      })
-    )
-    .mutation(async ({ input, ctx }) => {
-      const db = ctx.db ?? defaultDb;
-      const now = Date.now();
-
-      try {
-        const existing = await db
-          .select()
-          .from(channelPlaylists)
-          .where(eq(channelPlaylists.playlistId, input.playlistId))
-          .limit(1);
-
-        if (existing.length === 0) {
-          return { success: false, message: "Playlist not found" };
-        }
-
-        const current = existing[0];
-        const newTotalWatchTime =
-          (current.totalWatchTimeSeconds || 0) + (input.watchTimeSeconds || 0);
-
-        await db
-          .update(channelPlaylists)
-          .set({
-            currentVideoIndex: input.currentVideoIndex,
-            totalWatchTimeSeconds: newTotalWatchTime,
-            updatedAt: now,
-          })
-          .where(eq(channelPlaylists.playlistId, input.playlistId));
-
-        return {
-          success: true,
-          currentVideoIndex: input.currentVideoIndex,
-          totalWatchTimeSeconds: newTotalWatchTime,
-        };
-      } catch (e) {
-        logger.error("[playlists] updatePlayback failed", e);
-        return { success: false, message: "Failed to update playback position" };
       }
     }),
 

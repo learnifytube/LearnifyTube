@@ -12,10 +12,8 @@ import {
 } from "@/api/db/schema";
 import defaultDb from "@/api/db";
 import { setListOnDevices } from "@/api/on-device/store";
-import {
-  deleteVideoLibraryData,
-  findReferencedVideoIds,
-} from "@/api/utils/video-library-cleanup";
+import { loadCurrentVideo, loadCurrentVideoIndexes } from "@/api/collections/current-video";
+import { deleteVideoLibraryData, findReferencedVideoIds } from "@/api/utils/video-library-cleanup";
 import { getQueueManager } from "@/services/download-queue/queue-manager";
 import { getOptimizationQueueManager } from "@/services/optimization-queue/queue-manager";
 
@@ -40,7 +38,6 @@ export const customPlaylistsRouter = t.router({
           description: input.description ?? null,
           itemCount: 0,
           viewCount: 0,
-          currentVideoIndex: 0,
           totalWatchTimeSeconds: 0,
           createdAt: now,
           updatedAt: now,
@@ -69,6 +66,8 @@ export const customPlaylistsRouter = t.router({
           .orderBy(desc(customPlaylists.lastViewedAt), desc(customPlaylists.updatedAt))
           .limit(limit);
 
+        const currentVideoIndexes = await loadCurrentVideoIndexes(db, "list");
+
         // For each playlist, get the first 3 videos' thumbnails for preview
         const playlistsWithThumbnails = await Promise.all(
           playlists.map(async (playlist) => {
@@ -96,6 +95,8 @@ export const customPlaylistsRouter = t.router({
 
             return {
               ...playlist,
+              // The Current Video's place in the List, for card progress; null when none.
+              currentVideoIndex: currentVideoIndexes.get(playlist.id) ?? null,
               thumbnailUrl: firstVideo?.thumbnailUrl ?? null,
               thumbnailPath: firstVideo?.thumbnailPath ?? null,
               previewThumbnails,
@@ -170,6 +171,10 @@ export const customPlaylistsRouter = t.router({
           }));
 
         const firstVideo = videos[0];
+        const currentVideo = await loadCurrentVideo(db, { kind: "list", id: playlist.id });
+        const currentVideoIndex = currentVideo
+          ? videos.findIndex((video) => video.videoId === currentVideo.videoId)
+          : -1;
 
         return {
           id: playlist.id,
@@ -178,7 +183,8 @@ export const customPlaylistsRouter = t.router({
           itemCount: playlist.itemCount,
           viewCount: playlist.viewCount,
           lastViewedAt: playlist.lastViewedAt,
-          currentVideoIndex: playlist.currentVideoIndex ?? 0,
+          // The Current Video's place in the List; null when none is set or it left the List.
+          currentVideoIndex: currentVideoIndex >= 0 ? currentVideoIndex : null,
           totalWatchTimeSeconds: playlist.totalWatchTimeSeconds,
           createdAt: playlist.createdAt,
           updatedAt: playlist.updatedAt,
@@ -271,7 +277,9 @@ export const customPlaylistsRouter = t.router({
           const referencedVideoIds = await findReferencedVideoIds(db, playlistVideoIds, {
             excludeCustomPlaylistId: input.playlistId,
           });
-          removableVideoIds = playlistVideoIds.filter((videoId) => !referencedVideoIds.has(videoId));
+          removableVideoIds = playlistVideoIds.filter(
+            (videoId) => !referencedVideoIds.has(videoId)
+          );
 
           retainedVideosCount = playlistVideoIds.length - removableVideoIds.length;
 
@@ -312,7 +320,9 @@ export const customPlaylistsRouter = t.router({
 
             if (activeOptimizations.length > 0) {
               const optimizationResults = await Promise.allSettled(
-                activeOptimizations.map((job) => optimizationQueueManager.cancelOptimization(job.id))
+                activeOptimizations.map((job) =>
+                  optimizationQueueManager.cancelOptimization(job.id)
+                )
               );
 
               optimizationResults.forEach((result, index) => {
@@ -331,7 +341,10 @@ export const customPlaylistsRouter = t.router({
         await db
           .delete(favorites)
           .where(
-            and(eq(favorites.entityType, "custom_playlist"), eq(favorites.entityId, input.playlistId))
+            and(
+              eq(favorites.entityType, "custom_playlist"),
+              eq(favorites.entityId, input.playlistId)
+            )
           );
 
         await db.delete(customPlaylists).where(eq(customPlaylists.id, input.playlistId));
@@ -660,56 +673,6 @@ export const customPlaylistsRouter = t.router({
           error: String(e),
         });
         return [];
-      }
-    }),
-
-  // Update playlist playback position
-  updatePlayback: publicProcedure
-    .input(
-      z.object({
-        playlistId: z.string(),
-        currentVideoIndex: z.number().min(0),
-        watchTimeSeconds: z.number().min(0).optional(),
-      })
-    )
-    .mutation(async ({ input, ctx }) => {
-      const db = ctx.db ?? defaultDb;
-      const now = Date.now();
-
-      try {
-        const [existing] = await db
-          .select()
-          .from(customPlaylists)
-          .where(eq(customPlaylists.id, input.playlistId))
-          .limit(1);
-
-        if (!existing) {
-          return { success: false, message: "Playlist not found" };
-        }
-
-        const newTotalWatchTime =
-          (existing.totalWatchTimeSeconds || 0) + (input.watchTimeSeconds || 0);
-
-        await db
-          .update(customPlaylists)
-          .set({
-            currentVideoIndex: input.currentVideoIndex,
-            totalWatchTimeSeconds: newTotalWatchTime,
-            updatedAt: now,
-          })
-          .where(eq(customPlaylists.id, input.playlistId));
-
-        return {
-          success: true,
-          currentVideoIndex: input.currentVideoIndex,
-          totalWatchTimeSeconds: newTotalWatchTime,
-        };
-      } catch (e) {
-        logger.error("[customPlaylists] updatePlayback failed", {
-          playlistId: input.playlistId,
-          error: String(e),
-        });
-        return { success: false, message: "Failed to update playback position" };
       }
     }),
 

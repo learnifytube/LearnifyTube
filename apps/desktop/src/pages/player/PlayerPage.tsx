@@ -11,7 +11,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Rewind, FastForward, ListPlus, MoreVertical, Download, Trash2, Music, MonitorSmartphone } from "lucide-react";
+import {
+  Rewind,
+  FastForward,
+  ListPlus,
+  MoreVertical,
+  Download,
+  Trash2,
+  Music,
+  MonitorSmartphone,
+} from "lucide-react";
 import { toast } from "sonner";
 import { AddToPlaylistDialog } from "@/components/playlists/AddToPlaylistDialog";
 import { useWatchProgress } from "./hooks/useWatchProgress";
@@ -335,20 +344,6 @@ export default function PlayerPage(): React.JSX.Element {
     refetchOnWindowFocus: false,
   });
 
-  // Update playback position mutation
-  const updatePlaybackMutation = useMutation({
-    mutationFn: ({ videoIndex, watchTime }: { videoIndex: number; watchTime?: number }) =>
-      trpcClient.playlists.updatePlayback.mutate({
-        playlistId: playlistId!,
-        currentVideoIndex: videoIndex,
-        watchTimeSeconds: watchTime,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ytdlp", "all-playlists"] });
-      queryClient.invalidateQueries({ queryKey: ["playlists", "listAll"] });
-    },
-  });
-
   // Bump lastViewedAt/viewCount once per playlist session so the playlist
   // appears (and ranks) correctly in Recent Playlists.
   useEffect(() => {
@@ -363,23 +358,22 @@ export default function PlayerPage(): React.JSX.Element {
       });
   }, [playlistId, queryClient]);
 
-  // Persist the currently-playing index so resume works even when the user
-  // jumps to a specific video (instead of using next/previous).
+  // A Video started from a List, Favorites or YouTube playlist becomes its Current
+  // Video (ADR-0006); started anywhere else, no Current Video moves.
   useEffect(() => {
-    if (!playlistId || playlistIndex === undefined || playlistIndex === null) return;
-    trpcClient.playlists.updatePlayback
-      .mutate({ playlistId, currentVideoIndex: playlistIndex })
+    if (!videoId || !playlistId) return;
+    trpcClient.collections.videoStarted
+      .mutate({ videoId, collectionId: playlistId })
       .then(() => {
         queryClient.invalidateQueries({ queryKey: ["playlists", "listAll"] });
+        queryClient.invalidateQueries({ queryKey: ["playlist-details", playlistId] });
+        queryClient.invalidateQueries({ queryKey: ["customPlaylist-details", playlistId] });
+        queryClient.invalidateQueries({ queryKey: ["collections", "pickUp"] });
       })
       .catch((error: unknown) => {
-        logger.warn("[player] Failed to persist playlist position", {
-          playlistId,
-          playlistIndex,
-          error,
-        });
+        logger.warn("[player] Failed to record the Current Video", { playlistId, videoId, error });
       });
-  }, [playlistId, playlistIndex, queryClient]);
+  }, [videoId, playlistId, queryClient]);
 
   const playlistData = playlistQuery.data;
   const playlistVideos = playlistData?.videos ?? [];
@@ -397,7 +391,6 @@ export default function PlayerPage(): React.JSX.Element {
     const nextVideo = playlistVideos[nextIndex];
 
     if (nextVideo) {
-      updatePlaybackMutation.mutate({ videoIndex: nextIndex });
       navigate({
         to: "/player",
         search: {
@@ -415,7 +408,6 @@ export default function PlayerPage(): React.JSX.Element {
     playlistUrl,
     playlistCurrentIndex,
     playlistVideos,
-    updatePlaybackMutation,
     navigate,
   ]);
 
@@ -427,7 +419,6 @@ export default function PlayerPage(): React.JSX.Element {
     const previousVideo = playlistVideos[previousIndex];
 
     if (previousVideo) {
-      updatePlaybackMutation.mutate({ videoIndex: previousIndex });
       navigate({
         to: "/player",
         search: {
@@ -445,7 +436,6 @@ export default function PlayerPage(): React.JSX.Element {
     playlistUrl,
     playlistCurrentIndex,
     playlistVideos,
-    updatePlaybackMutation,
     navigate,
   ]);
 
@@ -607,7 +597,9 @@ export default function PlayerPage(): React.JSX.Element {
                           <ListPlus className="mr-2 h-4 w-4" />
                           Add to Mylist
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => toggleOnDevicesMutation.mutate(!isOnDevices)}>
+                        <DropdownMenuItem
+                          onClick={() => toggleOnDevicesMutation.mutate(!isOnDevices)}
+                        >
                           <MonitorSmartphone className="mr-2 h-4 w-4" />
                           {isOnDevices ? "Remove from Devices" : "Send to Devices"}
                         </DropdownMenuItem>

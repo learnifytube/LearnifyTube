@@ -84,6 +84,37 @@ export const movieWatchSchema = z.object({
 
 export type MovieWatch = z.infer<typeof movieWatchSchema>;
 
+/** The collections that remember a Current Video (ADR-0006); Channels don't. */
+export const collectionKindSchema = z.enum([
+  "list",
+  "favorites",
+  "youtube_playlist",
+]);
+
+export type CollectionKind = z.infer<typeof collectionKindSchema>;
+
+/**
+ * The Video a List (Favorites included) or YouTube playlist was last playing.
+ * Sent in the Device report; the newest updatedAt wins. Favorites' id is "favorites".
+ */
+export const currentVideoSchema = z.object({
+  collectionKind: collectionKindSchema,
+  collectionId: z.string(),
+  videoId: z.string(),
+  updatedAt: z.number(),
+});
+
+export type CurrentVideo = z.infer<typeof currentVideoSchema>;
+
+/**
+ * GET /api/playlist/:id/videos and GET /api/mylist/:id/videos ("favorites" for
+ * Favorites) carry `currentVideo` beside `videos`: the collection's Current Video,
+ * or null when none is set. Absent from desktops older than RESUME_SYNC_PROTOCOL_VERSION.
+ */
+export const collectionVideosCurrentVideoSchema = z.object({
+  currentVideo: currentVideoSchema.nullable().optional(),
+});
+
 /** POST /api/devices/report: what a Device holds and what was watched on it. */
 export const deviceReportSchema = z.object({
   deviceId: z.string().min(1),
@@ -108,6 +139,8 @@ export const deviceReportSchema = z.object({
   heldMovieIds: z.array(z.string()).optional(),
   /** Episodes with an Offline copy on the Device; absent from Devices older than Movies. */
   heldEpisodeIds: z.array(z.string()).optional(),
+  /** Current Videos of Lists and YouTube playlists played on the Device; absent from Devices older than resume. */
+  currentVideos: z.array(currentVideoSchema).optional(),
 });
 
 export type DeviceReport = z.infer<typeof deviceReportSchema>;

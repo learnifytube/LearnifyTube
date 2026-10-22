@@ -1,6 +1,14 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { Play, RefreshCw, ListVideo, CheckCircle2, Download, Loader2 } from "lucide-react";
+import {
+  Play,
+  RotateCcw,
+  RefreshCw,
+  ListVideo,
+  CheckCircle2,
+  Download,
+  Loader2,
+} from "lucide-react";
 import Thumbnail from "@/components/Thumbnail";
 
 interface PlaylistHeaderProps {
@@ -9,11 +17,14 @@ interface PlaylistHeaderProps {
   thumbnailUrl?: string | null;
   thumbnailPath?: string | null;
   itemCount: number;
-  currentVideoIndex: number;
+  /** The Current Video's place in the List; null when none is set. */
+  currentVideoIndex: number | null;
   downloadedCount: number;
   isRefreshing: boolean;
   lastUpdated?: number;
-  onPlayAll: () => void;
+  /** Plays where the List picks up (the Current Video, or the next unwatched one). */
+  onResume: () => void;
+  onPlayFromStart: () => void;
   onRefresh: () => void;
 }
 
@@ -27,10 +38,14 @@ export function PlaylistHeader({
   downloadedCount,
   isRefreshing,
   lastUpdated,
-  onPlayAll,
+  onResume,
+  onPlayFromStart,
   onRefresh,
 }: PlaylistHeaderProps): React.JSX.Element {
-  const progress = itemCount > 0 ? Math.round((currentVideoIndex / itemCount) * 100) : 0;
+  const progress =
+    itemCount > 0 && currentVideoIndex !== null
+      ? Math.round((currentVideoIndex / itemCount) * 100)
+      : 0;
   const notDownloadedCount = itemCount - downloadedCount;
   const allDownloaded = notDownloadedCount === 0 && itemCount > 0;
   const hideNoThumb = typeof thumbnailUrl === "string" && thumbnailUrl.includes("no_thumbnail");
@@ -117,9 +132,13 @@ export function PlaylistHeader({
 
             {/* Actions */}
             <div className="flex flex-wrap items-center gap-3">
-              <Button onClick={onPlayAll} className="gap-2">
+              <Button onClick={onResume} className="gap-2">
                 <Play className="h-4 w-4" fill="currentColor" />
-                {progress > 0 ? "Continue Watching" : "Start Playlist"}
+                {currentVideoIndex !== null ? "Resume" : "Play"}
+              </Button>
+              <Button variant="outline" onClick={onPlayFromStart} className="gap-2">
+                <RotateCcw className="h-4 w-4" />
+                Play from start
               </Button>
               <Button
                 variant="outline"

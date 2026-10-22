@@ -1,5 +1,6 @@
+import type { Movie, MovieWatch } from "../../../shared/mobile-sync-contract";
 import type { StreamingVideo } from "../../stores/playback";
-import type { TVRecentPlaylist } from "../../stores/tvHistory";
+import type { TVRecentMovie, TVRecentPlaylist } from "../../stores/tvHistory";
 import {
   buildTVCatalog,
   SENT_TO_THIS_TV_ID,
@@ -34,11 +35,31 @@ const historyEntry = (
   videoIds: string[],
   lastVideoId: string | null = null,
 ): TVRecentPlaylist => ({
+  kind: "videos",
   playlistId,
   title: `History ${playlistId}`,
   videos: videoIds.map((id) => video(id)),
   lastIndex: lastVideoId ? videoIds.indexOf(lastVideoId) : 0,
   lastVideoId,
+  updatedAt: 0,
+});
+
+const movie = (id: string, overrides: Partial<Movie> = {}): Movie => ({
+  id,
+  title: `Movie ${id}`,
+  posterUrl: `/api/movie/${id}/poster`,
+  durationSeconds: 6000,
+  missing: false,
+  captions: [],
+  sentToDevices: false,
+  watch: null,
+  ...overrides,
+});
+
+const movieEntry = (movieId: string): TVRecentMovie => ({
+  kind: "movie",
+  movieId,
+  title: `Saved title ${movieId}`,
   updatedAt: 0,
 });
 
@@ -53,6 +74,8 @@ function input(overrides: Partial<TVCatalogInput> = {}): TVCatalogInput {
     getStoredThumbnail: () => null,
     onDeviceSet: [],
     history: [],
+    movies: [],
+    keptMovieWatch: () => undefined,
     ...overrides,
   };
 }
@@ -311,5 +334,129 @@ describe("buildTVCatalog", () => {
     expect(someHeld.holdsNothing).toBe(false);
     expect(someHeld.emptyText.playlists).toBe("No playlists on this TV");
     expect(someHeld.emptyHint).toBeNull();
+  });
+
+  describe("Movies", () => {
+    it("lists the desktop's Movies that can play, each pressed to play it", () => {
+      const catalog = buildTVCatalog(
+        input({
+          ...connected,
+          movies: [movie("m1"), movie("gone", { missing: true })],
+        }),
+      );
+
+      expect(catalog.tabs.movies).toEqual([
+        {
+          id: "movie:m1",
+          title: "Movie m1",
+          subtitle: "1 h 40 min",
+          thumbnailUrl: "/api/movie/m1/poster",
+          action: { kind: "movie", movieId: "m1", title: "Movie m1" },
+        },
+      ]);
+      expect(catalog.modes).toContain("movies");
+    });
+
+    it("says where a Movie resumes, or that it was watched", () => {
+      const kept: Record<string, MovieWatch> = {
+        here: {
+          kind: "movie",
+          id: "here",
+          lastPositionSeconds: 2832,
+          lastWatchedAt: 20,
+        },
+      };
+      const catalog = buildTVCatalog(
+        input({
+          ...connected,
+          movies: [
+            movie("desk", {
+              watch: { positionSeconds: 754, watched: false, updatedAt: 10 },
+            }),
+            movie("here", {
+              watch: { positionSeconds: 100, watched: false, updatedAt: 10 },
+            }),
+            movie("done", {
+              watch: { positionSeconds: 0, watched: true, updatedAt: 10 },
+            }),
+            movie("unknown", { durationSeconds: null }),
+          ],
+          keptMovieWatch: (id) => kept[id],
+        }),
+      );
+
+      expect(catalog.tabs.movies.map((card) => card.subtitle)).toEqual([
+        "Resume at 12:34",
+        "Resume at 47:12",
+        "Watched",
+        "",
+      ]);
+    });
+
+    it("hides the Movies tab when there are none, as on an older desktop", () => {
+      const catalog = buildTVCatalog(input(connected));
+
+      expect(catalog.tabs.movies).toEqual([]);
+      expect(catalog.modes).toEqual([
+        "playlists",
+        "mylists",
+        "channels",
+        "history",
+      ]);
+    });
+
+    it("shows no Movies in Offline mode, as the TV holds none yet", () => {
+      const catalog = buildTVCatalog(
+        input({ movies: [movie("m1")], library: [video("a")] }),
+      );
+
+      expect(catalog.tabs.movies).toEqual([]);
+      expect(catalog.modes).not.toContain("movies");
+    });
+
+    it("resumes a Movie from History as the desktop lists it now", () => {
+      const catalog = buildTVCatalog(
+        input({
+          ...connected,
+          movies: [
+            movie("m1", {
+              title: "The Matrix",
+              watch: { positionSeconds: 754, watched: false, updatedAt: 10 },
+            }),
+          ],
+          history: [movieEntry("m1"), historyEntry("q", ["a"])],
+        }),
+      );
+
+      expect(catalog.tabs.history[0]).toEqual({
+        id: "movie:m1",
+        title: "The Matrix",
+        subtitle: "Movie · Resume at 12:34",
+        thumbnailUrl: "/api/movie/m1/poster",
+        action: { kind: "movie", movieId: "m1", title: "The Matrix" },
+      });
+      expect(catalog.tabs.history.map((card) => card.id)).toEqual([
+        "movie:m1",
+        "q",
+      ]);
+    });
+
+    it("leaves out History Movies the desktop no longer shows or can't play", () => {
+      const history = [movieEntry("hidden"), movieEntry("gone")];
+
+      const whileConnected = buildTVCatalog(
+        input({
+          ...connected,
+          movies: [movie("gone", { missing: true })],
+          history,
+        }),
+      );
+      expect(whileConnected.tabs.history).toEqual([]);
+
+      const offline = buildTVCatalog(
+        input({ movies: [movie("hidden")], history }),
+      );
+      expect(offline.tabs.history).toEqual([]);
+    });
   });
 });

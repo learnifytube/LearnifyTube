@@ -3,6 +3,7 @@ import {
   DesktopFetchFailedError,
   DesktopStillFetchingError,
 } from "../../services/desktop-fetch/createDesktopFetch";
+import type { PlaybackFailure } from "../../services/playback-source/createPlaybackSource";
 import { pairingRequiredText } from "./connectionText";
 
 /** A message on the TV: a title and a short text, readable from the couch. */
@@ -111,6 +112,41 @@ export const desktopGoneNothingLeft: TVMessageContent = {
   text: "Nothing else here is on this TV.",
   canRetry: false,
 };
+
+export const desktopGoneMovie: TVMessageContent = {
+  title: "The desktop went away",
+  text: "This Movie isn't on this TV, so it stopped. It picks up where it left off next time.",
+  canRetry: false,
+};
+
+/** Why a Movie isn't playing: the Playback source's failure, or the TV's player refusing the file. */
+export type MovieProblem = PlaybackFailure | { kind: "playerRejected" };
+
+/** What the TV says when a Movie can't play. Movies are files, so there's no fetch to wait for. */
+export function describeMovieProblem(problem: MovieProblem): TVMessageContent {
+  if (problem.kind === "playerRejected") {
+    return {
+      title: "Can't play this on this TV",
+      text: "This TV can't play this Movie's file. Try it on the desktop, or convert the file to a format Android plays.",
+      canRetry: false,
+    };
+  }
+  if (problem.kind === "notOnThisTV") {
+    return {
+      title: "Not on this TV",
+      text: "This Movie isn't on this TV. Connect to the desktop to watch it.",
+      canRetry: false,
+    };
+  }
+  if (problem.kind === "videoNotFound") {
+    return {
+      title: "Movie not found",
+      text: "Go back and pick another Movie.",
+      canRetry: false,
+    };
+  }
+  return describeDesktopRequestFailure(problem.error);
+}
 
 const updatesUnavailable: TVMessageText = {
   title: "Updates aren't available",

@@ -16,6 +16,7 @@ import {
   segmentsOf,
   type PosterSource,
 } from "./import-plan";
+import { codecWarningsFor, type CodecWarning } from "./codec-warnings";
 
 // Every way the preview can import a folder of video files.
 export const VIDEO_LAYOUTS = [...MOVIE_LAYOUTS, "series"] as const;
@@ -31,6 +32,8 @@ export type ProposedEpisode = {
   durationSeconds: number | null;
   videoCodec: string | null;
   audioCodec: string | null;
+  // What Android is likely to refuse to play; the preview warns before saving.
+  codecWarnings: CodecWarning[];
 };
 
 export type ProposedSeason = {
@@ -97,6 +100,7 @@ const proposeEpisode = (video: ListedFile, number: number | null): ProposedEpiso
   durationSeconds: video.durationSeconds ?? null,
   videoCodec: video.videoCodec ?? null,
   audioCodec: video.audioCodec ?? null,
+  codecWarnings: codecWarningsFor(video),
 });
 
 const seasonsOf = (videos: ListedFile[]): ProposedSeason[] => {

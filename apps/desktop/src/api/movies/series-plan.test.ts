@@ -45,6 +45,7 @@ describe("planSeriesImport", () => {
       durationSeconds: 1320,
       videoCodec: "h264",
       audioCodec: null,
+      codecWarnings: [],
     });
   });
 
@@ -115,6 +116,23 @@ describe("planSeriesImport", () => {
       kind: "frame",
       videoPath: "S01E01.mkv",
     });
+  });
+
+  it("warns about Episodes Android is likely to refuse to play", () => {
+    const [season] = planSeriesImport({
+      name: "Old",
+      files: [
+        { path: "S01E01.avi", videoCodec: "mpeg4", audioCodec: "dts" },
+        { path: "S01E02.mkv", videoCodec: "h264", audioCodec: "aac" },
+      ],
+    }).seasons;
+    expect(season.episodes.map((episode) => episode.codecWarnings)).toEqual([
+      [
+        { part: "container", name: "AVI" },
+        { part: "audio", name: "DTS" },
+      ],
+      [],
+    ]);
   });
 
   it("proposes no Seasons for a folder without video", () => {

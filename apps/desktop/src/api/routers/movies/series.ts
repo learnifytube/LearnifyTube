@@ -1,9 +1,13 @@
+import path from "path";
 import { randomUUID } from "crypto";
 import { app } from "electron";
 import { z } from "zod";
 import { publicProcedure, t } from "@/api/trpc";
 import defaultDb from "@/api/db";
 import { removeAppCover } from "@/api/audiobooks/covers";
+import type { FolderListing } from "@/api/audiobooks/import-plan";
+import { scanFolder } from "@/api/audiobooks/scan-folder";
+import { rescanSeries } from "@/api/movies/series-rescan";
 import { planSeriesImport, reorderSeries } from "@/api/movies/series-plan";
 import {
   forgetSeries,
@@ -17,6 +21,7 @@ import {
 import { savePoster } from "@/api/movies/posters";
 import { moviePostersDir } from "@/api/movies/posters-dir";
 import { movieFiles } from "@/main/security/movie-files";
+import { notifyDevicesOfMovies } from "./notify-devices";
 import { previewedListings } from "./previewed-listings";
 
 // Series in the Movies section (ADR-0005): Import, list, play and mark Episodes.
@@ -88,6 +93,25 @@ export const seriesRouter = t.router({
     .mutation(({ input, ctx }) =>
       setEpisodesWatched(ctx.db ?? defaultDb, input.target, input.watched)
     ),
+
+  // Looks at the Series folder again: new Episodes join their Season, files
+  // that are gone show as missing. Existing order is never changed.
+  rescan: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input, ctx }) => {
+    const db = ctx.db ?? defaultDb;
+    const found = await getSeries(db, input.id);
+    if (!found) return { added: 0, missing: 0 };
+    // A folder that is gone (e.g. an unplugged drive) makes every Episode missing.
+    const listing = await scanFolder(found.sourceFolder).catch(
+      (): FolderListing => ({ name: path.basename(found.sourceFolder), files: [] })
+    );
+    const result = await rescanSeries(db, input.id, listing);
+    if (!result) return { added: 0, missing: 0 };
+    if (result.filesChanged) movieFiles.tracksChanged();
+    // #56: Episodes added to a Season sent to Devices (`result.seasonsWithNewEpisodes`)
+    // are sent with it; send them here, before Devices are told.
+    await notifyDevicesOfMovies();
+    return { added: result.added, missing: result.missing };
+  }),
 
   // Removes the Series from the app only; its files are never touched.
   forget: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input, ctx }) => {

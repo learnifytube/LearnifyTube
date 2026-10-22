@@ -8,6 +8,7 @@ import {
   forgetMovie,
   listMovieFilePaths,
   listMovies,
+  markMissingMovies,
   recordMoviePlayback,
   renameMovie,
   saveImportedMovies,
@@ -159,5 +160,25 @@ describe("Movie catalog", () => {
     });
     expect((await listMovies(db)).map((m) => m.id)).toEqual([alienId]);
     expect(await forgetMovie(db, upId)).toBeNull();
+  });
+
+  it("shows a Movie whose file is gone as missing, keeping its Watch state until the file is back", async () => {
+    const [up, alien] = await importFilms(db);
+    await recordMoviePlayback(db, { movieId: up, positionSeconds: 1200 }, 2000);
+    const upFile = path.join("/films", "Up (2009).mp4");
+    const present = new Set([path.join("/films", "Alien (1979)/Alien.1979.mkv")]);
+    const exists = (filePath: string): Promise<boolean> => Promise.resolve(present.has(filePath));
+
+    expect(await markMissingMovies(db, exists)).toBe(1);
+    expect(await findMovie(db, up)).toMatchObject({ missing: true, positionSeconds: 1200 });
+    expect(await findMovie(db, alien)).toMatchObject({ missing: false });
+    expect(await markMissingMovies(db, exists)).toBe(0);
+
+    present.add(upFile);
+    expect(await markMissingMovies(db, exists)).toBe(1);
+    expect((await listMovies(db)).find((movie) => movie.id === up)).toMatchObject({
+      missing: false,
+      watchState: "in-progress",
+    });
   });
 });

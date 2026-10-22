@@ -1,8 +1,9 @@
 import { randomUUID } from "crypto";
+import { access } from "fs/promises";
 import { app, dialog } from "electron";
 import { z } from "zod";
 import { publicProcedure, t } from "@/api/trpc";
-import defaultDb from "@/api/db";
+import defaultDb, { type Database } from "@/api/db";
 import { removeAppCover } from "@/api/audiobooks/covers";
 import {
   MOVIE_LAYOUTS,
@@ -15,6 +16,7 @@ import {
   findMovie,
   forgetMovie,
   listMovies,
+  markMissingMovies,
   recordMoviePlayback,
   renameMovie,
   saveImportedMovies,
@@ -25,6 +27,7 @@ import { previewPoster, savePoster } from "@/api/movies/posters";
 import { moviePostersDir } from "@/api/movies/posters-dir";
 import { movieFiles } from "@/main/security/movie-files";
 import { planSeriesImport, suggestVideoLayout } from "@/api/movies/series-plan";
+import { notifyDevicesOfMovies } from "./notify-devices";
 import { previewedListings } from "./previewed-listings";
 import { seriesRouter } from "./series";
 
@@ -38,6 +41,17 @@ const posterSourceSchema: z.ZodType<PosterSource> = z.discriminatedUnion("kind",
   z.object({ kind: z.literal("embedded"), videoPath: z.string(), stream: z.number().int() }),
   z.object({ kind: z.literal("frame"), videoPath: z.string() }),
 ]);
+
+const fileExists = (filePath: string): Promise<boolean> =>
+  access(filePath).then(
+    () => true,
+    () => false
+  );
+
+// A Movie whose file is gone shows as missing, and plays again once it is back.
+const checkMovieFiles = async (db: Database): Promise<void> => {
+  if ((await markMissingMovies(db, fileExists)) > 0) await notifyDevicesOfMovies();
+};
 
 const posterFile = (poster: PosterSource): string =>
   poster.kind === "file" ? poster.path : poster.videoPath;
@@ -119,11 +133,17 @@ export const moviesRouter = t.router({
 
   series: seriesRouter,
 
-  list: publicProcedure.query(({ ctx }) => listMovies(ctx.db ?? defaultDb)),
+  list: publicProcedure.query(async ({ ctx }) => {
+    const db = ctx.db ?? defaultDb;
+    await checkMovieFiles(db);
+    return listMovies(db);
+  }),
 
-  get: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .query(({ input, ctx }) => findMovie(ctx.db ?? defaultDb, input.id)),
+  get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input, ctx }) => {
+    const db = ctx.db ?? defaultDb;
+    await checkMovieFiles(db);
+    return findMovie(db, input.id);
+  }),
 
   rename: publicProcedure
     .input(z.object({ id: z.string(), title: z.string().trim().min(1) }))

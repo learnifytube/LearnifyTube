@@ -75,7 +75,7 @@ One book the user imported from audio files on their computer, defined once at I
 _Avoid_: imported video, local video, album
 
 **Import**:
-To turn a folder on the computer into one or more Audiobooks. The user picks a folder and then says, before anything is saved, whether the folder is one Audiobook or each of its subfolders is one. Import is to Audiobooks what Keep is to Videos.
+To turn a folder on the computer into Audiobooks, Movies or a Series. The files decide which is offered (audio files make Audiobooks, video files make Movies or a Series), and the user confirms before anything is saved: one Audiobook or one per subfolder; one Movie, one Movie per file, or one Series. Import is to these what Keep is to Videos. The user's files are only read where they are, never copied.
 _Avoid_: add files, upload, keep (for Audiobooks)
 
 **Track**:
@@ -87,7 +87,7 @@ The order an Audiobook plays its Tracks in. Import sets it by subfolder and then
 _Avoid_: playlist order
 
 **Rescan**:
-Looking at an Audiobook's folder again after Import. New files join at the end of the Track order and files that are gone show as missing; nothing already there is reordered. The user's files are only ever read: forgetting an Audiobook never deletes them.
+Looking at the folder of an Audiobook or Series again after Import. New files join at the end of the Track order and files that are gone show as missing; nothing already there is reordered. The user's files are only ever read: forgetting an Audiobook never deletes them.
 _Avoid_: re-import, refresh
 
 **Listening position**:
@@ -97,3 +97,25 @@ _Avoid_: watch state, progress (for Audiobooks)
 **Book player**:
 What plays an Audiobook, on the desktop or a phone, with the same rules on both: it resumes from the Listening position, crosses Tracks on its own, pauses and resumes, skips ±30s, and lets the user pick any Track. Previous restarts the Track unless it has only just begun. On the desktop it keeps playing while the user browses or the window is hidden, and pauses when a Video starts.
 _Avoid_: audio player, video player (for Audiobooks)
+
+### Movies and Series
+
+**Movie**:
+One film the user imported from a video file on their computer. It is not a Video and has nothing to do with YouTube: it is never in the Library or a List. The user sends a Movie to Devices as a whole. It has its own Watch state, with the same rules as a Video's. If its file goes missing, the Movie shows as missing and keeps its Watch state.
+_Avoid_: local video, imported video, film file
+
+**Series**:
+A show the user imported from a folder of video files, made of Seasons of Episodes. A Series is never sent as a whole: the user sends one Season at a time. Playing a Series resumes the Episode in progress, or else starts the first unwatched Episode, and moves on to the next Episode by itself. The user can mark a whole Series, or one Season, watched or unwatched.
+_Avoid_: show, playlist, TV show
+
+**Season**:
+An ordered group of Episodes in a Series, and the unit the user sends to Devices. Episodes that a Rescan finds in a sent Season are sent too.
+_Avoid_: volume, folder
+
+**Episode**:
+One video file in a Series. It has its own Watch state, with the same rules as a Video's. Import orders Episodes by the season and episode numbers in their file names (S01E02), and otherwise by subfolder and then by file name, reading numbers as numbers. The user can correct the order at Import.
+_Avoid_: part, chapter, track
+
+**Shown on Devices**:
+Whether a Movie or Series appears on Devices at all. It is on by default; when the user turns it off, the Devices' catalog leaves it out entirely, so it can be neither seen nor played there.
+_Avoid_: hidden, private, parental lock

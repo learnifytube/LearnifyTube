@@ -7,11 +7,11 @@ The phone and Android TV app. The phone is a family catalog of the desktop Libra
 ### Catalog
 
 **Continue watching**:
-The phone's first Home row: Videos in progress on any device (started but not yet watched), newest first. Playing one resumes from the most recent Watch progress on any device, but a mark made on the desktop always wins. A Video finished anywhere leaves the row.
+The phone's first Home row: Videos, Movies and Series in progress on any device (started but not yet watched), newest first. A Series shows its next Episode. Playing one resumes from the most recent Watch progress on any device, but a mark made on the desktop always wins. Anything finished anywhere leaves the row; a Series leaves when it has no unwatched Episode left.
 _Avoid_: history, recently watched
 
 **On this phone**:
-The phone's second Home row: Videos that hold an Offline copy on this phone, newest first. Shown only when the phone has at least one Offline copy. Long-pressing a video gives the option to remove it from this phone.
+The phone's second Home row: Videos, Movies and Episodes that hold an Offline copy on this phone, newest first. Shown only when the phone has at least one Offline copy. Long-pressing a video gives the option to remove it from this phone.
 _Avoid_: downloads, downloaded videos, local files
 
 **Recently added**:
@@ -46,7 +46,7 @@ _Avoid_: books tab, audio, podcasts
 ### Offline playback
 
 **Offline copy**:
-The single playable file of a Video on this device, wherever it is stored. An Offline copy on a removed USB drive still exists but is unreachable until the drive returns. Viewers see a Video with an Offline copy as "on this TV" (or "on this phone"). The phone's **On this phone** row is exactly those Videos — not the On-device set.
+The single playable file of a Video, Movie or Episode on this device, wherever it is stored. An Offline copy on a removed USB drive still exists but is unreachable until the drive returns. Viewers see a Video with an Offline copy as "on this TV" (or "on this phone"). The phone's **On this phone** row is exactly those Videos — not the On-device set.
 _Avoid_: local file, local path, downloaded video, ready, offline (for the copy; Offline mode is the connection)
 
 **Storage location**:
@@ -54,7 +54,7 @@ The place the user chose for new Offline copies: internal app storage, a folder 
 _Avoid_: storage folder, video directory
 
 **Download**:
-The act of fetching a Video's Offline copy from the desktop app, starting with a Desktop fetch when the desktop doesn't have the Video yet. On the phone, playing a Video starts a Download with no extra confirmation. A Download produces an Offline copy; it is not the copy itself, and it ends when the copy exists. Receiving a Video from a nearby device is not a Download.
+The act of fetching an Offline copy of a Video, Movie or Episode from the desktop app, starting with a Desktop fetch when the desktop doesn't have the Video yet. On the phone, playing a Video starts a Download with no extra confirmation; playing a Movie or Episode only Streams, and it is Downloaded only when the desktop sent it or the user asks for it on the device. A Download produces an Offline copy; it is not the copy itself, and it ends when the copy exists. Receiving a Video from a nearby device is not a Download.
 _Avoid_: sync (for a single Video)
 
 **Desktop fetch**:
@@ -74,7 +74,7 @@ The Videos the desktop wants this device to hold (see the desktop glossary). The
 _Avoid_: synced videos, on this TV, on this phone
 
 **Mirror**:
-To bring this device in line with the On-device set on connect, on return to the foreground, and every few minutes. The mirror only removes Videos it brought itself, then sends a Device report.
+To bring this device in line with the On-device set and the Movies, Seasons and Audiobooks the desktop sent, on connect, on return to the foreground, and every few minutes. The mirror only removes Videos it brought itself, then sends a Device report.
 _Avoid_: sync (for this act)
 
 **Offline mode**:

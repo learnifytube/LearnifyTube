@@ -1,6 +1,6 @@
 {
   "name": "learnify-mobile",
-  "version": "1.0.45",
+  "version": "1.0.46",
   "main": "expo-router/entry",
   "scripts": {
     "postinstall": "patch-package && bash ../../scripts/setup-git-hooks.sh",

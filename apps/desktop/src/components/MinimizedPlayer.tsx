@@ -35,7 +35,7 @@ export function MinimizedPlayer(): React.JSX.Element | null {
   const { handleTimeUpdate } = useWatchProgress(
     playbackData?.videoId,
     persistentVideoRef,
-    playbackData?.lastPositionSeconds,
+    playbackData?.resumeAtSeconds,
     {
       onCurrentTimeChange: (t) => updateCurrentTime(t),
     }

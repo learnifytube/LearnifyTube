@@ -2,9 +2,10 @@ import type {
   MovieWatch,
   TitleWatch,
 } from "../../../shared/mobile-sync-contract";
-
-/** The Video rule: about 90% played is the end, so credits don't hold a resume point. */
-const WATCHED_FRACTION = 0.9;
+import {
+  isPlayedEnough,
+  resumeAt as resumePosition,
+} from "../../../shared/resume-at";
 
 /**
  * Where a Movie or Episode is now: the newer of the desktop's Watch state and
@@ -26,7 +27,17 @@ export function currentMovieWatch(
     : null;
 }
 
-/** Where a tap on a Movie or Episode starts playing: where it was left, unless that was the end. */
+/** A desktop mark made after this Device last played. */
+const markedOnDesktop = (
+  watch: TitleWatch | null,
+  current: { updatedAt: number } | null,
+) => !!watch?.watched && watch.updatedAt === current?.updatedAt;
+
+/**
+ * Where a tap on a Movie or Episode starts playing, by the shared "resume at"
+ * rule: where it was left, unless it was watched (played to about 90%, or
+ * marked on the desktop after this Device last played).
+ */
 export function resumeAt({
   watch,
   kept,
@@ -36,11 +47,12 @@ export function resumeAt({
   kept: MovieWatch | undefined;
   durationSeconds: number | null;
 }) {
-  const position = currentMovieWatch(watch, kept)?.positionSeconds ?? 0;
-  if (durationSeconds && position >= durationSeconds * WATCHED_FRACTION) {
-    return 0;
-  }
-  return position;
+  const current = currentMovieWatch(watch, kept);
+  return resumePosition({
+    positionSeconds: current?.positionSeconds ?? null,
+    durationSeconds,
+    watched: markedOnDesktop(watch, current),
+  });
 }
 
 export type TitleWatchState = "unwatched" | "in-progress" | "watched";
@@ -62,10 +74,12 @@ export function watchStateOf({
   const current = currentMovieWatch(watch, kept);
   if (!current) return { state: "unwatched", updatedAt: null };
   const { positionSeconds, updatedAt } = current;
-  const markedOnDesktop = watch?.updatedAt === updatedAt && watch.watched;
-  const reachedEnd =
-    !!durationSeconds && positionSeconds >= durationSeconds * WATCHED_FRACTION;
-  if (markedOnDesktop || reachedEnd) return { state: "watched", updatedAt };
+  if (
+    markedOnDesktop(watch, current) ||
+    isPlayedEnough(positionSeconds, durationSeconds)
+  ) {
+    return { state: "watched", updatedAt };
+  }
   return {
     state: positionSeconds > 0 ? "in-progress" : "unwatched",
     updatedAt,

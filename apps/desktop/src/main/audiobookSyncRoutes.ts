@@ -8,7 +8,11 @@ import {
   loadAudiobookCatalog,
 } from "../api/audiobooks/catalog";
 import { recordListening } from "../api/audiobooks/listening";
-import { audiobookListeningSchema } from "../../../shared/mobile-sync-contract";
+import { recordTrackPosition } from "../api/audiobooks/track-positions";
+import {
+  audiobookListeningSchema,
+  audiobookTrackPositionSchema,
+} from "../../../shared/mobile-sync-contract";
 import { resolveAudiobookTrackFile, resolveWithinAllowed } from "./security/path-confinement";
 import { getAllowedBaseDirs } from "./security/allowed-dirs";
 import { IMAGE_CONTENT_TYPES, serveFileWithRanges, serveImage } from "./serve-file";
@@ -84,15 +88,38 @@ export const createAudiobookSyncRoutes = ({
     sendJson(res, { success: true });
   };
 
+  // A Device's Track position while it plays (resume, v5); the newest one is kept.
+  const handleTrackPosition = async (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    audiobookId: string
+  ): Promise<void> => {
+    const body: unknown = JSON.parse(await readBody(req));
+    const parsed = audiobookTrackPositionSchema.safeParse(body);
+    if (!parsed.success || parsed.data.audiobookId !== audiobookId) {
+      sendError(res, "Invalid Track position", 400);
+      return;
+    }
+    await recordTrackPosition(db, parsed.data);
+    sendJson(res, { success: true });
+  };
+
   const postRoute = async (
     req: http.IncomingMessage,
     res: http.ServerResponse,
     pathname: string
   ): Promise<boolean> => {
     const listeningMatch = pathname.match(/^\/api\/audiobook\/([^/]+)\/listening$/);
-    if (!listeningMatch) return false;
-    await handleListening(req, res, decodeURIComponent(listeningMatch[1]));
-    return true;
+    if (listeningMatch) {
+      await handleListening(req, res, decodeURIComponent(listeningMatch[1]));
+      return true;
+    }
+    const trackPositionMatch = pathname.match(/^\/api\/audiobook\/([^/]+)\/track-position$/);
+    if (trackPositionMatch) {
+      await handleTrackPosition(req, res, decodeURIComponent(trackPositionMatch[1]));
+      return true;
+    }
+    return false;
   };
 
   const route = async (

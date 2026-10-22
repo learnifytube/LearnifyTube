@@ -2,21 +2,50 @@ import path from "path";
 import { asc, eq } from "drizzle-orm";
 import type { Database } from "@/api/db";
 import { audiobooks, audiobookTracks } from "@/api/db/schema";
-import type { AudiobookCatalog, ListeningPosition } from "../../../../shared/mobile-sync-contract";
+import type {
+  AudiobookCatalog,
+  ListeningPosition,
+  TrackPosition,
+} from "../../../../shared/mobile-sync-contract";
+
+type TrackRow = typeof audiobookTracks.$inferSelect;
 
 // A Track is named after its file, without the extension.
 const trackTitle = (filePath: string): string => path.parse(filePath).name;
 
-const listeningPosition = (book: typeof audiobooks.$inferSelect): ListeningPosition | null =>
-  book.listeningTrackId !== null &&
-  book.listeningSeconds !== null &&
-  book.listeningUpdatedAt !== null
-    ? {
+/** A Track's Track position as kept; null before the Track was ever played. */
+export const trackPosition = (track: TrackRow): TrackPosition | null =>
+  track.resumeUpdatedAt === null
+    ? null
+    : {
+        seconds: track.resumeSeconds ?? 0,
+        playedToEnd: track.playedToEnd,
+        updatedAt: track.resumeUpdatedAt,
+      };
+
+// The Track last played, at that Track's own Track position when that is the
+// newer record. The book-level seconds stay filled in for Devices older than resume.
+const listeningPosition = (
+  book: typeof audiobooks.$inferSelect,
+  tracks: TrackRow[]
+): ListeningPosition | null => {
+  if (
+    book.listeningTrackId === null ||
+    book.listeningSeconds === null ||
+    book.listeningUpdatedAt === null
+  ) {
+    return null;
+  }
+  const listeningTrack = tracks.find((track) => track.id === book.listeningTrackId);
+  const own = listeningTrack ? trackPosition(listeningTrack) : null;
+  return own && own.updatedAt > book.listeningUpdatedAt
+    ? { trackId: book.listeningTrackId, seconds: own.seconds, updatedAt: own.updatedAt }
+    : {
         trackId: book.listeningTrackId,
         seconds: book.listeningSeconds,
         updatedAt: book.listeningUpdatedAt,
-      }
-    : null;
+      };
+};
 
 /**
  * Every imported Audiobook for Devices, its Tracks in Track order.
@@ -31,26 +60,28 @@ export const loadAudiobookCatalog = async (
     db.select().from(audiobookTracks).orderBy(asc(audiobookTracks.position)),
   ]);
   return {
-    audiobooks: books.map((book) => ({
-      id: book.id,
-      title: book.title,
-      author: book.author,
-      // Versioned, so a changed cover isn't shown from a Device's image cache.
-      coverUrl: book.coverPath
-        ? assetUrl(`/api/audiobook/${book.id}/cover?v=${book.updatedAt ?? book.createdAt}`)
-        : null,
-      tracks: tracks
-        .filter((track) => track.audiobookId === book.id)
-        .map((track) => ({
+    audiobooks: books.map((book) => {
+      const bookTracks = tracks.filter((track) => track.audiobookId === book.id);
+      return {
+        id: book.id,
+        title: book.title,
+        author: book.author,
+        // Versioned, so a changed cover isn't shown from a Device's image cache.
+        coverUrl: book.coverPath
+          ? assetUrl(`/api/audiobook/${book.id}/cover?v=${book.updatedAt ?? book.createdAt}`)
+          : null,
+        tracks: bookTracks.map((track) => ({
           id: track.id,
           title: trackTitle(track.filePath),
           durationSeconds: track.durationSeconds,
           missing: track.missing,
+          trackPosition: trackPosition(track),
         })),
-      listeningPosition: listeningPosition(book),
-      finished: book.finished,
-      sentToDevices: book.sentToDevices,
-    })),
+        listeningPosition: listeningPosition(book, bookTracks),
+        finished: book.finished,
+        sentToDevices: book.sentToDevices,
+      };
+    }),
   };
 };
 

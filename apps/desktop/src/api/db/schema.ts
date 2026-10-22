@@ -655,6 +655,12 @@ export const audiobookTracks = sqliteTable(
     position: integer("position").notNull(),
     durationSeconds: integer("duration_seconds"),
     missing: integer("missing", { mode: "boolean" }).notNull().default(false),
+    // Track position (ADR-0006): where the user stopped in this Track, whether
+    // it was played to its end, and when that last changed (newest wins).
+    // Null before the Track was ever played.
+    resumeSeconds: integer("resume_seconds"),
+    playedToEnd: integer("played_to_end", { mode: "boolean" }).notNull().default(false),
+    resumeUpdatedAt: integer("resume_updated_at"),
   },
   (table) => [index("audiobook_tracks_book_position_idx").on(table.audiobookId, table.position)]
 );

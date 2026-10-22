@@ -645,3 +645,99 @@ export const audiobookTracks = sqliteTable(
 
 export type Audiobook = typeof audiobooks.$inferSelect;
 export type AudiobookTrack = typeof audiobookTracks.$inferSelect;
+
+// Movies and Series (ADR-0005): imported from video files on the computer, never
+// Videos. Files are referenced in place; the app only reads them. Each Movie and
+// Episode keeps its own Watch progress with the Video rules: watched at about
+// 90%, and `watch_updated_at` lets a desktop mark win over older Device progress.
+
+// What the scan step's probe found in the file.
+const probedVideoColumns = {
+  durationSeconds: integer("duration_seconds"),
+  videoCodec: text("video_codec"),
+  audioCodec: text("audio_codec"),
+};
+
+const watchProgressColumns = {
+  // Where playback stopped, in seconds; null before it was ever played.
+  positionSeconds: integer("position_seconds"),
+  // Set at about 90% played or when marked watched; null otherwise.
+  watchedAt: integer("watched_at"),
+  // When the position or watched mark last changed.
+  watchUpdatedAt: integer("watch_updated_at"),
+};
+
+export const movies = sqliteTable("movies", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  // The folder the Movie was imported from, and its video file (both absolute).
+  sourceFolder: text("source_folder").notNull(),
+  filePath: text("file_path").notNull(),
+  // App-owned copy of the poster image, or null for the placeholder.
+  posterPath: text("poster_path"),
+  ...probedVideoColumns,
+  missing: integer("missing", { mode: "boolean" }).notNull().default(false),
+  shownOnDevices: integer("shown_on_devices", { mode: "boolean" }).notNull().default(true),
+  sentToDevices: integer("sent_to_devices", { mode: "boolean" }).notNull().default(false),
+  ...watchProgressColumns,
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at"),
+});
+
+export const series = sqliteTable("series", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  sourceFolder: text("source_folder").notNull(),
+  posterPath: text("poster_path"),
+  shownOnDevices: integer("shown_on_devices", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at"),
+});
+
+export const seasons = sqliteTable(
+  "seasons",
+  {
+    id: text("id").primaryKey(),
+    seriesId: text("series_id")
+      .notNull()
+      .references(() => series.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    // The season number from the file or folder names, if any (S01 -> 1).
+    number: integer("number"),
+    // Place among the Series' Seasons, from 0.
+    position: integer("position").notNull(),
+    // The Season is the unit sent to Devices.
+    sentToDevices: integer("sent_to_devices", { mode: "boolean" }).notNull().default(false),
+  },
+  (table) => [index("seasons_series_position_idx").on(table.seriesId, table.position)]
+);
+
+export const episodes = sqliteTable(
+  "episodes",
+  {
+    id: text("id").primaryKey(),
+    seriesId: text("series_id")
+      .notNull()
+      .references(() => series.id, { onDelete: "cascade" }),
+    seasonId: text("season_id")
+      .notNull()
+      .references(() => seasons.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    // Absolute path of the user's video file.
+    filePath: text("file_path").notNull(),
+    // The episode number from the file name, if any (E02 -> 2).
+    number: integer("number"),
+    // Place in the Season's Episode order, from 0.
+    position: integer("position").notNull(),
+    ...probedVideoColumns,
+    missing: integer("missing", { mode: "boolean" }).notNull().default(false),
+    ...watchProgressColumns,
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [index("episodes_season_position_idx").on(table.seasonId, table.position)]
+);
+
+export type Movie = typeof movies.$inferSelect;
+export type Series = typeof series.$inferSelect;
+export type Season = typeof seasons.$inferSelect;
+export type Episode = typeof episodes.$inferSelect;

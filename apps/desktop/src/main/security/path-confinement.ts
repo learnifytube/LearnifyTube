@@ -84,9 +84,21 @@ const AUDIO_CONTENT_TYPES: Record<string, string> = {
   ".opus": "audio/ogg",
 };
 
+// The video files Movies and Episodes are imported from (see isVideoPath).
+const VIDEO_CONTENT_TYPES: Record<string, string> = {
+  ".mp4": "video/mp4",
+  ".m4v": "video/mp4",
+  ".mkv": "video/x-matroska",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+  ".avi": "video/x-msvideo",
+  ".ts": "video/mp2t",
+  ".wmv": "video/x-ms-wmv",
+};
+
 export type TrackFileResult =
   | { ok: true; realPath: string; contentType: string }
-  | { ok: false; reason: "unknown-track" | "not-found" | "not-audio" };
+  | { ok: false; reason: "unknown-track" | "not-found" | "not-audio" | "not-video" };
 
 /**
  * Decide whether an Audiobook Track's file may be served. Track files live in
@@ -148,6 +160,23 @@ export type TrackFileAllowlist = {
 export const createTrackFileAllowlist = (
   loadTrackFilePaths: () => Promise<string[]>,
   platform: string = process.platform
+): TrackFileAllowlist =>
+  createRecordedFileAllowlist(loadTrackFilePaths, resolveAudioFile, platform);
+
+/**
+ * The same for the video files of Movies and Episodes (ADR-0005): only a
+ * recorded file, and only when it is a regular video file.
+ */
+export const createMovieFileAllowlist = (
+  loadMovieFilePaths: () => Promise<string[]>,
+  platform: string = process.platform
+): TrackFileAllowlist =>
+  createRecordedFileAllowlist(loadMovieFilePaths, resolveVideoFile, platform);
+
+const createRecordedFileAllowlist = (
+  loadTrackFilePaths: () => Promise<string[]>,
+  resolveFile: (recorded: string) => TrackFileResult,
+  platform: string
 ): TrackFileAllowlist => {
   let recorded: Promise<Map<string, string>> | null = null;
   const resolved = new Map<string, TrackFileResult>();
@@ -179,7 +208,7 @@ export const createTrackFileAllowlist = (
       const realKey = localFileKey(realpathOrNull(requestedPath) ?? requestedPath, platform);
       const trackFile = (await load()).get(realKey);
       if (!trackFile) return { ok: false, reason: "unknown-track" };
-      const result = resolveAudioFile(trackFile);
+      const result = resolveFile(trackFile);
       if (result.ok) resolved.set(key, result);
       return result;
     },
@@ -190,16 +219,28 @@ export const createTrackFileAllowlist = (
   };
 };
 
-const resolveAudioFile = (recorded: string): TrackFileResult => {
+const resolveRecordedFile = (
+  recorded: string,
+  contentTypes: Record<string, string>,
+  wrongKind: "not-audio" | "not-video"
+): TrackFileResult => {
   const realPath = realpathOrNull(path.resolve(recorded));
   if (!realPath) {
     return { ok: false, reason: "not-found" };
   }
 
-  const contentType = AUDIO_CONTENT_TYPES[path.extname(realPath).toLowerCase()];
+  const contentType = contentTypes[path.extname(realPath).toLowerCase()];
   if (!contentType || !fs.statSync(realPath).isFile()) {
-    return { ok: false, reason: "not-audio" };
+    return { ok: false, reason: wrongKind };
   }
 
   return { ok: true, realPath, contentType };
 };
+
+function resolveAudioFile(recorded: string): TrackFileResult {
+  return resolveRecordedFile(recorded, AUDIO_CONTENT_TYPES, "not-audio");
+}
+
+function resolveVideoFile(recorded: string): TrackFileResult {
+  return resolveRecordedFile(recorded, VIDEO_CONTENT_TYPES, "not-video");
+}

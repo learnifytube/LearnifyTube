@@ -3,6 +3,7 @@ import * as os from "os";
 import * as path from "path";
 
 import {
+  createMovieFileAllowlist,
   createTrackFileAllowlist,
   localFileKey,
   resolveAudiobookTrackFile,
@@ -323,6 +324,18 @@ describe("Track file allowlist", () => {
     allowlist.tracksChanged();
 
     expect(await allowlist.resolve(later)).toEqual(expect.objectContaining({ ok: true }));
+  });
+
+  test("serves the video file of a Movie, and nothing beside it", async () => {
+    const film = writeFile("Films/Alien (1979)/Alien.1979.mkv");
+    const other = writeFile("Films/Alien (1979)/Alien.1979.nfo");
+    const allowlist = createMovieFileAllowlist(trackFiles(film, other).load);
+    expect(await allowlist.resolve(film)).toEqual({
+      ok: true,
+      realPath: film,
+      contentType: "video/x-matroska",
+    });
+    expect(await allowlist.resolve(other)).toEqual({ ok: false, reason: "not-video" });
   });
 });
 

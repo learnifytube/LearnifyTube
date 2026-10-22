@@ -33,6 +33,7 @@ import {
   type ConfinementResult,
 } from "./main/security/path-confinement";
 import { trackFiles } from "./main/security/track-files";
+import { movieFiles } from "./main/security/movie-files";
 import { getAllowedBaseDirs, refreshAllowedBaseDirs } from "./main/security/allowed-dirs";
 
 // Global error handlers to prevent crashes from logging errors
@@ -474,7 +475,9 @@ app.whenReady().then(async () => {
       const requestedPath = localFilePath(normalizedPath);
       // Audiobook Tracks live in the user's own folders: each recorded Track file is
       // let through, from memory, so a playing Track's Range requests touch no disk.
-      const track = await trackFiles.resolve(requestedPath);
+      // Movie and Episode files (ADR-0005) are let through the same way.
+      const audioTrack = await trackFiles.resolve(requestedPath);
+      const track = audioTrack.ok ? audioTrack : await movieFiles.resolve(requestedPath);
       const confinement: ConfinementResult = track.ok
         ? { ok: true, realPath: track.realPath }
         : resolveWithinAllowed(requestedPath, getAllowedBaseDirs());

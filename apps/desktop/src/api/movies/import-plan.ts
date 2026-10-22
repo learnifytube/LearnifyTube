@@ -6,7 +6,7 @@ import { isAudioPath, type FolderListing, type ListedFile } from "@/api/audioboo
 
 const VIDEO_EXTENSIONS = new Set(["mp4", "m4v", "mkv", "webm", "mov", "avi", "ts", "wmv"]);
 
-const extensionOf = (path: string): string => path.split(".").pop()?.toLowerCase() ?? "";
+export const extensionOf = (path: string): string => path.split(".").pop()?.toLowerCase() ?? "";
 
 export const isVideoPath = (path: string): boolean => VIDEO_EXTENSIONS.has(extensionOf(path));
 
@@ -35,7 +35,7 @@ export const classifyFolder = (listing: FolderListing): FolderKind => {
   return { kind, audioFiles, videoFiles, mixed: audioFiles > 0 && videoFiles > 0 };
 };
 
-// "series" joins with the Series Import.
+// The Series layout plans with ./series-plan.
 export const MOVIE_LAYOUTS = ["one-movie", "movie-per-file"] as const;
 
 export type MovieLayout = (typeof MOVIE_LAYOUTS)[number];
@@ -57,27 +57,27 @@ export type ProposedMovie = {
 
 export type MovieImportPlan = { suggestedLayout: MovieLayout; movies: ProposedMovie[] };
 
-const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
+export const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
 
-const POSTER_NAME = /^(poster|folder|cover)$/i;
+export const POSTER_NAME = /^(poster|folder|cover)$/i;
 
 // Samples, trailers and extras that come with a film.
 const EXTRA_FOLDER = /^(samples?|extras?|featurettes?|trailers?|behind the scenes|bonus)$/i;
 const EXTRA_FILE = /(^|[\s._-])(sample|trailer)([\s._-]|$)/i;
 
-const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
+export const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
-const segmentsOf = (path: string): string[] => path.split("/");
+export const segmentsOf = (path: string): string[] => path.split("/");
 
-const dirOf = (path: string): string => segmentsOf(path).slice(0, -1).join("/");
+export const dirOf = (path: string): string => segmentsOf(path).slice(0, -1).join("/");
 
-const baseNameOf = (path: string): string => {
+export const baseNameOf = (path: string): string => {
   const name = segmentsOf(path).at(-1) ?? path;
   const dot = name.lastIndexOf(".");
   return dot > 0 ? name.slice(0, dot) : name;
 };
 
-const isExtra = (path: string): boolean =>
+export const isExtra = (path: string): boolean =>
   segmentsOf(path)
     .slice(0, -1)
     .some((folder) => EXTRA_FOLDER.test(folder)) || EXTRA_FILE.test(baseNameOf(path));

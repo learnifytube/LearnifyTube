@@ -31,7 +31,12 @@ function EpisodePlayer({
   const [unplayable, setUnplayable] = useState(false);
   const videoSrc = toLocalFileUrl(episode.filePath);
   // Playing it pauses the Book player, as any Video does.
-  useMovieProgress(videoRef, episode, videoSrc, "episode");
+  useMovieProgress(
+    videoRef,
+    { ...episode, watched: episode.watchState === "watched" },
+    videoSrc,
+    "episode"
+  );
   const captions = useCaptionTracks("episode", episode.id);
   if (unplayable) {
     return (

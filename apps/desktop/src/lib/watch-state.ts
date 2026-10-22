@@ -1,10 +1,7 @@
 export type WatchState = "unwatched" | "in-progress" | "watched";
 
-const WATCHED_FRACTION = 0.9;
-
 // A Video counts as watched once about 90% of it has played.
-export const isPlayedEnough = (positionSeconds: number, durationSeconds: number | null): boolean =>
-  !!durationSeconds && durationSeconds > 0 && positionSeconds >= durationSeconds * WATCHED_FRACTION;
+export { isPlayedEnough } from "../../../shared/resume-at";
 
 export const getWatchState = (stats: {
   watchedAt: number | null;

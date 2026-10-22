@@ -31,6 +31,7 @@ import defaultDb, { type Database } from "@/api/db";
 import { removeFromPhoneList } from "@/api/on-device/store";
 import { getYtDlpAssetName } from "@/api/utils/ytdlp-utils/ytdlp-utils";
 import crypto from "crypto";
+import { resumeAt } from "../../../../../shared/resume-at";
 
 const getBinDir = (): string => path.join(app.getPath("userData"), "bin");
 const getBinaryFilePath = (): string => path.join(getBinDir(), getYtDlpAssetName(process.platform));
@@ -950,18 +951,29 @@ export const ytdlpRouter = t.router({
 
       // Get watch progress (last position) if available
       let lastPositionSeconds: number | undefined = undefined;
+      let watched = false;
       try {
         const watchStats = await db
-          .select({ lastPositionSeconds: videoWatchStats.lastPositionSeconds })
+          .select({
+            lastPositionSeconds: videoWatchStats.lastPositionSeconds,
+            watchedAt: videoWatchStats.watchedAt,
+          })
           .from(videoWatchStats)
           .where(eq(videoWatchStats.videoId, input.videoId))
           .limit(1);
         if (watchStats.length > 0 && watchStats[0].lastPositionSeconds !== null) {
           lastPositionSeconds = watchStats[0].lastPositionSeconds;
         }
+        watched = !!watchStats[0]?.watchedAt;
       } catch {
         // Silently fail - watch stats might not exist
       }
+      // Where the player starts: from the beginning once watched.
+      const resumeAtSeconds = resumeAt({
+        positionSeconds: lastPositionSeconds ?? null,
+        durationSeconds: v.durationSeconds,
+        watched,
+      });
 
       // Generate media server URL for reliable streaming
       let mediaUrl: string | null = null;
@@ -988,6 +1000,7 @@ export const ytdlpRouter = t.router({
         progress: v.downloadProgress,
         availableLanguages,
         lastPositionSeconds,
+        resumeAtSeconds,
         thumbnailUrl: v.thumbnailUrl,
         thumbnailPath: v.thumbnailPath,
         channelTitle: v.channelTitle,

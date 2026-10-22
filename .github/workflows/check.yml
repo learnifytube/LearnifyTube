@@ -33,6 +33,8 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm ci --prefix apps/desktop --ignore-scripts
       - run: npm run desktop:check
+      # --ignore-scripts skipped Electron's binary download; some suites import electron
+      - run: node apps/desktop/node_modules/electron/install.js
       - run: npm run desktop:test
 
   mobile:

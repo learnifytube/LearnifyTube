@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import { movieCatalog } from "../../services/movie-catalog";
+import { refreshMovieCatalog } from "../../services/movie-catalog";
 import { resolveRemoteAssetUrl } from "../../services/remoteAssetUrl";
 import { useMovieCatalogStore } from "../../stores/movieCatalog";
 import type { Movie } from "../../../shared/mobile-sync-contract";
@@ -54,19 +54,9 @@ export function MoviesRow({
   useFocusEffect(
     useCallback(() => {
       if (!serverUrl) return;
-      let cancelled = false;
-      movieCatalog
-        .load(serverUrl)
-        .then(({ movies, series }) => {
-          if (cancelled) return;
-          useMovieCatalogStore.setState({ serverUrl, movies, series });
-        })
-        .catch((error) =>
-          console.warn("[MoviesRow] Loading Movies failed:", error),
-        );
-      return () => {
-        cancelled = true;
-      };
+      refreshMovieCatalog(serverUrl).catch((error) =>
+        console.warn("[MoviesRow] Loading Movies failed:", error),
+      );
     }, [serverUrl]),
   );
 

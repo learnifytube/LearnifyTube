@@ -63,6 +63,7 @@ export const seriesRouter = t.router({
       });
       previewedListings.done(input.folderPath);
       movieFiles.tracksChanged();
+      await notifyDevicesOfMovies();
       return { id };
     }),
 
@@ -74,7 +75,10 @@ export const seriesRouter = t.router({
 
   rename: publicProcedure
     .input(z.object({ id: z.string(), title: z.string().trim().min(1) }))
-    .mutation(({ input, ctx }) => renameSeries(ctx.db ?? defaultDb, input.id, input.title)),
+    .mutation(async ({ input, ctx }) => {
+      await renameSeries(ctx.db ?? defaultDb, input.id, input.title);
+      await notifyDevicesOfMovies();
+    }),
 
   // The desktop player's progress on an Episode.
   recordPlayback: publicProcedure
@@ -118,6 +122,7 @@ export const seriesRouter = t.router({
     const forgotten = await forgetSeries(ctx.db ?? defaultDb, input.id);
     if (!forgotten) return;
     movieFiles.tracksChanged();
+    await notifyDevicesOfMovies();
     await removeAppCover(forgotten.posterPath, moviePostersDir(app.getPath("userData")));
   }),
 });

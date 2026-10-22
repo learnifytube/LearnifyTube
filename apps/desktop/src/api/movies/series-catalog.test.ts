@@ -117,6 +117,7 @@ describe("Series catalog", () => {
         posterPath: null,
         seasonCount: 1,
         episodeCount: 1,
+        shownOnDevices: true,
         watchState: "unwatched",
       },
       {
@@ -125,6 +126,7 @@ describe("Series catalog", () => {
         posterPath: "/userData/movie-posters/office.jpg",
         seasonCount: 2,
         episodeCount: 3,
+        shownOnDevices: true,
         watchState: "unwatched",
       },
     ]);

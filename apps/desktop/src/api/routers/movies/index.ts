@@ -28,6 +28,7 @@ import { moviePostersDir } from "@/api/movies/posters-dir";
 import { movieFiles } from "@/main/security/movie-files";
 import { planSeriesImport, suggestVideoLayout } from "@/api/movies/series-plan";
 import { devicesHoldingMovie, setMovieSentToDevices } from "@/api/movies/send-to-devices";
+import { setShownOnDevices } from "@/api/movies/shown-on-devices";
 import { notifyDevicesOfMovies } from "./notify-devices";
 import { previewedListings } from "./previewed-listings";
 import { seriesRouter } from "./series";
@@ -129,6 +130,7 @@ export const moviesRouter = t.router({
       const ids = await saveImportedMovies(db, input.folderPath, imported);
       previewedListings.done(input.folderPath);
       movieFiles.tracksChanged();
+      await notifyDevicesOfMovies();
       return { ids };
     }),
 
@@ -148,7 +150,10 @@ export const moviesRouter = t.router({
 
   rename: publicProcedure
     .input(z.object({ id: z.string(), title: z.string().trim().min(1) }))
-    .mutation(({ input, ctx }) => renameMovie(ctx.db ?? defaultDb, input.id, input.title)),
+    .mutation(async ({ input, ctx }) => {
+      await renameMovie(ctx.db ?? defaultDb, input.id, input.title);
+      await notifyDevicesOfMovies();
+    }),
 
   // The desktop player's progress, saved now and then and when it pauses or closes.
   recordPlayback: publicProcedure
@@ -183,6 +188,17 @@ export const moviesRouter = t.router({
     const forgotten = await forgetMovie(ctx.db ?? defaultDb, input.id);
     if (!forgotten) return;
     movieFiles.tracksChanged();
+    await notifyDevicesOfMovies();
     await removeAppCover(forgotten.posterPath, moviePostersDir(app.getPath("userData")));
   }),
+
+  // Shown on Devices, for a Movie or a whole Series. Switched off, Devices no
+  // longer list it or get its files, and their Mirror removes it.
+  setShownOnDevices: publicProcedure
+    .input(z.object({ kind: z.enum(["movie", "series"]), id: z.string(), shown: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      const title = { kind: input.kind, id: input.id };
+      const changed = await setShownOnDevices(ctx.db ?? defaultDb, title, input.shown);
+      if (changed) await notifyDevicesOfMovies();
+    }),
 });

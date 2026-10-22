@@ -14,6 +14,7 @@ import type { EpisodesTarget, SeriesDetail, SeriesEpisode } from "@/api/movies/s
 import { episodeAfter } from "../../../../shared/series/nextUp";
 import { MoviePoster } from "./components/MoviePoster";
 import { SeriesSeasons } from "./components/SeriesSeasons";
+import { ShownOnDevicesSwitch } from "./components/ShownOnDevicesSwitch";
 import { useMovieProgress } from "./useMovieProgress";
 
 // Plays one Episode from its Watch progress; mounted once per Episode.
@@ -153,6 +154,7 @@ function SeriesView({ series }: { series: SeriesDetail }): React.JSX.Element {
             </form>
           )}
           <WatchStateBadge watchState={series.watchState} />
+          <ShownOnDevicesSwitch kind="series" id={series.id} shown={series.shownOnDevices} />
           <div className="flex flex-wrap gap-2">
             {upNext && upNext.id !== playingId && (
               <Button className="gap-2" onClick={() => setPlayingId(upNext.id)}>

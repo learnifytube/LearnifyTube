@@ -12,6 +12,7 @@ import { WatchStateBadge } from "@/components/WatchStateBadge";
 import { VideoPlayer } from "@/pages/player/components/VideoPlayer";
 import { formatListeningTime } from "@/pages/audiobooks/format";
 import { watchStateOf } from "@/api/movies/watch-progress";
+import { ShownOnDevicesSwitch } from "./components/ShownOnDevicesSwitch";
 import { useMovieProgress } from "./useMovieProgress";
 import { MovieOnDevices } from "./components/MovieOnDevices";
 
@@ -114,6 +115,7 @@ function MovieView({ movie }: { movie: Movie }): React.JSX.Element {
             <span>{formatListeningTime(movie.durationSeconds)}</span>
           </div>
           <p className="break-all text-xs text-muted-foreground">{movie.filePath}</p>
+          <ShownOnDevicesSwitch kind="movie" id={movie.id} shown={movie.shownOnDevices} />
         </div>
 
         <div className="flex gap-2">

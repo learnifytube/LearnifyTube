@@ -1,5 +1,6 @@
 import {
   SYNC_SSE_EVENT_AUDIOBOOKS,
+  SYNC_SSE_EVENT_MOVIES,
   SYNC_SSE_EVENT_ON_DEVICE_SET,
   type DeviceReport,
   type OnDeviceSet,
@@ -57,12 +58,20 @@ export type DeviceMirrorPlatform = {
     /** Audiobooks wholly on this Device. */
     heldIds: () => Promise<string[]>;
   };
+  movies: {
+    /**
+     * Refetches the desktop's Movie catalog into the Catalog snapshot, so a
+     * title switched off Shown on Devices leaves the Device at once.
+     */
+    refreshCatalog: (serverUrl: string) => Promise<void>;
+  };
 };
 
 const SYNC_INTERVAL_MS = 2 * 60_000;
 const SYNC_EVENTS = new Set([
   SYNC_SSE_EVENT_ON_DEVICE_SET,
   SYNC_SSE_EVENT_AUDIOBOOKS,
+  SYNC_SSE_EVENT_MOVIES,
 ]);
 
 /**
@@ -128,6 +137,9 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
     await platform.audiobooks.mirror(serverUrl).catch((error) => {
       console.warn("[DeviceMirror] Audiobook Mirror failed", error);
     });
+    await platform.movies.refreshCatalog(serverUrl).catch((error) => {
+      console.warn("[DeviceMirror] Movie catalog failed", error);
+    });
 
     await platform.desktop.report(serverUrl, {
       deviceId: await platform.device.getId(),
@@ -188,8 +200,9 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
     const interval = setInterval(syncIfConnected, SYNC_INTERVAL_MS);
     syncIfConnected();
 
-    // The desktop pushes a sync event when the On-device set or the sent
-    // Audiobooks change (ADR-0003), while connected and in the foreground.
+    // The desktop pushes a sync event when the On-device set, the sent
+    // Audiobooks or the Movies change (ADR-0003), while connected and in the
+    // foreground.
     let stopListening: (() => void) | null = null;
     let listeningTo: string | null = null;
 

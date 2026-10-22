@@ -69,6 +69,7 @@ describe("Movie catalog", () => {
         durationSeconds: null,
         missing: false,
         positionSeconds: null,
+        shownOnDevices: true,
         watchState: "unwatched",
       },
       {
@@ -78,6 +79,7 @@ describe("Movie catalog", () => {
         durationSeconds: 5760,
         missing: false,
         positionSeconds: null,
+        shownOnDevices: true,
         watchState: "unwatched",
       },
     ]);

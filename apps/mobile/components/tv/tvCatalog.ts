@@ -188,7 +188,7 @@ export function describeTitleWatch(
     return `Resume at ${formatPlaybackTime(resumeAt(progress))}`;
   }
   if (!title.durationSeconds) return "";
-  const minutes = Math.round(title.durationSeconds / 60);
+  const minutes = Math.max(1, Math.round(title.durationSeconds / 60));
   const hours = Math.floor(minutes / 60);
   return hours > 0 ? `${hours} h ${minutes % 60} min` : `${minutes} min`;
 }

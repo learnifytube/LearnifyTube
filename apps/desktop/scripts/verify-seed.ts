@@ -3,7 +3,9 @@
  * Fills a verify desktop's folder (LEARNIFYTUBE_USER_DATA_DIR) with a small,
  * deterministic library so the phone and TV have something to show: two
  * Channels, a playlist, a My List switched on for devices, six playable Videos
- * with thumbnails and transcripts, and one Video the desktop has not fetched.
+ * with thumbnails and transcripts, and one Video the desktop has not fetched;
+ * two Movies (one sent to Devices, with an English Caption) and a Series of two
+ * Seasons (Season 1 sent to Devices).
  * Media is generated with ffmpeg; nothing touches the network or the user's
  * own desktop. Wipes and refills the folder on every run.
  *
@@ -19,9 +21,14 @@ import {
   channelPlaylists,
   channels,
   customPlaylistItems,
+  captions,
   customPlaylists,
+  episodes,
+  movies,
   onDeviceLists,
   playlistItems,
+  seasons,
+  series,
   userPreferences,
   videoTranscripts,
   youtubeVideos,
@@ -72,6 +79,49 @@ const MY_LIST = {
   videos: ["vrfyVideo05", "vrfyVideo06", "vrfyVideo07"],
 };
 
+const MOVIES = [
+  {
+    id: "5f0c1a52-0000-4000-8000-00000000a001",
+    title: "The Tiny Test Movie",
+    seconds: 40,
+    hue: 120,
+    sent: true,
+    caption: { id: "5f0c1a52-0000-4000-8000-00000000c001", language: "en", label: "English" },
+  },
+  {
+    id: "5f0c1a52-0000-4000-8000-00000000a002",
+    title: "Streaming Only",
+    seconds: 30,
+    hue: 280,
+    sent: false,
+    caption: null,
+  },
+];
+
+const SERIES = {
+  id: "5f0c1a52-0000-4000-8000-00000000b001",
+  title: "Tiny Tales",
+  hue: 330,
+  seasons: [
+    {
+      id: "5f0c1a52-0000-4000-8000-00000000b101",
+      number: 1,
+      sent: true,
+      episodes: [
+        { id: "5f0c1a52-0000-4000-8000-00000000e101", title: "The Beginning", seconds: 20 },
+        { id: "5f0c1a52-0000-4000-8000-00000000e102", title: "The Middle", seconds: 20 },
+        { id: "5f0c1a52-0000-4000-8000-00000000e103", title: "The End", seconds: 20 },
+      ],
+    },
+    {
+      id: "5f0c1a52-0000-4000-8000-00000000b102",
+      number: 2,
+      sent: false,
+      episodes: [{ id: "5f0c1a52-0000-4000-8000-00000000e201", title: "Again", seconds: 20 }],
+    },
+  ],
+};
+
 const ffmpeg = (args: string[]) => execFileSync("ffmpeg", ["-y", "-loglevel", "error", ...args]);
 
 const prepareFolder = (dir: string) => {
@@ -85,6 +135,33 @@ const prepareFolder = (dir: string) => {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, MARKER), "");
 };
+
+const makeVideo = (file: string, seconds: number, hue: number) =>
+  ffmpeg([
+    "-f",
+    "lavfi",
+    "-i",
+    `testsrc2=s=640x360:r=24,hue=h=${hue}`,
+    "-f",
+    "lavfi",
+    "-i",
+    `sine=frequency=${300 + hue}`,
+    "-t",
+    String(seconds),
+    "-c:v",
+    "libx264",
+    "-preset",
+    "ultrafast",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    "-shortest",
+    file,
+  ]);
+
+const makePoster = (file: string, hue: number) =>
+  ffmpeg(["-f", "lavfi", "-i", `testsrc2=s=400x600,hue=h=${hue}`, "-frames:v", "1", file]);
 
 const timestamp = (seconds: number) => {
   const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
@@ -261,6 +338,83 @@ async function main() {
     }))
   );
   await db.insert(onDeviceLists).values({ listId: MY_LIST.id, createdAt: now });
+
+  // Movies and a Series, each in its own imported folder; posters in app storage.
+  const postersDir = path.join(dir, "movie-posters");
+  fs.mkdirSync(postersDir, { recursive: true });
+  for (const m of MOVIES) {
+    const folder = path.join(dir, "media", "movies", m.title);
+    fs.mkdirSync(folder, { recursive: true });
+    const filePath = path.join(folder, `${m.title}.mp4`);
+    makeVideo(filePath, m.seconds, m.hue);
+    const posterPath = path.join(postersDir, `${m.id}.jpg`);
+    makePoster(posterPath, m.hue);
+    await db.insert(movies).values({
+      id: m.id,
+      title: m.title,
+      sourceFolder: folder,
+      filePath,
+      posterPath,
+      durationSeconds: m.seconds,
+      videoCodec: "h264",
+      audioCodec: "aac",
+      sentToDevices: m.sent,
+      createdAt: now,
+    });
+    if (m.caption) {
+      const captionPath = path.join(folder, `${m.title}.en.vtt`);
+      fs.writeFileSync(captionPath, transcriptFor(m.title, m.seconds).rawVtt);
+      await db.insert(captions).values({
+        id: m.caption.id,
+        movieId: m.id,
+        filePath: captionPath,
+        language: m.caption.language,
+        label: m.caption.label,
+        position: 0,
+      });
+    }
+  }
+
+  const seriesFolder = path.join(dir, "media", "series", SERIES.title);
+  const seriesPoster = path.join(postersDir, `${SERIES.id}.jpg`);
+  makePoster(seriesPoster, SERIES.hue);
+  await db.insert(series).values({
+    id: SERIES.id,
+    title: SERIES.title,
+    sourceFolder: seriesFolder,
+    posterPath: seriesPoster,
+    createdAt: now,
+  });
+  for (const [seasonIndex, season] of SERIES.seasons.entries()) {
+    const seasonFolder = path.join(seriesFolder, `Season ${season.number}`);
+    fs.mkdirSync(seasonFolder, { recursive: true });
+    await db.insert(seasons).values({
+      id: season.id,
+      seriesId: SERIES.id,
+      title: `Season ${season.number}`,
+      number: season.number,
+      position: seasonIndex,
+      sentToDevices: season.sent,
+    });
+    for (const [position, e] of season.episodes.entries()) {
+      const code = `S0${season.number}E0${position + 1}`;
+      const filePath = path.join(seasonFolder, `${SERIES.title} ${code}.mp4`);
+      makeVideo(filePath, e.seconds, SERIES.hue - (position + seasonIndex) * 40);
+      await db.insert(episodes).values({
+        id: e.id,
+        seriesId: SERIES.id,
+        seasonId: season.id,
+        title: e.title,
+        filePath,
+        number: position + 1,
+        position,
+        durationSeconds: e.seconds,
+        videoCodec: "h264",
+        audioCodec: "aac",
+        createdAt: now,
+      });
+    }
+  }
 
   fs.writeFileSync(
     path.join(dir, "mobile-sync-pairing.json"),

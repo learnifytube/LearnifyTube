@@ -829,14 +829,15 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginBottom: spacing.md,
   },
+  // Six tabs and the header buttons share one row at 960 dp.
   modeTabs: {
     flexDirection: "row",
-    gap: spacing.sm,
+    gap: spacing.xs,
     flex: 1,
   },
   modeTab: {
     borderRadius: radius.full,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md - spacing.xs,
     paddingVertical: spacing.sm,
     ...tvRestingBorder,
   },

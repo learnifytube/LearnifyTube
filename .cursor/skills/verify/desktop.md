@@ -10,6 +10,7 @@ The isolated desktop is a second Electron process. `LEARNIFYTUBE_USER_DATA_DIR` 
 - Six fetched videos (`vrfyVideo01`–`06`) with H.264 mp4, jpg thumbs, English transcripts
 - One unfetched video `vrfyVideo07` ("Not on the desktop yet")
 - Playlist "Science for kids", My List "Bedtime" marked on-device
+- Movies "The Tiny Test Movie" (40 s, sent to Devices, English Caption) and "Streaming Only" (30 s, not sent); Series "Tiny Tales" with Season 1 (3 Episodes, sent) and Season 2 (1 Episode, not sent). Files under `<folder>/media/`, posters in `movie-posters/`. A paired TV or phone Mirrors the sent ones on its first sync; flip `movies.sent_to_devices` / `seasons.sent_to_devices` in `local.db` with `sqlite3` to watch one arrive or leave within the 2-minute sync.
 - `mobile-sync-pairing.json` with `VERFY234`
 - Preferences with sync enabled on port `53318`
 

@@ -414,6 +414,17 @@ describe("buildTVCatalog", () => {
       ]);
     });
 
+    it("never says a short title lasts 0 min", () => {
+      const catalog = buildTVCatalog(
+        input({
+          ...connected,
+          movies: [movie("short", { durationSeconds: 20 })],
+        }),
+      );
+
+      expect(catalog.tabs.movies[0].subtitle).toBe("1 min");
+    });
+
     it("hides the Movies tab when there are none, as on an older desktop", () => {
       const catalog = buildTVCatalog(input(connected));
 

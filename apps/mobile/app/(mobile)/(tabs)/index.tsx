@@ -33,11 +33,17 @@ import {
   ContinueListeningRow,
 } from "../../../components/phone/AudiobooksRow";
 import { MoviesRow } from "../../../components/phone/MoviesRow";
+import { SeriesRow } from "../../../components/phone/SeriesRow";
+import {
+  ContinueWatchingRow,
+  useContinueWatching,
+} from "../../../components/phone/ContinueWatchingRow";
 import { resumePoint } from "../../../services/listening-position/listeningPosition";
 import { useListeningPositionsStore } from "../../../stores/listeningPositions";
 import {
   buildPhoneHome,
   type PhoneHomeRow,
+  CONTINUE_WATCHING_ID,
   ON_THIS_PHONE_ID,
 } from "../../../components/phone/phoneCatalog";
 import { videoThumbnails } from "../../../services/video-thumbnails";
@@ -47,7 +53,12 @@ import { colors, spacing, fontSize, fontWeight } from "../../../theme";
 import { ArrowLeft, Smartphone } from "../../../theme/icons";
 import type { StreamingVideo } from "../../../stores/playback";
 import type { RemoteVideoWithStatus } from "../../../types";
-import type { Audiobook, Movie } from "../../../../shared/mobile-sync-contract";
+import type {
+  Audiobook,
+  Episode,
+  Movie,
+  Series,
+} from "../../../../shared/mobile-sync-contract";
 
 const POSTER_WIDTH = 168;
 
@@ -123,6 +134,18 @@ function openAudiobook(book: Audiobook) {
 // Tapping a Movie Streams it; it is never Downloaded from here (ADR-0005).
 function playMovie(movie: Movie) {
   router.push({ pathname: "/movie-player", params: { id: movie.id } });
+}
+
+// An Episode Streams like a Movie; the Episodes after it autoplay.
+function playEpisode(episode: Episode) {
+  router.push({
+    pathname: "/movie-player",
+    params: { kind: "episode", id: episode.id },
+  });
+}
+
+function openSeries(series: Series) {
+  router.push({ pathname: "/series", params: { id: series.id } });
 }
 
 export default function HomeScreen() {
@@ -247,6 +270,22 @@ export default function HomeScreen() {
     ],
   );
 
+  // Continue watching merges Movies and Series into its Videos, so it is
+  // drawn apart from the Video rows, first.
+  const videoContinueRow =
+    rows.find((row) => row.id === CONTINUE_WATCHING_ID) ?? null;
+  const videoRows = rows.filter((row) => row.id !== CONTINUE_WATCHING_ID);
+  const lastWatchedAt = new Map(
+    continueWatching.map((item) => [item.id, item.lastWatchedAt]),
+  );
+  const continueItems = useContinueWatching({
+    serverUrl,
+    videos: (videoContinueRow?.videos ?? []).map((video) => ({
+      video,
+      lastWatchedAt: lastWatchedAt.get(video.id) ?? null,
+    })),
+  });
+
   const activeRow = useMemo(() => {
     if (!openRow) return null;
     return rows.find((r) => r.id === openRow.id) ?? null;
@@ -258,7 +297,7 @@ export default function HomeScreen() {
     }
   }, [openRow, rows]);
 
-  const empty = rows.length === 0;
+  const empty = rows.length === 0 && continueItems.length === 0;
   const needsPairing = empty && !connected && !savedUrl;
 
   if (activeRow) {
@@ -326,7 +365,7 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <FlatList
-        data={rows}
+        data={videoRows}
         keyExtractor={(row) => row.id}
         contentContainerStyle={styles.scroll}
         initialNumToRender={3}
@@ -353,6 +392,15 @@ export default function HomeScreen() {
                 desktop is connected and it stays here.
               </Text>
             ) : null}
+            <ContinueWatchingRow
+              items={continueItems}
+              serverUrl={serverUrl}
+              onPlayVideo={(index) =>
+                videoContinueRow && playRow(videoContinueRow, index)
+              }
+              onPlayMovie={playMovie}
+              onPlayEpisode={playEpisode}
+            />
             <ContinueListeningRow
               serverUrl={serverUrl}
               onPlay={playAudiobook}
@@ -364,6 +412,7 @@ export default function HomeScreen() {
               onOpen={openAudiobook}
             />
             <MoviesRow serverUrl={serverUrl} onPlay={playMovie} />
+            <SeriesRow serverUrl={serverUrl} onOpen={openSeries} />
           </>
         }
         renderItem={({ item: row }) => (

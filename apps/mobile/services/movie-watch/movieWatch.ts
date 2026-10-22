@@ -42,3 +42,32 @@ export function resumeAt({
   }
   return position;
 }
+
+export type TitleWatchState = "unwatched" | "in-progress" | "watched";
+
+/**
+ * Whether a Movie or Episode is unwatched, in progress or watched, by the
+ * newer of the desktop's Watch state and this Device's progress, and when that
+ * last changed. A desktop mark made after this Device last played wins.
+ */
+export function watchStateOf({
+  watch,
+  kept,
+  durationSeconds,
+}: {
+  watch: TitleWatch | null;
+  kept: MovieWatch | undefined;
+  durationSeconds: number | null;
+}): { state: TitleWatchState; updatedAt: number | null } {
+  const current = currentMovieWatch(watch, kept);
+  if (!current) return { state: "unwatched", updatedAt: null };
+  const { positionSeconds, updatedAt } = current;
+  const markedOnDesktop = watch?.updatedAt === updatedAt && watch.watched;
+  const reachedEnd =
+    !!durationSeconds && positionSeconds >= durationSeconds * WATCHED_FRACTION;
+  if (markedOnDesktop || reachedEnd) return { state: "watched", updatedAt };
+  return {
+    state: positionSeconds > 0 ? "in-progress" : "unwatched",
+    updatedAt,
+  };
+}

@@ -1,5 +1,6 @@
 import {
   SYNC_SSE_EVENT_AUDIOBOOKS,
+  SYNC_SSE_EVENT_MOVIES,
   SYNC_SSE_EVENT_ON_DEVICE_SET,
   type MovieWatch,
   type OnDeviceSet,
@@ -97,6 +98,8 @@ function createHarness({
     audiobookMirrorFails: false,
     heldAudiobookIds: [] as string[],
     movieWatch: [] as MovieWatch[],
+    movieCatalogRefreshes: [] as string[],
+    movieCatalogFails: false,
     // The desktops listened to for pushed sync events, and how to push one.
     listening: [] as string[],
     pushEvent: (_event: string) => {},
@@ -177,6 +180,12 @@ function createHarness({
         state.audiobookMirrors.push(serverUrl);
       },
       heldIds: async () => state.heldAudiobookIds,
+    },
+    movies: {
+      refreshCatalog: async (serverUrl) => {
+        if (state.movieCatalogFails) throw new Error("Catalog request failed");
+        state.movieCatalogRefreshes.push(serverUrl);
+      },
     },
   };
   return { state, mirror: createDeviceMirror(platform) };
@@ -277,6 +286,33 @@ describe("device mirror", () => {
     await mirror.syncNow();
     expect(state.requested).toEqual(["a"]);
     expect(state.reports).toHaveLength(1);
+  });
+
+  it("refetches the Movie catalog on every sync", async () => {
+    const { state, mirror } = createHarness({ set: [] });
+    await mirror.syncNow();
+    expect(state.movieCatalogRefreshes).toEqual([SERVER]);
+  });
+
+  it("still Mirrors Videos and reports when the Movie catalog fails", async () => {
+    const { state, mirror } = createHarness({ set: ["a"] });
+    state.movieCatalogFails = true;
+    await mirror.syncNow();
+    expect(state.requested).toEqual(["a"]);
+    expect(state.reports).toHaveLength(1);
+  });
+
+  it("refetches the Movie catalog when the desktop pushes a Movies change", async () => {
+    const { state, mirror } = createHarness({ set: [] });
+    const stop = mirror.start();
+    await flush();
+    const before = state.movieCatalogRefreshes.length;
+
+    state.pushEvent(SYNC_SSE_EVENT_MOVIES);
+    await flush();
+
+    expect(state.movieCatalogRefreshes).toHaveLength(before + 1);
+    stop();
   });
 
   it("stores missing thumbnails for Videos in the set the Device already holds", async () => {

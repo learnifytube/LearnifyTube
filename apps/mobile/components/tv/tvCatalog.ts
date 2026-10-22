@@ -3,10 +3,7 @@ import type {
   MovieWatch,
   OnDeviceSet,
 } from "../../../shared/mobile-sync-contract";
-import {
-  currentMovieWatch,
-  resumeAt,
-} from "../../services/movie-watch/movieWatch";
+import { watchStateOf, resumeAt } from "../../services/movie-watch/movieWatch";
 import type { StreamingVideo } from "../../stores/playback";
 import type {
   TVHistoryEntry,
@@ -157,15 +154,16 @@ export function playHeldCollection(
 
 /** How far into the Movie a press starts, else that it was watched, else its length. */
 function describeMovie(movie: Movie, kept: MovieWatch | undefined): string {
-  const start = resumeAt({
+  const progress = {
     watch: movie.watch,
     kept,
     durationSeconds: movie.durationSeconds,
-  });
-  if (start > 0) return `Resume at ${formatPlaybackTime(start)}`;
-  // resumeAt starts over from a position near the end, so any position left is the end.
-  const position = currentMovieWatch(movie.watch, kept)?.positionSeconds ?? 0;
-  if (movie.watch?.watched || position > 0) return "Watched";
+  };
+  const { state } = watchStateOf(progress);
+  if (state === "watched") return "Watched";
+  if (state === "in-progress") {
+    return `Resume at ${formatPlaybackTime(resumeAt(progress))}`;
+  }
   if (!movie.durationSeconds) return "";
   const minutes = Math.round(movie.durationSeconds / 60);
   const hours = Math.floor(minutes / 60);

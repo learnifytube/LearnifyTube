@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Circle, Loader2, Pencil, Play, Trash2 } from "lucide-react";
+import { CheckCircle2, Circle, Loader2, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpcClient } from "@/utils/trpc";
 import { toLocalFileUrl } from "@/helpers/localFile";
@@ -14,6 +14,7 @@ import type { EpisodesTarget, SeriesDetail, SeriesEpisode } from "@/api/movies/s
 import { episodeAfter } from "../../../../shared/series/nextUp";
 import { MoviePoster } from "./components/MoviePoster";
 import { SeriesSeasons } from "./components/SeriesSeasons";
+import { ShownOnDevicesSwitch } from "./components/ShownOnDevicesSwitch";
 import { useMovieProgress } from "./useMovieProgress";
 
 // Plays one Episode from its Watch progress; mounted once per Episode.
@@ -72,6 +73,19 @@ function SeriesView({ series }: { series: SeriesDetail }): React.JSX.Element {
       await refresh();
     },
     onError: () => toast.error("Couldn't rename the Series"),
+  });
+
+  const rescan = useMutation({
+    mutationFn: () => trpcClient.movies.series.rescan.mutate({ id: series.id }),
+    onSuccess: async ({ added, missing }) => {
+      await refresh();
+      const parts = [
+        added > 0 ? `${added} new Episode${added === 1 ? "" : "s"}` : "No new Episodes",
+        ...(missing > 0 ? [`${missing} missing`] : []),
+      ];
+      toast.success(parts.join(", "));
+    },
+    onError: () => toast.error("Couldn't rescan the Series"),
   });
 
   const forget = useMutation({
@@ -140,6 +154,7 @@ function SeriesView({ series }: { series: SeriesDetail }): React.JSX.Element {
             </form>
           )}
           <WatchStateBadge watchState={series.watchState} />
+          <ShownOnDevicesSwitch kind="series" id={series.id} shown={series.shownOnDevices} />
           <div className="flex flex-wrap gap-2">
             {upNext && upNext.id !== playingId && (
               <Button className="gap-2" onClick={() => setPlayingId(upNext.id)}>
@@ -161,6 +176,15 @@ function SeriesView({ series }: { series: SeriesDetail }): React.JSX.Element {
                 <CheckCircle2 className="h-4 w-4" />
               )}
               {seriesWatched ? "Mark Series unwatched" : "Mark Series watched"}
+            </Button>
+            <Button
+              variant="outline"
+              className="gap-2"
+              disabled={rescan.isPending}
+              onClick={() => rescan.mutate()}
+            >
+              <RefreshCw className={rescan.isPending ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+              Rescan
             </Button>
             <Button
               variant="outline"

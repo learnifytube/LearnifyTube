@@ -35,3 +35,16 @@ export const watchStateOf = (
   progress: Pick<WatchProgress, "positionSeconds" | "watchedAt">
 ): WatchState =>
   getWatchState({ watchedAt: progress.watchedAt, lastPositionSeconds: progress.positionSeconds });
+
+// Where a Device stopped, unless the desktop's Watch state changed since then
+// (a desktop mark wins): null leaves the desktop's as it is. `now` is stamped,
+// so the same Device progress reported again never beats a later desktop change.
+export const playedOnDevice = (
+  existing: WatchProgress,
+  device: { lastPositionSeconds: number; lastWatchedAt: number },
+  durationSeconds: number | null,
+  now: number
+): WatchProgress | null =>
+  device.lastWatchedAt <= (existing.watchUpdatedAt ?? 0)
+    ? null
+    : playedTo(existing, device.lastPositionSeconds, durationSeconds, now);

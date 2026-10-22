@@ -98,7 +98,10 @@ const VIDEO_CONTENT_TYPES: Record<string, string> = {
 
 export type TrackFileResult =
   | { ok: true; realPath: string; contentType: string }
-  | { ok: false; reason: "unknown-track" | "not-found" | "not-audio" | "not-video" };
+  | {
+      ok: false;
+      reason: "unknown-track" | "not-found" | "not-audio" | "not-video" | "outside-folder";
+    };
 
 /**
  * Decide whether an Audiobook Track's file may be served. Track files live in
@@ -116,6 +119,31 @@ export const resolveAudiobookTrackFile = async (
     return { ok: false, reason: "unknown-track" };
   }
   return resolveAudioFile(recorded);
+};
+
+/**
+ * Decide whether a Movie's or Episode's video file may be served to a Device
+ * (ADR-0005). Found by id, never by a path from the request, and only for a
+ * title Shown on Devices (`findShownFile` returns null otherwise). The folder
+ * the title was imported from is its allowed directory: the file must stay
+ * inside it once symlinks are resolved, and must be a regular video file.
+ */
+export const resolveMovieFile = async (
+  id: string,
+  findShownFile: (id: string) => Promise<{ filePath: string; folder: string } | null>
+): Promise<TrackFileResult> => {
+  const recorded = id ? await findShownFile(id) : null;
+  if (!recorded) {
+    return { ok: false, reason: "unknown-track" };
+  }
+  const confined = resolveWithinAllowed(recorded.filePath, [recorded.folder]);
+  if (!confined.ok) {
+    return {
+      ok: false,
+      reason: confined.reason === "outside-allowed" ? "outside-folder" : "not-found",
+    };
+  }
+  return resolveVideoFile(confined.realPath);
 };
 
 /**

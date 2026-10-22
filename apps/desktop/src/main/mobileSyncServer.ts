@@ -34,6 +34,7 @@ import {
   MOBILE_SYNC_PROTOCOL_VERSION,
   MIN_SUPPORTED_MOBILE_SYNC_PROTOCOL_VERSION,
   SYNC_SSE_EVENT_AUDIOBOOKS,
+  SYNC_SSE_EVENT_MOVIES,
   SYNC_SSE_EVENT_ON_DEVICE_SET,
   SYNC_SSE_HEARTBEAT_MS,
   type SyncServerInfo,
@@ -42,6 +43,7 @@ import {
 } from "../../../shared/mobile-sync-contract";
 import { loadOnDeviceSet, recordDeviceReport } from "../api/on-device/store";
 import { createAudiobookSyncRoutes } from "./audiobookSyncRoutes";
+import { createMovieSyncRoutes } from "./movieSyncRoutes";
 import { parseByteRange } from "./byte-range";
 
 // pipe() leaves the file open when the client hangs up mid-stream (a skip or seek);
@@ -241,6 +243,7 @@ type MobileSyncServer = {
   getConnectedDevices: () => ConnectedDevice[];
   broadcastOnDeviceSetChanged: () => void;
   broadcastAudiobooksChanged: () => void;
+  broadcastMoviesChanged: () => void;
 };
 
 /**
@@ -396,6 +399,9 @@ const createMobileSyncServer = (): MobileSyncServer => {
   // Devices Mirror the sent Audiobooks again (ADR-0003).
   const broadcastAudiobooksChanged = (): void => broadcast(SYNC_SSE_EVENT_AUDIOBOOKS);
 
+  // Devices Mirror the sent Movies and Seasons again, and drop titles no longer Shown on Devices.
+  const broadcastMoviesChanged = (): void => broadcast(SYNC_SSE_EVENT_MOVIES);
+
   const handleEventsStream = (res: http.ServerResponse): void => {
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -539,6 +545,17 @@ const createMobileSyncServer = (): MobileSyncServer => {
     sendError,
     readBody,
   });
+
+  const movieRoutes = createMovieSyncRoutes({ db: defaultDb, assetUrl, sendJson, sendError });
+
+  // GET /api/audiobooks, /api/audiobook-track/:id/file, /api/audiobook/:id/cover;
+  // GET /api/movies, /api/(movie|episode)/:id/file, /api/(movie|series)/:id/poster.
+  const routeAudiobooksAndMovies = async (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    url: string
+  ): Promise<boolean> =>
+    (await audiobookRoutes.route(req, res, url)) || (await movieRoutes.route(req, res, url));
 
   const handleApiInfo = async (res: http.ServerResponse): Promise<void> => {
     try {
@@ -2742,8 +2759,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
       return;
     }
 
-    // GET /api/audiobooks, /api/audiobook-track/:id/file, /api/audiobook/:id/cover; else 404
-    if (!(await audiobookRoutes.route(req, res, url))) sendError(res, "Not found", 404);
+    if (!(await routeAudiobooksAndMovies(req, res, url))) sendError(res, "Not found", 404);
   };
 
   const start = async (requestedPort?: number): Promise<number> => {
@@ -2869,6 +2885,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
     getConnectedDevices,
     broadcastOnDeviceSetChanged,
     broadcastAudiobooksChanged,
+    broadcastMoviesChanged,
   };
 };
 

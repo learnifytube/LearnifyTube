@@ -93,6 +93,10 @@ export const deviceReportSchema = z.object({
   heldAudiobookIds: z.array(z.string()).optional(),
   /** Watch progress of Movies and Episodes played on the Device; absent from Devices older than Movies. */
   movieWatch: z.array(movieWatchSchema).optional(),
+  /** Movies with an Offline copy on the Device, sent or downloaded there; absent from Devices older than Movies. */
+  heldMovieIds: z.array(z.string()).optional(),
+  /** Episodes with an Offline copy on the Device; absent from Devices older than Movies. */
+  heldEpisodeIds: z.array(z.string()).optional(),
 });
 
 export type DeviceReport = z.infer<typeof deviceReportSchema>;

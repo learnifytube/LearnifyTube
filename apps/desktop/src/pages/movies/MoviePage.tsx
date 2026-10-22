@@ -13,6 +13,7 @@ import { VideoPlayer } from "@/pages/player/components/VideoPlayer";
 import { formatListeningTime } from "@/pages/audiobooks/format";
 import { watchStateOf } from "@/api/movies/watch-progress";
 import { useMovieProgress } from "./useMovieProgress";
+import { MovieOnDevices } from "./components/MovieOnDevices";
 
 type Movie = NonNullable<Awaited<ReturnType<typeof trpcClient.movies.get.query>>>;
 
@@ -140,6 +141,8 @@ function MovieView({ movie }: { movie: Movie }): React.JSX.Element {
           </Button>
         </div>
       </div>
+
+      <MovieOnDevices id={movie.id} sentToDevices={movie.sentToDevices} />
     </div>
   );
 }

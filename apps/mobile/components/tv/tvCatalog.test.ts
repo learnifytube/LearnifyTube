@@ -1,6 +1,15 @@
-import type { Movie, MovieWatch } from "../../../shared/mobile-sync-contract";
+import type {
+  Episode,
+  Movie,
+  MovieWatch,
+  Series,
+} from "../../../shared/mobile-sync-contract";
 import type { StreamingVideo } from "../../stores/playback";
-import type { TVRecentMovie, TVRecentPlaylist } from "../../stores/tvHistory";
+import type {
+  TVRecentMovie,
+  TVRecentPlaylist,
+  TVRecentSeries,
+} from "../../stores/tvHistory";
 import {
   buildTVCatalog,
   SENT_TO_THIS_TV_ID,
@@ -76,6 +85,8 @@ function input(overrides: Partial<TVCatalogInput> = {}): TVCatalogInput {
     history: [],
     movies: [],
     keptMovieWatch: () => undefined,
+    series: [],
+    keptEpisodeWatch: () => undefined,
     ...overrides,
   };
 }
@@ -458,5 +469,193 @@ describe("buildTVCatalog", () => {
       );
       expect(offline.tabs.history).toEqual([]);
     });
+  });
+});
+
+describe("Series", () => {
+  const episode = (id: string, overrides: Partial<Episode> = {}): Episode => ({
+    id,
+    title: `Episode ${id}`,
+    number: null,
+    durationSeconds: 3000,
+    missing: false,
+    captions: [],
+    watch: null,
+    ...overrides,
+  });
+
+  const series = (id: string, episodes: Episode[]): Series => ({
+    id,
+    title: `Series ${id}`,
+    posterUrl: `/api/series/${id}/poster`,
+    seasons: [
+      {
+        id: `${id}-s1`,
+        title: "Season 1",
+        number: 1,
+        sentToDevices: false,
+        episodes,
+      },
+    ],
+  });
+
+  const seriesEntry = (seriesId: string): TVRecentSeries => ({
+    kind: "series",
+    seriesId,
+    title: `Saved title ${seriesId}`,
+    updatedAt: 0,
+  });
+
+  const watched = { positionSeconds: 0, watched: true, updatedAt: 10 };
+
+  it("lists the desktop's Series with an Episode that plays, each pressed to open it", () => {
+    const catalog = buildTVCatalog(
+      input({
+        ...connected,
+        series: [
+          series("s1", [episode("e1"), episode("e2")]),
+          series("gone", [episode("g1", { missing: true })]),
+        ],
+      }),
+    );
+
+    expect(catalog.tabs.series).toEqual([
+      {
+        id: "series:s1",
+        title: "Series s1",
+        subtitle: "2 Episodes",
+        thumbnailUrl: "/api/series/s1/poster",
+        action: { kind: "series", seriesId: "s1", title: "Series s1" },
+      },
+    ]);
+    expect(catalog.modes).toEqual([
+      "playlists",
+      "mylists",
+      "channels",
+      "series",
+      "history",
+    ]);
+  });
+
+  it("says where a Series picks up, or that it was watched", () => {
+    const kept: Record<string, MovieWatch> = {
+      here: {
+        kind: "episode",
+        id: "here",
+        lastPositionSeconds: 754,
+        lastWatchedAt: 20,
+      },
+    };
+    const catalog = buildTVCatalog(
+      input({
+        ...connected,
+        series: [
+          series("resume", [
+            episode("done", { watch: watched }),
+            episode("here"),
+          ]),
+          series("next", [episode("n1", { watch: watched }), episode("n2")]),
+          series("all", [episode("a1", { watch: watched })]),
+        ],
+        keptEpisodeWatch: (id) => kept[id],
+      }),
+    );
+
+    expect(catalog.tabs.series.map((card) => card.subtitle)).toEqual([
+      "Resume Episode here at 12:34",
+      "Next: Episode n2",
+      "Watched",
+    ]);
+  });
+
+  it("hides the Series tab when there are none, and in Offline mode", () => {
+    expect(buildTVCatalog(input(connected)).modes).not.toContain("series");
+
+    const offline = buildTVCatalog(
+      input({ series: [series("s1", [episode("e1")])], library: [video("a")] }),
+    );
+    expect(offline.tabs.series).toEqual([]);
+    expect(offline.modes).not.toContain("series");
+  });
+
+  it("resumes a Series from History at its Episode in progress", () => {
+    const catalog = buildTVCatalog(
+      input({
+        ...connected,
+        series: [
+          series("s1", [
+            episode("e1", { watch: watched }),
+            episode("e2", {
+              watch: { positionSeconds: 754, watched: false, updatedAt: 12 },
+            }),
+            episode("e3"),
+          ]),
+        ],
+        history: [seriesEntry("s1"), historyEntry("q", ["a"])],
+      }),
+    );
+
+    expect(catalog.tabs.history[0]).toEqual({
+      id: "series:s1",
+      title: "Series s1",
+      subtitle: "Series · Resume Episode e2 at 12:34",
+      thumbnailUrl: "/api/series/s1/poster",
+      action: { kind: "episode", episodeId: "e2", title: "Series s1" },
+    });
+    expect(catalog.tabs.history.map((card) => card.id)).toEqual([
+      "series:s1",
+      "q",
+    ]);
+  });
+
+  it("resumes a Series from History at the next unwatched Episode", () => {
+    const catalog = buildTVCatalog(
+      input({
+        ...connected,
+        series: [
+          series("s1", [
+            episode("e1", { watch: watched }),
+            episode("e2", { missing: true }),
+            episode("e3"),
+          ]),
+        ],
+        history: [seriesEntry("s1")],
+      }),
+    );
+
+    expect(catalog.tabs.history[0].action).toEqual({
+      kind: "episode",
+      episodeId: "e3",
+      title: "Series s1",
+    });
+  });
+
+  it("opens a watched Series from History instead of playing it", () => {
+    const catalog = buildTVCatalog(
+      input({
+        ...connected,
+        series: [series("s1", [episode("e1", { watch: watched })])],
+        history: [seriesEntry("s1")],
+      }),
+    );
+
+    expect(catalog.tabs.history[0]).toMatchObject({
+      subtitle: "Series · Watched",
+      action: { kind: "series", seriesId: "s1", title: "Series s1" },
+    });
+  });
+
+  it("leaves out History Series the desktop no longer shows, and all of them offline", () => {
+    const shown = [series("s1", [episode("e1")])];
+
+    const whileConnected = buildTVCatalog(
+      input({ ...connected, series: shown, history: [seriesEntry("hidden")] }),
+    );
+    expect(whileConnected.tabs.history).toEqual([]);
+
+    const offline = buildTVCatalog(
+      input({ series: shown, history: [seriesEntry("s1")] }),
+    );
+    expect(offline.tabs.history).toEqual([]);
   });
 });

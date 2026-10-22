@@ -15,10 +15,11 @@ export type {
   TVHistoryEntry,
   TVRecentMovie,
   TVRecentPlaylist,
+  TVRecentSeries,
 } from "./tvHistoryEntries";
 
 interface TVHistoryStore {
-  /** Newest first: Video queues and Movies played on this TV. */
+  /** Newest first: Video queues, Movies and Series played on this TV. */
   entries: TVHistoryEntry[];
   upsertRecentPlaylist: (params: {
     playlistId: string;
@@ -31,7 +32,7 @@ interface TVHistoryStore {
     currentIndex: number;
     currentVideoId?: string | null;
   }) => void;
-  /** A Movie started playing. */
+  /** A Movie, or an Episode of a Series, started playing. */
   recordTitle: (title: TVPlayedTitle) => void;
   clearRecentPlaylists: () => void;
 }

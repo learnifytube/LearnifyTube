@@ -131,6 +131,47 @@ describe("TV history entries", () => {
     });
   });
 
+  it("keeps one entry per Series, apart from a Movie of the same id", () => {
+    let entries: TVHistoryEntry[] = [];
+    entries = recordPlayedTitle(
+      entries,
+      { kind: "series", seriesId: "s1", title: "Old title" },
+      1,
+    );
+    entries = recordPlayedTitle(
+      entries,
+      { kind: "movie", movieId: "s1", title: "A Movie" },
+      2,
+    );
+    entries = recordPlayedTitle(
+      entries,
+      { kind: "series", seriesId: "s1", title: "Dark" },
+      3,
+    );
+
+    expect(entries.map(historyKey)).toEqual(["series:s1", "movie:s1"]);
+    expect(entries[0]).toEqual({
+      kind: "series",
+      seriesId: "s1",
+      title: "Dark",
+      updatedAt: 3,
+    });
+  });
+
+  it("keeps a saved Series entry as a Series", () => {
+    expect(
+      migrateTVHistory({
+        entries: [
+          { kind: "series", seriesId: "s1", title: "Dark", updatedAt: 4 },
+        ],
+      }),
+    ).toEqual({
+      entries: [
+        { kind: "series", seriesId: "s1", title: "Dark", updatedAt: 4 },
+      ],
+    });
+  });
+
   it("starts empty from nothing saved", () => {
     expect(migrateTVHistory(undefined)).toEqual({ entries: [] });
   });

@@ -1,15 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DeviceEventEmitter, StyleSheet, Text, View } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, type Href } from "expo-router";
 import { useEvent } from "expo";
 import { useVideoPlayer, VideoView, type VideoPlayer } from "expo-video";
 import { SafeAreaView } from "react-native-safe-area-context";
+import type { MovieWatch } from "../../../../shared/mobile-sync-contract";
 import { useMovieCatalogStore } from "../../../stores/movieCatalog";
 import { movieWatchKey, useMovieWatchStore } from "../../../stores/movieWatch";
 import { useTVHistoryStore } from "../../../stores/tvHistory";
 import { useTVNoticeStore } from "../../../stores/tvNotice";
-import { tvMoviePlaybackSource } from "../../../services/playback-source";
+import {
+  tvEpisodePlaybackSource,
+  tvMoviePlaybackSource,
+} from "../../../services/playback-source";
 import { resumeAt } from "../../../services/movie-watch/movieWatch";
+import {
+  findTitle,
+  seriesEpisodeAfter,
+} from "../../../services/movie-watch/seriesWatch";
 import { useMovieProgressRecorder } from "../../../hooks/useMovieProgressRecorder";
 import { goBackOrTVHome } from "../../../components/tv/tvBack";
 import { TVFocusPressable } from "../../../components/tv/TVFocusPressable";
@@ -18,6 +26,7 @@ import {
   TVMessageCard,
 } from "../../../components/tv/TVMessage";
 import {
+  desktopGoneEpisode,
   desktopGoneMovie,
   describeMovieProblem,
   type MovieProblem,
@@ -46,33 +55,37 @@ import {
 
 const OVERLAY_AUTO_HIDE_MS = 5000;
 
-/** Where a press on the Movie starts: where any device left it, unless that was the end. */
-function startPosition(movieId: string): number {
-  const movie = useMovieCatalogStore
-    .getState()
-    .movies.find((item) => item.id === movieId);
+type TitleKind = MovieWatch["kind"];
+
+/** Where a press on the title starts: where any device left it, unless that was the end. */
+function startPosition(kind: TitleKind, id: string): number {
+  const title = findTitle(useMovieCatalogStore.getState(), kind, id);
   return resumeAt({
-    watch: movie?.watch ?? null,
-    kept: useMovieWatchStore.getState().progress[
-      movieWatchKey("movie", movieId)
-    ],
-    durationSeconds: movie?.durationSeconds ?? null,
+    watch: title?.watch ?? null,
+    kept: useMovieWatchStore.getState().progress[movieWatchKey(kind, id)],
+    durationSeconds: title?.durationSeconds ?? null,
   });
 }
 
 /**
- * Plays a Movie on the TV: Streamed from the desktop, never Downloaded
- * (ADR-0005), and put in History. A file the TV's player refuses says so.
+ * Plays a Movie, or an Episode (`kind=episode`) and then the Episodes after it,
+ * on the TV: Streamed from the desktop, never Downloaded (ADR-0005), and put in
+ * History (an Episode puts its Series there). A file the TV's player refuses
+ * says so.
  */
 export default function TVMoviePlayerScreen() {
-  const { id = "" } = useLocalSearchParams<{ id: string }>();
-  const movie = useMovieCatalogStore((state) =>
-    state.movies.find((item) => item.id === id),
-  );
+  const params = useLocalSearchParams<{ id: string; kind?: string }>();
+  const id = params.id ?? "";
+  const kind: TitleKind = params.kind === "episode" ? "episode" : "movie";
+  const catalog = useMovieCatalogStore();
+  const movie = findTitle(catalog, kind, id);
   const showNotice = useTVNoticeStore((state) => state.show);
 
   const playerRef = useRef<VideoPlayer | null>(null);
-  const { source, retry } = tvMoviePlaybackSource.useSource({
+  // The kind never changes while the screen is up, so the hook order holds.
+  const playbackSource =
+    kind === "episode" ? tvEpisodePlaybackSource : tvMoviePlaybackSource;
+  const { source, retry } = playbackSource.useSource({
     videoId: id,
     queue: [],
     index: -1,
@@ -87,12 +100,12 @@ export default function TVMoviePlayerScreen() {
     const start =
       source.kind === "offline" && source.resumeAt !== null
         ? source.resumeAt
-        : startPosition(id);
+        : startPosition(kind, id);
     if (start > 0) instance.currentTime = start;
     instance.play();
   });
   playerRef.current = player;
-  useMovieProgressRecorder(player, "movie", id);
+  useMovieProgressRecorder(player, kind, id);
 
   const { status, error } = useEvent(player, "statusChange", {
     status: player.status,
@@ -102,21 +115,42 @@ export default function TVMoviePlayerScreen() {
     isPlaying: player.playing,
   });
 
-  const movieTitle = movie?.title;
+  // History keeps the Movie, or the Series an Episode belongs to.
+  const series = movie?.series ?? null;
+  const seriesId = series?.id;
+  const historyTitle = series ? series.title : movie?.title;
   useEffect(() => {
-    if (!movieTitle) return;
+    if (!historyTitle) return;
     useTVHistoryStore
       .getState()
-      .recordTitle({ kind: "movie", movieId: id, title: movieTitle });
-  }, [id, movieTitle]);
+      .recordTitle(
+        seriesId
+          ? { kind: "series", seriesId, title: historyTitle }
+          : { kind: "movie", movieId: id, title: historyTitle },
+      );
+  }, [id, seriesId, historyTitle]);
 
-  // The desktop went away mid-Stream and the TV doesn't hold this Movie.
+  // Episodes autoplay: the next one in Series order that can play.
+  useEffect(() => {
+    if (!series) return;
+    const subscription = player.addListener("playToEnd", () => {
+      const next = seriesEpisodeAfter(series, id);
+      if (!next) return;
+      router.replace({
+        pathname: "/(tv)/movie/[id]",
+        params: { id: next.id, kind: "episode" },
+      } as Href);
+    });
+    return () => subscription.remove();
+  }, [player, series, id]);
+
+  // The desktop went away mid-Stream and the TV doesn't hold this title.
   const desktopLost = source.kind === "desktopLost";
   useEffect(() => {
     if (!desktopLost) return;
-    showNotice(desktopGoneMovie);
+    showNotice(kind === "episode" ? desktopGoneEpisode : desktopGoneMovie);
     goBackOrTVHome();
-  }, [desktopLost, showNotice]);
+  }, [desktopLost, kind, showNotice]);
 
   useEffect(() => {
     if (status === "error") {
@@ -217,13 +251,13 @@ export default function TVMoviePlayerScreen() {
 
   if (!uri || problem) {
     const message = problem
-      ? describeMovieProblem(problem)
+      ? describeMovieProblem(problem, kind)
       : { title: movie?.title ?? "Starting", text: "Please wait" };
     const canRetry =
       !!problem &&
       source.kind === "failed" &&
       source.canRetry &&
-      describeMovieProblem(problem).canRetry;
+      describeMovieProblem(problem, kind).canRetry;
     return (
       <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
         <View style={styles.centered}>

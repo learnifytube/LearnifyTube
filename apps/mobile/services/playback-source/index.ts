@@ -74,6 +74,16 @@ export const tvMoviePlaybackSource = createPlaybackSource({
   log: (message, data) => logger.info(message, data),
 });
 
+// The TV's Episode player, Stream-only like the TV's Movies.
+export const tvEpisodePlaybackSource = createPlaybackSource({
+  getDesktop: desktopConnection.getState,
+  onDesktopChange: desktopConnection.subscribe,
+  offlineCopy: noOfflineCopies,
+  desktopFetch: null,
+  streamUrl: api.getEpisodeFileUrl,
+  log: (message, data) => logger.info(message, data),
+});
+
 export type {
   PlaybackFailure,
   PlaybackSourceKind,

@@ -2,19 +2,25 @@ import type {
   Movie,
   MovieWatch,
   OnDeviceSet,
+  Series,
 } from "../../../shared/mobile-sync-contract";
 import { watchStateOf, resumeAt } from "../../services/movie-watch/movieWatch";
+import {
+  seriesEpisodes,
+  seriesNextUp,
+} from "../../services/movie-watch/seriesWatch";
 import type { StreamingVideo } from "../../stores/playback";
 import type {
   TVHistoryEntry,
   TVRecentMovie,
   TVRecentPlaylist,
+  TVRecentSeries,
 } from "../../stores/tvHistory";
 import { formatPlaybackTime } from "../playerSeek";
 import type { RemoteChannel, RemoteMyList, RemotePlaylist } from "../../types";
 
 export type TVBrowseMode =
-  "playlists" | "mylists" | "channels" | "movies" | "history";
+  "playlists" | "mylists" | "channels" | "movies" | "series" | "history";
 
 /** The tabs in the order the TV home shows them. */
 const TAB_ORDER: TVBrowseMode[] = [
@@ -22,6 +28,7 @@ const TAB_ORDER: TVBrowseMode[] = [
   "mylists",
   "channels",
   "movies",
+  "series",
   "history",
 ];
 
@@ -65,6 +72,10 @@ export type TVCatalogInput = {
   movies: Movie[];
   /** Where this TV last stopped in a Movie. */
   keptMovieWatch: (movieId: string) => MovieWatch | undefined;
+  /** The desktop's Series, from the same catalog as `movies`. */
+  series: Series[];
+  /** Where this TV last stopped in an Episode. */
+  keptEpisodeWatch: (episodeId: string) => MovieWatch | undefined;
 };
 
 /** What pressing a card does. */
@@ -83,7 +94,11 @@ export type TVCardAction =
       title: string;
     }
   | { kind: "channel"; id: string; title: string }
-  | { kind: "movie"; movieId: string; title: string };
+  | { kind: "movie"; movieId: string; title: string }
+  /** Opens the Series screen. */
+  | { kind: "series"; seriesId: string; title: string }
+  /** Plays an Episode, then the ones after it; `title` is the Series'. */
+  | { kind: "episode"; episodeId: string; title: string };
 
 export type TVCatalogCard = {
   id: string;
@@ -110,6 +125,7 @@ const connectedEmptyText: Record<TVBrowseMode, string> = {
   mylists: "No lists here yet",
   channels: "No channels here yet",
   movies: "No Movies here yet",
+  series: "No Series here yet",
   history: "No history yet",
 };
 
@@ -118,6 +134,7 @@ const offlineEmptyText: Record<TVBrowseMode, string> = {
   mylists: "No lists on this TV",
   channels: "No channels on this TV",
   movies: "No Movies on this TV",
+  series: "No Series on this TV",
   history: "Nothing to resume on this TV",
 };
 
@@ -152,22 +169,51 @@ export function playHeldCollection(
   };
 }
 
-/** How far into the Movie a press starts, else that it was watched, else its length. */
-function describeMovie(movie: Movie, kept: MovieWatch | undefined): string {
+/** How far into a Movie or Episode a press starts, else that it was watched, else its length. */
+export function describeTitleWatch(
+  title: Pick<Movie, "watch" | "durationSeconds">,
+  kept: MovieWatch | undefined,
+): string {
   const progress = {
-    watch: movie.watch,
+    watch: title.watch,
     kept,
-    durationSeconds: movie.durationSeconds,
+    durationSeconds: title.durationSeconds,
   };
   const { state } = watchStateOf(progress);
   if (state === "watched") return "Watched";
   if (state === "in-progress") {
     return `Resume at ${formatPlaybackTime(resumeAt(progress))}`;
   }
-  if (!movie.durationSeconds) return "";
-  const minutes = Math.round(movie.durationSeconds / 60);
+  if (!title.durationSeconds) return "";
+  const minutes = Math.round(title.durationSeconds / 60);
   const hours = Math.floor(minutes / 60);
   return hours > 0 ? `${hours} h ${minutes % 60} min` : `${minutes} min`;
+}
+
+const countEpisodes = (count: number) =>
+  count === 1 ? "1 Episode" : `${count} Episodes`;
+
+/** How a Series card says where it picks up, and the Episode that plays then (null once watched). */
+function seriesPickUp(
+  series: Series,
+  keptEpisode: TVCatalogInput["keptEpisodeWatch"],
+) {
+  const playable = seriesEpisodes(series).filter((item) => !item.missing);
+  const next = seriesNextUp(series, keptEpisode);
+  if (!next) return { subtitle: "Watched", episode: null };
+  const { episode } = next;
+  const progress = {
+    watch: episode.watch,
+    kept: keptEpisode(episode.id),
+    durationSeconds: episode.durationSeconds,
+  };
+  const subtitle =
+    watchStateOf(progress).state === "in-progress"
+      ? `Resume ${episode.title} at ${formatPlaybackTime(resumeAt(progress))}`
+      : next.lastWatchedAt === null
+        ? countEpisodes(playable.length)
+        : `Next: ${episode.title}`;
+  return { subtitle, episode };
 }
 
 /** What each TV home tab shows: the desktop's catalog while connected, else only what plays. */
@@ -239,7 +285,7 @@ export function buildTVCatalog(input: TVCatalogInput) {
   const movieCard = (movie: Movie, subtitlePrefix = ""): TVCatalogCard => ({
     id: `movie:${movie.id}`,
     title: movie.title,
-    subtitle: `${subtitlePrefix}${describeMovie(movie, input.keptMovieWatch(movie.id))}`,
+    subtitle: `${subtitlePrefix}${describeTitleWatch(movie, input.keptMovieWatch(movie.id))}`,
     thumbnailUrl: desktop?.resolveAssetUrl(movie.posterUrl) ?? null,
     action: { kind: "movie", movieId: movie.id, title: movie.title },
   });
@@ -248,6 +294,37 @@ export function buildTVCatalog(input: TVCatalogInput) {
   const movieHistoryCard = (entry: TVRecentMovie): TVCatalogCard[] => {
     const movie = playableMovies.find((item) => item.id === entry.movieId);
     return movie ? [movieCard(movie, "Movie · ")] : [];
+  };
+
+  // Like Movies, Series play only from a connected desktop for now.
+  const playableSeries = desktop
+    ? input.series.filter((item) =>
+        seriesEpisodes(item).some((episode) => !episode.missing),
+      )
+    : [];
+  const seriesCard = (series: Series): TVCatalogCard => ({
+    id: `series:${series.id}`,
+    title: series.title,
+    subtitle: seriesPickUp(series, input.keptEpisodeWatch).subtitle,
+    thumbnailUrl: desktop?.resolveAssetUrl(series.posterUrl) ?? null,
+    action: { kind: "series", seriesId: series.id, title: series.title },
+  });
+
+  // A Series in History plays its next-up Episode; a watched one opens the Series.
+  const seriesHistoryCard = (entry: TVRecentSeries): TVCatalogCard[] => {
+    const series = playableSeries.find((item) => item.id === entry.seriesId);
+    if (!series) return [];
+    const { subtitle, episode } = seriesPickUp(series, input.keptEpisodeWatch);
+    const card = seriesCard(series);
+    return [
+      {
+        ...card,
+        subtitle: `Series · ${subtitle}`,
+        action: episode
+          ? { kind: "episode", episodeId: episode.id, title: series.title }
+          : card.action,
+      },
+    ];
   };
 
   const videoHistoryCard = (entry: TVRecentPlaylist): TVCatalogCard[] => {
@@ -287,12 +364,21 @@ export function buildTVCatalog(input: TVCatalogInput) {
   };
 
   const historyCards = input.history.flatMap((entry) =>
-    entry.kind === "movie" ? movieHistoryCard(entry) : videoHistoryCard(entry),
+    entry.kind === "movie"
+      ? movieHistoryCard(entry)
+      : entry.kind === "series"
+        ? seriesHistoryCard(entry)
+        : videoHistoryCard(entry),
   );
   const movieCards = playableMovies.map((movie) => movieCard(movie));
-  // Only the Movies tab hides when empty: older desktops don't serve Movies.
-  const modes = TAB_ORDER.filter(
-    (mode) => mode !== "movies" || movieCards.length > 0,
+  const seriesCards = playableSeries.map(seriesCard);
+  // Only the Movies and Series tabs hide when empty: older desktops serve neither.
+  const modes = TAB_ORDER.filter((mode) =>
+    mode === "movies"
+      ? movieCards.length > 0
+      : mode === "series"
+        ? seriesCards.length > 0
+        : true,
   );
 
   if (desktop) {
@@ -351,6 +437,7 @@ export function buildTVCatalog(input: TVCatalogInput) {
           },
         })),
         movies: movieCards,
+        series: seriesCards,
         history: historyCards,
       },
       modes,
@@ -394,6 +481,7 @@ export function buildTVCatalog(input: TVCatalogInput) {
       mylists: [...sentToThisTV(), ...collectionCards("mylist")],
       channels: channelCards,
       movies: movieCards,
+      series: seriesCards,
       history: historyCards,
     },
     modes,
@@ -403,6 +491,7 @@ export function buildTVCatalog(input: TVCatalogInput) {
           mylists: NOTHING_HELD_TEXT,
           channels: NOTHING_HELD_TEXT,
           movies: NOTHING_HELD_TEXT,
+          series: NOTHING_HELD_TEXT,
           history: NOTHING_HELD_TEXT,
         }
       : offlineEmptyText,

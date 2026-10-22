@@ -41,6 +41,7 @@ export default function TVLayout() {
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="connect" options={{ headerShown: false }} />
         <Stack.Screen name="channel/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="series/[id]" options={{ headerShown: false }} />
       </Stack>
       <TVNoticeHost />
       {updateMessage.element}

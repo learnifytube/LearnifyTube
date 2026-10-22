@@ -5,6 +5,7 @@ import {
 import {
   describeDesktopRequestFailure,
   describeMovieProblem,
+  desktopGoneEpisode,
   describeUpdateMessage,
   describeUpdateQuestion,
   describeVideoFailure,
@@ -162,6 +163,19 @@ describe("describeMovieProblem", () => {
       expect(shown(message)).toMatch(/Movie/);
       expect(shown(message)).not.toMatch(/Video/);
     }
+  });
+
+  it("names an Episode when an Episode can't play", () => {
+    for (const problem of [
+      { kind: "playerRejected" as const },
+      { kind: "notOnThisTV" as const },
+      { kind: "videoNotFound" as const },
+    ]) {
+      const message = describeMovieProblem(problem, "episode");
+      expect(shown(message)).toMatch(/Episode/);
+      expect(shown(message)).not.toMatch(/Movie|Video/);
+    }
+    expect(shown(desktopGoneEpisode)).toMatch(/Episode/);
   });
 
   it("words a failed desktop request the same as for any other request", () => {

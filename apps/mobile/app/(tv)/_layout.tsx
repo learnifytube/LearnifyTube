@@ -31,6 +31,13 @@ export default function TVLayout() {
             presentation: "fullScreenModal",
           }}
         />
+        <Stack.Screen
+          name="movie/[id]"
+          options={{
+            headerShown: false,
+            presentation: "fullScreenModal",
+          }}
+        />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="connect" options={{ headerShown: false }} />
         <Stack.Screen name="channel/[id]" options={{ headerShown: false }} />

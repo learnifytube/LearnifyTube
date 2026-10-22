@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEvent } from "expo";
-import { useVideoPlayer, VideoView, type VideoPlayer } from "expo-video";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useConnectionStore } from "../../stores/connection";
 import { useMovieCatalogStore } from "../../stores/movieCatalog";
@@ -19,7 +19,7 @@ import {
   type PlaybackFailure,
 } from "../../services/playback-source";
 import { bookPlayer } from "../../services/book-player";
-import { deviceMirror } from "../../services/device-mirror";
+import { useMovieProgressRecorder } from "../../hooks/useMovieProgressRecorder";
 import { resumeAt } from "../../services/movie-watch/movieWatch";
 import { resolveRemoteAssetUrl } from "../../services/remoteAssetUrl";
 import { PlayerProgressBar } from "../../components/phone/PlayerProgressBar";
@@ -40,7 +40,6 @@ import {
 } from "../../theme/icons";
 
 const CONTROLS_HIDE_MS = 3000;
-const SAVE_INTERVAL_MS = 5000;
 const SEEK_SECONDS = 10;
 
 function failureText(failure: PlaybackFailure) {
@@ -48,39 +47,6 @@ function failureText(failure: PlaybackFailure) {
     return "This movie needs the desktop.";
   }
   return "Couldn't play this movie. Try again when the desktop is around.";
-}
-
-// Keeps where playback is on this phone; the Device report takes it to the desktop.
-function useMovieProgressRecorder(player: VideoPlayer, movieId: string) {
-  useEffect(() => {
-    if (!movieId) return;
-    const save = (positionSeconds: number) => {
-      if (positionSeconds <= 0) return;
-      useMovieWatchStore.getState().keep({
-        kind: "movie",
-        id: movieId,
-        lastPositionSeconds: positionSeconds,
-        lastWatchedAt: Date.now(),
-      });
-    };
-    const interval = setInterval(() => {
-      if (player.playing) save(player.currentTime);
-    }, SAVE_INTERVAL_MS);
-    const endSubscription = player.addListener("playToEnd", () =>
-      save(player.duration || player.currentTime),
-    );
-    return () => {
-      clearInterval(interval);
-      endSubscription.remove();
-      try {
-        save(player.currentTime);
-      } catch {
-        // The player may already be released when the screen closes.
-      }
-      // Tell the desktop now rather than at the next sync.
-      void deviceMirror.syncNow();
-    };
-  }, [player, movieId]);
 }
 
 /** Plays a Movie: Streamed from the desktop, never Downloaded (ADR-0005). */
@@ -166,7 +132,7 @@ export default function MoviePlayerScreen() {
     // Only when a source starts: a later catalog refresh mustn't seek.
   }, [player, sourceUri, id]);
 
-  useMovieProgressRecorder(player, id);
+  useMovieProgressRecorder(player, "movie", id);
 
   useEffect(() => {
     const timeSubscription = player.addListener("timeUpdate", (event) => {

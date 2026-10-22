@@ -4,6 +4,7 @@ import {
 } from "../../services/desktop-fetch/createDesktopFetch";
 import {
   describeDesktopRequestFailure,
+  describeMovieProblem,
   describeUpdateMessage,
   describeUpdateQuestion,
   describeVideoFailure,
@@ -140,5 +141,34 @@ describe("describeUpdateQuestion", () => {
 
     expect(question.confirmLabel).toBe("Open Settings");
     expect(shown(question)).toMatch(/LearnifyTube/);
+  });
+});
+
+describe("describeMovieProblem", () => {
+  it("says this TV can't play a file its player rejected, with nothing to retry", () => {
+    const message = describeMovieProblem({ kind: "playerRejected" });
+
+    expect(message.title).toBe("Can't play this on this TV");
+    expect(shown(message)).toMatch(/Movie/);
+    expect(message.canRetry).toBe(false);
+  });
+
+  it("names a Movie, never a Video, when the TV can't reach it", () => {
+    for (const problem of [
+      { kind: "notOnThisTV" as const },
+      { kind: "videoNotFound" as const },
+    ]) {
+      const message = describeMovieProblem(problem);
+      expect(shown(message)).toMatch(/Movie/);
+      expect(shown(message)).not.toMatch(/Video/);
+    }
+  });
+
+  it("words a failed desktop request the same as for any other request", () => {
+    const error = new Error("Network request failed");
+
+    expect(describeMovieProblem({ kind: "desktopFailed", error })).toEqual(
+      describeDesktopRequestFailure(error),
+    );
   });
 });

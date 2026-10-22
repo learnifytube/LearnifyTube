@@ -1,9 +1,32 @@
-import type { OnDeviceSet } from "../../../shared/mobile-sync-contract";
+import type {
+  Movie,
+  MovieWatch,
+  OnDeviceSet,
+} from "../../../shared/mobile-sync-contract";
+import {
+  currentMovieWatch,
+  resumeAt,
+} from "../../services/movie-watch/movieWatch";
 import type { StreamingVideo } from "../../stores/playback";
-import type { TVRecentPlaylist } from "../../stores/tvHistory";
+import type {
+  TVHistoryEntry,
+  TVRecentMovie,
+  TVRecentPlaylist,
+} from "../../stores/tvHistory";
+import { formatPlaybackTime } from "../playerSeek";
 import type { RemoteChannel, RemoteMyList, RemotePlaylist } from "../../types";
 
-export type TVBrowseMode = "playlists" | "mylists" | "channels" | "history";
+export type TVBrowseMode =
+  "playlists" | "mylists" | "channels" | "movies" | "history";
+
+/** The tabs in the order the TV home shows them. */
+const TAB_ORDER: TVBrowseMode[] = [
+  "playlists",
+  "mylists",
+  "channels",
+  "movies",
+  "history",
+];
 
 /** The On-device set's card. The id predates the name and stays, as TV history keeps it. */
 export const SENT_TO_THIS_TV_ID = "on-this-tv";
@@ -40,7 +63,11 @@ export type TVCatalogInput = {
   hasOfflineCopy: (videoId: string) => boolean;
   getStoredThumbnail: (videoId: string) => string | null;
   onDeviceSet: OnDeviceSet["videos"];
-  history: TVRecentPlaylist[];
+  history: TVHistoryEntry[];
+  /** The desktop's Movies (its latest catalog); empty on a desktop too old to serve them. */
+  movies: Movie[];
+  /** Where this TV last stopped in a Movie. */
+  keptMovieWatch: (movieId: string) => MovieWatch | undefined;
 };
 
 /** What pressing a card does. */
@@ -58,7 +85,8 @@ export type TVCardAction =
       id: string;
       title: string;
     }
-  | { kind: "channel"; id: string; title: string };
+  | { kind: "channel"; id: string; title: string }
+  | { kind: "movie"; movieId: string; title: string };
 
 export type TVCatalogCard = {
   id: string;
@@ -84,6 +112,7 @@ const connectedEmptyText: Record<TVBrowseMode, string> = {
   playlists: "No playlists here yet",
   mylists: "No lists here yet",
   channels: "No channels here yet",
+  movies: "No Movies here yet",
   history: "No history yet",
 };
 
@@ -91,6 +120,7 @@ const offlineEmptyText: Record<TVBrowseMode, string> = {
   playlists: "No playlists on this TV",
   mylists: "No lists on this TV",
   channels: "No channels on this TV",
+  movies: "No Movies on this TV",
   history: "Nothing to resume on this TV",
 };
 
@@ -123,6 +153,23 @@ export function playHeldCollection(
     videos,
     startIndex: 0,
   };
+}
+
+/** How far into the Movie a press starts, else that it was watched, else its length. */
+function describeMovie(movie: Movie, kept: MovieWatch | undefined): string {
+  const start = resumeAt({
+    watch: movie.watch,
+    kept,
+    durationSeconds: movie.durationSeconds,
+  });
+  if (start > 0) return `Resume at ${formatPlaybackTime(start)}`;
+  // resumeAt starts over from a position near the end, so any position left is the end.
+  const position = currentMovieWatch(movie.watch, kept)?.positionSeconds ?? 0;
+  if (movie.watch?.watched || position > 0) return "Watched";
+  if (!movie.durationSeconds) return "";
+  const minutes = Math.round(movie.durationSeconds / 60);
+  const hours = Math.floor(minutes / 60);
+  return hours > 0 ? `${hours} h ${minutes % 60} min` : `${minutes} min`;
 }
 
 /** What each TV home tab shows: the desktop's catalog while connected, else only what plays. */
@@ -187,7 +234,25 @@ export function buildTVCatalog(input: TVCatalogInput) {
     ];
   };
 
-  const historyCards = input.history.flatMap((entry) => {
+  // The TV holds no Movies yet, so only a connected desktop's catalog plays them.
+  const playableMovies = desktop
+    ? input.movies.filter((movie) => !movie.missing)
+    : [];
+  const movieCard = (movie: Movie, subtitlePrefix = ""): TVCatalogCard => ({
+    id: `movie:${movie.id}`,
+    title: movie.title,
+    subtitle: `${subtitlePrefix}${describeMovie(movie, input.keptMovieWatch(movie.id))}`,
+    thumbnailUrl: desktop?.resolveAssetUrl(movie.posterUrl) ?? null,
+    action: { kind: "movie", movieId: movie.id, title: movie.title },
+  });
+
+  // A Movie in History plays as the desktop lists it now; one it no longer shows is left out.
+  const movieHistoryCard = (entry: TVRecentMovie): TVCatalogCard[] => {
+    const movie = playableMovies.find((item) => item.id === entry.movieId);
+    return movie ? [movieCard(movie, "Movie · ")] : [];
+  };
+
+  const videoHistoryCard = (entry: TVRecentPlaylist): TVCatalogCard[] => {
     const videos = desktop
       ? entry.videos
       : entry.videos.filter((item) => hasOfflineCopy(item.id));
@@ -221,7 +286,16 @@ export function buildTVCatalog(input: TVCatalogInput) {
         },
       },
     ];
-  });
+  };
+
+  const historyCards = input.history.flatMap((entry) =>
+    entry.kind === "movie" ? movieHistoryCard(entry) : videoHistoryCard(entry),
+  );
+  const movieCards = playableMovies.map((movie) => movieCard(movie));
+  // Only the Movies tab hides when empty: older desktops don't serve Movies.
+  const modes = TAB_ORDER.filter(
+    (mode) => mode !== "movies" || movieCards.length > 0,
+  );
 
   if (desktop) {
     return {
@@ -278,8 +352,10 @@ export function buildTVCatalog(input: TVCatalogInput) {
             title: item.channelTitle,
           },
         })),
+        movies: movieCards,
         history: historyCards,
       },
+      modes,
       emptyText: connectedEmptyText,
       emptyHint: null,
       holdsNothing: false,
@@ -319,13 +395,16 @@ export function buildTVCatalog(input: TVCatalogInput) {
       playlists: collectionCards("playlist"),
       mylists: [...sentToThisTV(), ...collectionCards("mylist")],
       channels: channelCards,
+      movies: movieCards,
       history: historyCards,
     },
+    modes,
     emptyText: holdsNothing
       ? {
           playlists: NOTHING_HELD_TEXT,
           mylists: NOTHING_HELD_TEXT,
           channels: NOTHING_HELD_TEXT,
+          movies: NOTHING_HELD_TEXT,
           history: NOTHING_HELD_TEXT,
         }
       : offlineEmptyText,

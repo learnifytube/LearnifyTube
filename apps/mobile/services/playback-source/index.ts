@@ -54,6 +54,16 @@ export const phoneMoviePlaybackSource = createPlaybackSource({
   log: (message, data) => logger.info(message, data),
 });
 
+// The TV's Movie player: Stream-only from the Desktop connection (ADR-0005).
+export const tvMoviePlaybackSource = createPlaybackSource({
+  getDesktop: desktopConnection.getState,
+  onDesktopChange: desktopConnection.subscribe,
+  offlineCopy: noOfflineCopies,
+  desktopFetch: null,
+  streamUrl: api.getMovieFileUrl,
+  log: (message, data) => logger.info(message, data),
+});
+
 export type {
   PlaybackFailure,
   PlaybackSourceKind,

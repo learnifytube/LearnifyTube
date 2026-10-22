@@ -24,6 +24,9 @@ import {
 import type { StreamingVideo } from "../../stores/playback";
 import { useTVHistoryStore } from "../../stores/tvHistory";
 import { useOnDeviceSetStore } from "../../stores/onDeviceSet";
+import { useMovieCatalogStore } from "../../stores/movieCatalog";
+import { movieWatchKey, useMovieWatchStore } from "../../stores/movieWatch";
+import { movieCatalog } from "../../services/movie-catalog";
 import { api } from "../../services/api";
 import { playQueue } from "../../services/play-queue";
 import {
@@ -88,6 +91,7 @@ const TABS: Array<{ mode: TVBrowseMode; label: string }> = [
   { mode: "playlists", label: "Playlists" },
   { mode: "mylists", label: "My Lists" },
   { mode: "channels", label: "Channels" },
+  { mode: "movies", label: "Movies" },
   { mode: "history", label: "History" },
 ];
 
@@ -170,9 +174,12 @@ export default function TVHomeScreen() {
   const connection = desktopConnection.useConnection();
   const serverUrl = connection.status === "connected" ? connection.url : null;
   const onDeviceSet = useOnDeviceSetStore((state) => state.videos);
-  const recentPlaylists = useTVHistoryStore((state) => state.recentPlaylists);
+  const history = useTVHistoryStore((state) => state.entries);
+  const movieCatalogState = useMovieCatalogStore();
+  const movieProgress = useMovieWatchStore((state) => state.progress);
 
-  const [mode, setMode] = useState<TVBrowseMode>("playlists");
+  // The tab picked; the one shown falls back to Playlists when it has gone (an empty Movies tab).
+  const [selectedMode, setMode] = useState<TVBrowseMode>("playlists");
   const {
     show: showTVMessage,
     isOpen: isTVMessageOpen,
@@ -203,6 +210,7 @@ export default function TVHomeScreen() {
     playlists: 0,
     mylists: 0,
     channels: 0,
+    movies: 0,
     history: 0,
   });
   const [focusedGridIndex, setFocusedGridIndex] = useState(0);
@@ -247,11 +255,6 @@ export default function TVHomeScreen() {
   useEffect(() => {
     if (tabFocus === "released") setTabFocus("selected");
   }, [tabFocus]);
-
-  useEffect(() => {
-    const tab = tabRefs.current[mode];
-    setSelectedTabHandle(tab ? (findNodeHandle(tab) ?? undefined) : undefined);
-  }, [mode]);
 
   useEffect(() => {
     setSettingsHandle(
@@ -303,11 +306,12 @@ export default function TVHomeScreen() {
     setIsLoadingCatalog(true);
 
     try {
-      const [playlistResult, myListResult, channelResult] =
+      const [playlistResult, myListResult, channelResult, movieResult] =
         await Promise.allSettled([
           api.getPlaylists(serverUrl),
           api.getMyLists(serverUrl),
           api.getChannels(serverUrl),
+          movieCatalog.load(serverUrl),
         ]);
       const cached = getCatalogSnapshot();
       let nextPlaylists = cached.playlists;
@@ -338,6 +342,12 @@ export default function TVHomeScreen() {
           serverUrl,
           channelResult.value.channels,
         );
+      } else {
+        failed = true;
+      }
+
+      if (movieResult.status === "fulfilled") {
+        useMovieCatalogStore.setState({ serverUrl, ...movieResult.value });
       } else {
         failed = true;
       }
@@ -384,7 +394,14 @@ export default function TVHomeScreen() {
       hasOfflineCopy: (videoId) => getOfflineUri(videoId) !== null,
       getStoredThumbnail,
       onDeviceSet,
-      history: recentPlaylists,
+      history,
+      // Only the connected desktop's own catalog: another desktop's ids mean nothing here.
+      movies:
+        movieCatalogState.serverUrl === serverUrl
+          ? movieCatalogState.movies
+          : [],
+      keptMovieWatch: (movieId) =>
+        movieProgress[movieWatchKey("movie", movieId)],
     }),
     [
       cachedCollections,
@@ -392,14 +409,25 @@ export default function TVHomeScreen() {
       getOfflineUri,
       getStoredThumbnail,
       myLists,
+      history,
+      movieCatalogState,
+      movieProgress,
       onDeviceSet,
       playlists,
-      recentPlaylists,
       serverUrl,
       videos,
     ],
   );
   const catalog = useMemo(() => buildTVCatalog(catalogInput), [catalogInput]);
+  const mode = catalog.modes.includes(selectedMode)
+    ? selectedMode
+    : "playlists";
+  const tabs = TABS.filter((tab) => catalog.modes.includes(tab.mode));
+
+  useEffect(() => {
+    const tab = tabRefs.current[mode];
+    setSelectedTabHandle(tab ? (findNodeHandle(tab) ?? undefined) : undefined);
+  }, [mode]);
 
   const play = (action: Extract<TVCardAction, { kind: "play" }>) => {
     const first = playQueue.start({
@@ -488,6 +516,10 @@ export default function TVHomeScreen() {
     }
     if (action.kind === "remote") {
       void playRemoteCollection(action.collection, action.id, action.title);
+      return;
+    }
+    if (action.kind === "movie") {
+      router.push(`/(tv)/movie/${action.movieId}` as Href);
       return;
     }
     router.push({
@@ -594,7 +626,7 @@ export default function TVHomeScreen() {
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <View style={styles.controlsRow}>
         <View style={styles.modeTabs}>
-          {TABS.map((tab) => (
+          {tabs.map((tab) => (
             <TVFocusPressable
               key={tab.mode}
               ref={(node) => {

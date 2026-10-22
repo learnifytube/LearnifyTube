@@ -10,6 +10,12 @@ import {
   keepListeningPosition,
   type ListeningSave,
 } from "../../../../shared/book-player/keepListeningPosition";
+import type {
+  AudiobookTrackPosition,
+  TrackPosition,
+} from "../../../../shared/mobile-sync-contract";
+import { newestWins } from "../../../../shared/newest-wins";
+import { resumeAt } from "../../../../shared/resume-at";
 import { createAudioElementPlatform, type AudioOutput } from "./audioElementPlatform";
 
 /** An Audiobook as the desktop keeps it: its Tracks are files in the user's folder. */
@@ -26,8 +32,14 @@ export type DesktopAudiobook = {
     filePath: string;
     durationSeconds: number | null;
     missing: boolean;
+    // Its Track position (ADR-0006); null times before it was ever played.
+    resumeSeconds: number | null;
+    playedToEnd: boolean;
+    resumeUpdatedAt: number | null;
   }[];
 };
+
+type DesktopTrack = DesktopAudiobook["tracks"][number];
 
 /** The window's document: every media element's `play` reaches it while capturing. */
 export type MediaPage = {
@@ -46,11 +58,14 @@ const isVideo = (target: unknown): boolean =>
 
 /** The shared Book player, started with the desktop's Audiobooks. */
 export type DesktopBookPlayer = Omit<BookPlayer, "play" | "jumpTo" | "startOver"> & {
-  /** Plays a book from its Listening position; from the start once finished. */
+  /**
+   * Plays a book from its Listening position: the Track last played, at that
+   * Track's own Track position; from the start once finished.
+   */
   play: (book: DesktopAudiobook) => Promise<void>;
-  /** Plays a book from the start of the Track at `trackIndex`. */
+  /** Plays the Track at `trackIndex` from its Track position; from 0 once played to its end. */
   jumpTo: (book: DesktopAudiobook, trackIndex: number) => Promise<void>;
-  /** Plays a book again from Track 1 at 0:00. */
+  /** Clears every Track position and plays the book again from Track 1 at 0:00. */
   startOver: (book: DesktopAudiobook) => Promise<void>;
   /** How far into the Track the book is; zeros while no Track plays. */
   getProgress: () => TrackProgress;
@@ -69,30 +84,62 @@ const NO_PROGRESS: TrackProgress = { elapsed: 0, duration: 0 };
 const trackTitle = (filePath: string): string =>
   (filePath.split(/[\\/]/).pop() ?? filePath).replace(/\.[^.]+$/, "");
 
-// Where Play resumes: the Listening position, or the start once finished.
-const resumeFrom = (book: DesktopAudiobook): ListeningPoint | null =>
-  book.finished || book.listeningTrackId === null
+const storedPosition = (track: DesktopTrack): TrackPosition | null =>
+  track.resumeUpdatedAt === null
     ? null
-    : { trackId: book.listeningTrackId, seconds: book.listeningSeconds ?? 0 };
+    : {
+        seconds: track.resumeSeconds ?? 0,
+        playedToEnd: track.playedToEnd,
+        updatedAt: track.resumeUpdatedAt,
+      };
 
 /**
  * The shared Book player on the desktop: Tracks play straight from the
  * Audiobook's folder over `local-file://` through one `<audio>` element, and
- * every save of the Listening position goes to `saveListening`. A Video
- * starting anywhere on `page` pauses the book; the bar can resume it.
+ * every save of the Listening position goes to `saveListening`. Each Track's
+ * place is saved to `saveTrackPosition` as playback leaves it, and Start over
+ * to `saveStartOver`. A Video starting anywhere on `page` pauses the book; the
+ * bar can resume it.
  */
 export function createDesktopBookPlayer({
   audio,
   page,
   saveListening,
+  saveTrackPosition,
+  saveStartOver,
   speed,
 }: {
   audio: AudioOutput;
   page: MediaPage;
   saveListening: (save: ListeningSave) => void;
+  saveTrackPosition: (position: AudiobookTrackPosition) => void;
+  /** Start over clears every Track position of the book, as of `at`. */
+  saveStartOver: (audiobookId: string, at: number) => void;
   /** Where the desktop's own speed is remembered (the phone keeps its own). */
   speed?: BookSpeedMemory;
 }): DesktopBookPlayer {
+  // Track positions saved while this player ran, newer than the book the page
+  // passes until it refetches.
+  const savedPositions = new Map<string, TrackPosition>();
+  const positionOf = (track: DesktopTrack): TrackPosition | null =>
+    newestWins(storedPosition(track), savedPositions.get(track.id) ?? null);
+  const startAtOf = (track: DesktopTrack): number => {
+    const position = positionOf(track);
+    return resumeAt({
+      positionSeconds: position?.seconds ?? null,
+      // Only played to its end restarts a Track; a long chapter at 90% resumes.
+      durationSeconds: null,
+      watched: position?.playedToEnd ?? false,
+    });
+  };
+
+  // Where Play resumes: the Track last played at its own Track position, or the start once finished.
+  const resumeFrom = (book: DesktopAudiobook): ListeningPoint | null => {
+    if (book.finished || book.listeningTrackId === null) return null;
+    const track = book.tracks.find((candidate) => candidate.id === book.listeningTrackId);
+    const seconds = track && positionOf(track) ? startAtOf(track) : (book.listeningSeconds ?? 0);
+    return { trackId: book.listeningTrackId, seconds };
+  };
   // Each Track's file, by Track id, for the books played so far.
   const trackFiles = new Map<string, string>();
   const platform = createAudioElementPlatform(audio, async (_book, track) => {
@@ -151,6 +198,39 @@ export function createDesktopBookPlayer({
   }
   player.subscribe(updateProgress);
 
+  // The Track playing and where it last was, saved as its Track position once
+  // playback leaves it (another Track, the book's end, or another book).
+  let place: AudiobookTrackPosition | null = null;
+  const placeNow = (playedToEnd = false): AudiobookTrackPosition | null => {
+    const state = player.getState();
+    if (state.status !== "playing" && state.status !== "paused") return null;
+    return {
+      audiobookId: state.book.id,
+      trackId: state.book.tracks[state.trackIndex].id,
+      seconds: platform.currentTime(),
+      playedToEnd,
+      updatedAt: Date.now(),
+    };
+  };
+  const notePlace = (): void => {
+    const now = placeNow();
+    if (now && now.trackId === place?.trackId && place.playedToEnd) return;
+    place = now ?? place;
+  };
+  audio.addEventListener("timeupdate", notePlace);
+  audio.addEventListener("ended", () => {
+    place = placeNow(true) ?? place;
+  });
+  player.subscribe(() => {
+    const now = placeNow();
+    if (now?.trackId === place?.trackId) return;
+    if (place) {
+      savedPositions.set(place.trackId, place);
+      saveTrackPosition(place);
+    }
+    place = now;
+  });
+
   return {
     ...player,
     getProgress: () => progress,
@@ -168,7 +248,20 @@ export function createDesktopBookPlayer({
       updateProgress();
     },
     play: (book) => player.play(toBook(book), resumeFrom(book)),
-    jumpTo: (book, trackIndex) => player.jumpTo(toBook(book), trackIndex),
-    startOver: (book) => player.startOver(toBook(book)),
+    jumpTo: (book, trackIndex) => {
+      const track = book.tracks[trackIndex];
+      if (!track) return player.jumpTo(toBook(book), trackIndex);
+      return player.play(toBook(book), { trackId: track.id, seconds: startAtOf(track) });
+    },
+    startOver: (book) => {
+      const at = Date.now();
+      // The place playing now is part of what Start over clears.
+      if (place?.audiobookId === book.id) place = null;
+      for (const track of book.tracks) {
+        savedPositions.set(track.id, { seconds: 0, playedToEnd: false, updatedAt: at });
+      }
+      saveStartOver(book.id, at);
+      return player.startOver(toBook(book));
+    },
   };
 }

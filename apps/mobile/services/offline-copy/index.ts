@@ -4,6 +4,10 @@ import {
   getOfflineCopyRecords,
   updateVideoLocalPath,
 } from "../../db/repositories/videos";
+import {
+  getMovieOfflineCopyRecords,
+  updateHeldMovieLocalPath,
+} from "../../db/repositories/heldMovies";
 import { getVideoStorageLocation } from "../storage-location";
 import {
   documentsDir,
@@ -55,4 +59,18 @@ const platform: OfflineCopyPlatform = {
 };
 
 export const offlineCopy = createOfflineCopy(platform);
+
+/**
+ * The Movies' and Episodes' Offline copies (ADR-0005): a `movies` folder beside
+ * `videos` in every Storage location, recorded on their holds, never in the
+ * Video library.
+ */
+export const movieOfflineCopy = createOfflineCopy(
+  {
+    ...platform,
+    loadRecords: getMovieOfflineCopyRecords,
+    writeRecord: updateHeldMovieLocalPath,
+  },
+  { folder: "movies" },
+);
 export type { OfflineCopy } from "./createOfflineCopy";

@@ -1,6 +1,5 @@
 import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as FileSystemLegacy from "expo-file-system/legacy";
 import { api } from "../api";
 import { desktopFetch } from "../desktop-fetch";
 import { offlineCopy } from "../offline-copy";
@@ -12,6 +11,7 @@ import {
   type DownloadQueuePlatform,
   type StoredDownload,
 } from "./createDownloadQueue";
+import { transferFile } from "./transferFile";
 
 // Written in the shape the old persisted Zustand store used, so Downloads
 // queued before this module existed are picked up.
@@ -35,38 +35,13 @@ const platform: DownloadQueuePlatform = {
   },
   desktopFetch,
   desktop: {
-    transfer: async (serverUrl, videoId, destUri, onProgress, signal) => {
-      const transfer = FileSystemLegacy.createDownloadResumable(
+    transfer: (serverUrl, videoId, destUri, onProgress, signal) =>
+      transferFile(
         api.getVideoFileUrl(serverUrl, videoId),
         destUri,
-        {},
-        ({ totalBytesWritten, totalBytesExpectedToWrite }) => {
-          if (totalBytesExpectedToWrite > 0) {
-            onProgress(
-              Math.round((totalBytesWritten / totalBytesExpectedToWrite) * 100),
-            );
-          }
-        },
-      );
-      const abort = () => {
-        transfer.pauseAsync().catch(() => {});
-      };
-      signal.addEventListener("abort", abort);
-      try {
-        const result = await transfer.downloadAsync();
-        if (signal.aborted) throw new Error("Download cancelled");
-        // 202: the desktop lost the file and is fetching it again.
-        if (result?.status === 202) return "missing";
-        if (!result || result.status !== 200) {
-          throw new Error(
-            `Download failed: ${result?.status ?? "unknown error"}`,
-          );
-        }
-        return "done";
-      } finally {
-        signal.removeEventListener("abort", abort);
-      }
-    },
+        onProgress,
+        signal,
+      ),
     getDetails: async (serverUrl, videoId) => {
       const [meta, transcripts] = await Promise.all([
         api.getVideoMeta(serverUrl, videoId),

@@ -117,6 +117,9 @@ export const recordDeviceReport = async (
     offlineVideoIdsJson: JSON.stringify(report.offlineVideoIds),
     // Devices older than Audiobooks don't say; they hold none.
     heldAudiobookIdsJson: JSON.stringify(report.heldAudiobookIds ?? []),
+    // Devices older than Movies don't say either.
+    heldMovieIdsJson: JSON.stringify(report.heldMovieIds ?? []),
+    heldEpisodeIdsJson: JSON.stringify(report.heldEpisodeIds ?? []),
     lastSeenAt: now,
   };
   await db

@@ -603,6 +603,9 @@ export const syncDevices = sqliteTable("sync_devices", {
   offlineVideoIdsJson: text("offline_video_ids_json").notNull(),
   // Audiobooks wholly on the Device, as it last reported (ADR-0004: never Videos).
   heldAudiobookIdsJson: text("held_audiobook_ids_json").notNull().default("[]"),
+  // Movies and Episodes with an Offline copy on the Device, as it last reported (ADR-0005).
+  heldMovieIdsJson: text("held_movie_ids_json").notNull().default("[]"),
+  heldEpisodeIdsJson: text("held_episode_ids_json").notNull().default("[]"),
   lastSeenAt: integer("last_seen_at").notNull(),
 });
 

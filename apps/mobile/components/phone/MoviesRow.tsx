@@ -15,6 +15,10 @@ import type { Movie } from "../../../shared/mobile-sync-contract";
 import { colors, fontSize, fontWeight, radius, spacing } from "../../theme";
 import { Film } from "../../theme/icons";
 import { moviesRowItems } from "./moviesRowItems";
+import { showMovieOptions } from "./movieOnThisPhone";
+import { heldMovies } from "../../services/held-movies";
+import { heldTitleOfMovie } from "../../services/held-movies/heldTitle";
+import { movieOfflineCopy } from "../../services/offline-copy";
 
 const POSTER_WIDTH = 120;
 const POSTER_HEIGHT = 180;
@@ -40,8 +44,9 @@ export function MoviePoster({
 
 /**
  * The Movies Home row: the desktop's Movies (in Offline mode the last catalog
- * seen, dimmed). Tapping one Streams it. Hidden when there are none, and on a
- * desktop too old to serve Movies.
+ * seen, dimmed unless on this phone). Tapping one plays its Offline copy or
+ * Streams it; long-press offers Download to this phone or Remove from this
+ * phone. Hidden when there are none, and on a desktop too old to serve Movies.
  */
 export function MoviesRow({
   serverUrl,
@@ -61,11 +66,22 @@ export function MoviesRow({
   );
 
   const catalog = useMovieCatalogStore();
+  const getOfflineUri = movieOfflineCopy.useLookup();
+  const holds = heldMovies.useHolds();
+  const onThisPhone = (id: string) => getOfflineUri(id) !== null;
   const items = moviesRowItems({
     connected: !!serverUrl,
     movies: !serverUrl || catalog.serverUrl === serverUrl ? catalog.movies : [],
+    onThisPhone,
   });
   if (items.length === 0) return null;
+
+  const caption = (movie: Movie, needsDesktop: boolean) => {
+    if (needsDesktop) return "Needs the desktop";
+    if (onThisPhone(movie.id)) return "On this phone";
+    if (holds.some((hold) => hold.id === movie.id)) return "Downloading";
+    return null;
+  };
 
   return (
     <View style={styles.block} testID="movies-row">
@@ -86,6 +102,13 @@ export function MoviesRow({
             ]}
             disabled={needsDesktop}
             onPress={() => onPlay(movie)}
+            onLongPress={() =>
+              showMovieOptions({
+                title: heldTitleOfMovie(movie),
+                held: holds.some((hold) => hold.id === movie.id),
+                connected: !!serverUrl,
+              })
+            }
             accessibilityLabel={
               needsDesktop
                 ? `${movie.title} needs the desktop`
@@ -96,8 +119,8 @@ export function MoviesRow({
             <Text style={styles.movieTitle} numberOfLines={2}>
               {movie.title}
             </Text>
-            {needsDesktop ? (
-              <Text style={styles.caption}>Needs the desktop</Text>
+            {caption(movie, needsDesktop) ? (
+              <Text style={styles.caption}>{caption(movie, needsDesktop)}</Text>
             ) : null}
           </Pressable>
         )}

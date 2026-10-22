@@ -41,19 +41,21 @@ export type ContinueWatchingInput = {
   series: Series[];
   /** This phone's own progress in a Movie or Episode. */
   kept: (kind: MovieWatch["kind"], id: string) => MovieWatch | undefined;
+  /** Whether this phone holds the Movie's or Episode's Offline copy. */
+  onThisPhone?: (id: string) => boolean;
 };
 
 /**
  * The phone's Continue watching row: Videos, Movies in progress and each
  * started Series' next Episode, newest first. A Movie leaves once watched
  * anywhere (a desktop mark wins); a Series once no unwatched Episode remains.
- * No Movie or Episode is held on the phone yet, so in Offline mode each one
- * Needs the desktop.
+ * In Offline mode a Movie or Episode without an Offline copy here Needs the desktop.
  */
 export function mergeContinueWatching(
   input: ContinueWatchingInput,
 ): ContinueWatchingItem[] {
-  const needsDesktop = !input.connected;
+  const onThisPhone = input.onThisPhone ?? (() => false);
+  const needsDesktop = (id: string) => !input.connected && !onThisPhone(id);
   const videos = input.videos.map(
     ({ video, lastWatchedAt }, videoIndex): ContinueWatchingItem => ({
       kind: "video",
@@ -70,7 +72,14 @@ export function mergeContinueWatching(
       durationSeconds: movie.durationSeconds,
     });
     if (state !== "in-progress") return [];
-    return [{ kind: "movie", movie, lastWatchedAt: updatedAt, needsDesktop }];
+    return [
+      {
+        kind: "movie",
+        movie,
+        lastWatchedAt: updatedAt,
+        needsDesktop: needsDesktop(movie.id),
+      },
+    ];
   });
   const episodes = input.series.flatMap((series): ContinueWatchingItem[] => {
     const next = seriesNextUp(series, (id) => input.kept("episode", id));
@@ -82,7 +91,7 @@ export function mergeContinueWatching(
         series,
         episode: next.episode,
         lastWatchedAt: next.lastWatchedAt,
-        needsDesktop,
+        needsDesktop: needsDesktop(next.episode.id),
       },
     ];
   });

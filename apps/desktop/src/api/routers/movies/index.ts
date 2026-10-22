@@ -27,6 +27,7 @@ import { previewPoster, savePoster } from "@/api/movies/posters";
 import { moviePostersDir } from "@/api/movies/posters-dir";
 import { movieFiles } from "@/main/security/movie-files";
 import { planSeriesImport, suggestVideoLayout } from "@/api/movies/series-plan";
+import { devicesHoldingMovie, setMovieSentToDevices } from "@/api/movies/send-to-devices";
 import { setShownOnDevices } from "@/api/movies/shown-on-devices";
 import { notifyDevicesOfMovies } from "./notify-devices";
 import { previewedListings } from "./previewed-listings";
@@ -168,6 +169,18 @@ export const moviesRouter = t.router({
   setWatched: publicProcedure
     .input(z.object({ id: z.string(), watched: z.boolean() }))
     .mutation(({ input, ctx }) => setMovieWatched(ctx.db ?? defaultDb, input.id, input.watched)),
+
+  // Send to Devices / Remove from Devices: Devices Mirror the whole Movie.
+  setSentToDevices: publicProcedure
+    .input(z.object({ id: z.string(), sent: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      const changed = await setMovieSentToDevices(ctx.db ?? defaultDb, input.id, input.sent);
+      if (changed) await notifyDevicesOfMovies();
+    }),
+
+  devicesHolding: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(({ input, ctx }) => devicesHoldingMovie(ctx.db ?? defaultDb, input.id)),
 
   // Removes the Movie from the app only. The video file is never deleted, moved or
   // modified; only the app's own poster copy goes.

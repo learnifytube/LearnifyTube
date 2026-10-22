@@ -1,5 +1,6 @@
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { resolveRemoteAssetUrl } from "../../services/remoteAssetUrl";
+import { movieOfflineCopy } from "../../services/offline-copy";
 import { useMovieCatalogStore } from "../../stores/movieCatalog";
 import { movieWatchKey, useMovieWatchStore } from "../../stores/movieWatch";
 import type { StreamingVideo } from "../../stores/playback";
@@ -27,6 +28,7 @@ export function useContinueWatching({
 }) {
   const catalog = useMovieCatalogStore();
   const progress = useMovieWatchStore((state) => state.progress);
+  const getMovieOfflineUri = movieOfflineCopy.useLookup();
   const current = !serverUrl || catalog.serverUrl === serverUrl;
   return mergeContinueWatching({
     connected: !!serverUrl,
@@ -34,6 +36,7 @@ export function useContinueWatching({
     movies: current ? catalog.movies : [],
     series: current ? catalog.series : [],
     kept: (kind, id) => progress[movieWatchKey(kind, id)],
+    onThisPhone: (id) => getMovieOfflineUri(id) !== null,
   });
 }
 
@@ -55,7 +58,9 @@ function cardData(
     title: title.title,
     channelTitle: item.kind === "movie" ? "Movie" : item.series.title,
     duration: title.durationSeconds ?? 0,
-    thumbnailUrl: serverUrl ? resolveRemoteAssetUrl(serverUrl, posterUrl) : null,
+    thumbnailUrl: serverUrl
+      ? resolveRemoteAssetUrl(serverUrl, posterUrl)
+      : null,
   };
 }
 

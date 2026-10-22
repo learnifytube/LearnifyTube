@@ -49,6 +49,29 @@ describe("buildPhoneHome", () => {
     expect(rows[2].videos.map((item) => item.id)).toEqual(["v1", "v2"]);
   });
 
+  it("adds the Movies and Episodes with an Offline copy to On this phone, newest first", () => {
+    const hold = (id: string, heldAt: number) => ({
+      kind: "movie" as const,
+      id,
+      title: id,
+      posterUrl: null,
+      durationSeconds: 6000,
+      reasons: ["mirrored" as const],
+      heldAt,
+    });
+    const rows = buildPhoneHome(
+      base({
+        connected: false,
+        heldMovies: [hold("up", 2), hold("arriving", 3), hold("alien", 1)],
+        hasMovieOfflineCopy: (id) => id !== "arriving",
+      }),
+    );
+
+    expect(rows.map((row) => row.id)).toEqual([ON_THIS_PHONE_ID]);
+    expect(rows[0].videos).toEqual([]);
+    expect(rows[0].movies?.map((item) => item.id)).toEqual(["up", "alien"]);
+  });
+
   it("omits On this phone row when empty or when no videos have an offline copy", () => {
     const rows = buildPhoneHome(
       base({

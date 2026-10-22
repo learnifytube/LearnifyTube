@@ -2,6 +2,7 @@ import {
   SYNC_SSE_EVENT_AUDIOBOOKS,
   SYNC_SSE_EVENT_MOVIES,
   SYNC_SSE_EVENT_ON_DEVICE_SET,
+  type MovieCatalog,
   type MovieWatch,
   type OnDeviceSet,
 } from "../../../shared/mobile-sync-contract";
@@ -100,6 +101,11 @@ function createHarness({
     movieWatch: [] as MovieWatch[],
     movieCatalogRefreshes: [] as string[],
     movieCatalogFails: false,
+    // What the desktop serves as its Movie catalog; null for a desktop too old.
+    movieCatalog: { movies: [], series: [] } as MovieCatalog | null,
+    movieMirrors: [] as MovieCatalog[],
+    movieMirrorFails: false,
+    heldMovies: { movieIds: [] as string[], episodeIds: [] as string[] },
     // The desktops listened to for pushed sync events, and how to push one.
     listening: [] as string[],
     pushEvent: (_event: string) => {},
@@ -185,7 +191,13 @@ function createHarness({
       refreshCatalog: async (serverUrl) => {
         if (state.movieCatalogFails) throw new Error("Catalog request failed");
         state.movieCatalogRefreshes.push(serverUrl);
+        return state.movieCatalog;
       },
+      mirror: async (catalog) => {
+        if (state.movieMirrorFails) throw new Error("Disk full");
+        state.movieMirrors.push(catalog);
+      },
+      heldIds: () => state.heldMovies,
     },
   };
   return { state, mirror: createDeviceMirror(platform) };
@@ -270,6 +282,8 @@ describe("device mirror", () => {
         ],
         heldAudiobookIds: ["orwell"],
         movieWatch: [],
+        heldMovieIds: [],
+        heldEpisodeIds: [],
       },
     ]);
   });
@@ -297,6 +311,42 @@ describe("device mirror", () => {
   it("still Mirrors Videos and reports when the Movie catalog fails", async () => {
     const { state, mirror } = createHarness({ set: ["a"] });
     state.movieCatalogFails = true;
+    await mirror.syncNow();
+    expect(state.requested).toEqual(["a"]);
+    expect(state.reports).toHaveLength(1);
+  });
+
+  it("Mirrors the sent Movies from the catalog it just refetched", async () => {
+    const { state, mirror } = createHarness({ set: [] });
+    const served: MovieCatalog = { movies: [], series: [] };
+    state.movieCatalog = served;
+    await mirror.syncNow();
+    expect(state.movieMirrors).toEqual([served]);
+  });
+
+  it("leaves the Movies it holds alone on a desktop too old to serve Movies", async () => {
+    const { state, mirror } = createHarness({ set: [] });
+    state.movieCatalog = null;
+    await mirror.syncNow();
+    expect(state.movieMirrors).toEqual([]);
+    expect(state.reports).toHaveLength(1);
+  });
+
+  it("reports the Movies and Episodes it holds", async () => {
+    const { state, mirror } = createHarness({ set: [] });
+    state.heldMovies = { movieIds: ["up"], episodeIds: ["pilot"] };
+    await mirror.syncNow();
+    expect(state.reports).toEqual([
+      expect.objectContaining({
+        heldMovieIds: ["up"],
+        heldEpisodeIds: ["pilot"],
+      }),
+    ]);
+  });
+
+  it("still Mirrors Videos and reports when the Movie Mirror fails", async () => {
+    const { state, mirror } = createHarness({ set: ["a"] });
+    state.movieMirrorFails = true;
     await mirror.syncNow();
     expect(state.requested).toEqual(["a"]);
     expect(state.reports).toHaveLength(1);

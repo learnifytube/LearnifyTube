@@ -239,6 +239,21 @@ export const favorites = sqliteTable(
   ]
 );
 
+// Movies and Episodes held on this Device (ADR-0005: never Videos): why it
+// holds each one, what it shows of it, and its Offline copy record.
+export const heldMovies = sqliteTable("held_movies", {
+  id: text("id").primaryKey(),
+  kind: text("kind", { enum: ["movie", "episode"] }).notNull(),
+  title: text("title").notNull(),
+  posterUrl: text("poster_url"),
+  durationSeconds: integer("duration_seconds"),
+  // JSON array of "pulled" | "mirrored".
+  reasonsJson: text("reasons_json").notNull(),
+  // Written only by the Movies' Offline copy module.
+  localPath: text("local_path"),
+  heldAt: integer("held_at").notNull(),
+});
+
 // TypeScript types
 export type Video = typeof videos.$inferSelect;
 export type NewVideo = typeof videos.$inferInsert;

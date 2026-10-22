@@ -3,6 +3,7 @@ import {
   SYNC_SSE_EVENT_MOVIES,
   SYNC_SSE_EVENT_ON_DEVICE_SET,
   type DeviceReport,
+  type MovieCatalog,
   type OnDeviceSet,
 } from "../../../shared/mobile-sync-contract";
 
@@ -63,7 +64,11 @@ export type DeviceMirrorPlatform = {
      * Refetches the desktop's Movie catalog into the Catalog snapshot, so a
      * title switched off Shown on Devices leaves the Device at once.
      */
-    refreshCatalog: (serverUrl: string) => Promise<void>;
+    refreshCatalog: (serverUrl: string) => Promise<MovieCatalog | null>;
+    /** The Movie Mirror (`createMovieMirror`), planned from the catalog just refetched. */
+    mirror: (catalog: MovieCatalog) => Promise<void>;
+    /** Movies and Episodes with an Offline copy on this Device. */
+    heldIds: () => { movieIds: string[]; episodeIds: string[] };
   };
 };
 
@@ -137,9 +142,19 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
     await platform.audiobooks.mirror(serverUrl).catch((error) => {
       console.warn("[DeviceMirror] Audiobook Mirror failed", error);
     });
-    await platform.movies.refreshCatalog(serverUrl).catch((error) => {
-      console.warn("[DeviceMirror] Movie catalog failed", error);
-    });
+    // Null on a desktop too old to serve Movies: what the Device holds stays.
+    const movieCatalog = await platform.movies
+      .refreshCatalog(serverUrl)
+      .catch((error) => {
+        console.warn("[DeviceMirror] Movie catalog failed", error);
+        return null;
+      });
+    if (movieCatalog) {
+      await platform.movies.mirror(movieCatalog).catch((error) => {
+        console.warn("[DeviceMirror] Movie Mirror failed", error);
+      });
+    }
+    const heldMovies = platform.movies.heldIds();
 
     await platform.desktop.report(serverUrl, {
       deviceId: await platform.device.getId(),
@@ -150,6 +165,8 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
       listening: platform.getListening(),
       heldAudiobookIds: await platform.audiobooks.heldIds(),
       movieWatch: platform.getMovieWatch(),
+      heldMovieIds: heldMovies.movieIds,
+      heldEpisodeIds: heldMovies.episodeIds,
     });
 
     // Videos held from before thumbnails were stored with Offline copies;

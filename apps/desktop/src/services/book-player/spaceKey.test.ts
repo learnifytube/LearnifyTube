@@ -25,7 +25,17 @@ const book: DesktopAudiobook = {
   listeningTrackId: null,
   listeningSeconds: null,
   finished: false,
-  tracks: [{ id: "t1", filePath: "/books/Frankl/01.mp3", durationSeconds: 300, missing: false }],
+  tracks: [
+    {
+      id: "t1",
+      filePath: "/books/Frankl/01.mp3",
+      durationSeconds: 300,
+      missing: false,
+      resumeSeconds: null,
+      playedToEnd: false,
+      resumeUpdatedAt: null,
+    },
+  ],
 };
 
 // A key press with focus on the page itself, unless `target` says otherwise.
@@ -52,6 +62,8 @@ const setup = () => {
     audio: silentAudio(),
     page: { addEventListener: () => undefined },
     saveListening: () => undefined,
+    saveTrackPosition: () => undefined,
+    saveStartOver: () => undefined,
   });
   return { player };
 };

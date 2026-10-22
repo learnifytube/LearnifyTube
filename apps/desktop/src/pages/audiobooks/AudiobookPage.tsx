@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, RefreshCw, Trash2, Volume2 } from "lucide-react";
+import { Check, Pencil, RefreshCw, Trash2, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpcClient } from "@/utils/trpc";
 import { cn } from "@/lib/utils";
@@ -23,7 +23,30 @@ import { AudiobookOnDevices } from "./components/AudiobookOnDevices";
 import { AudiobookPlayButtons, useCurrentTrackId } from "./components/AudiobookPlayButtons";
 import { EditAudiobookDialog } from "./components/EditAudiobookDialog";
 import { SortableTrackList } from "./components/SortableTrackList";
-import { formatListeningTime } from "./format";
+import { formatListeningTime, trackListenState } from "./format";
+
+// Not started, in progress (at its Track position) or played to the end.
+function TrackListenBadge({
+  track,
+}: {
+  track: { resumeSeconds: number | null; playedToEnd: boolean };
+}): React.JSX.Element | null {
+  const state = trackListenState(track);
+  if (state === "not-started") return null;
+  if (state === "played-to-end") {
+    return (
+      <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+        <Check className="h-3 w-3" />
+        Played
+      </span>
+    );
+  }
+  return (
+    <span className="shrink-0 text-xs text-primary">
+      At {formatListeningTime(track.resumeSeconds)}
+    </span>
+  );
+}
 
 type AudiobookDetail = NonNullable<Awaited<ReturnType<typeof trpcClient.audiobooks.get.query>>>;
 
@@ -170,6 +193,7 @@ export default function AudiobookPage(): React.JSX.Element {
                     </span>
                   </button>
                   {track.missing && <span className="text-xs text-destructive">Missing</span>}
+                  <TrackListenBadge track={track} />
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {formatListeningTime(track.durationSeconds)}
                   </span>

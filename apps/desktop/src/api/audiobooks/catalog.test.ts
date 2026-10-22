@@ -82,9 +82,27 @@ describe("Audiobook catalog", () => {
         // Versioned, so a changed cover isn't shown from a Device's image cache.
         coverUrl: "http://desktop/api/audiobook/frankl/cover?v=5",
         tracks: [
-          { id: "t1", title: "Track 01", durationSeconds: 300, missing: false },
-          { id: "t2", title: "Track 02", durationSeconds: 240, missing: false },
-          { id: "t3", title: "Track 1", durationSeconds: null, missing: true },
+          {
+            id: "t1",
+            title: "Track 01",
+            durationSeconds: 300,
+            missing: false,
+            trackPosition: null,
+          },
+          {
+            id: "t2",
+            title: "Track 02",
+            durationSeconds: 240,
+            missing: false,
+            trackPosition: null,
+          },
+          {
+            id: "t3",
+            title: "Track 1",
+            durationSeconds: null,
+            missing: true,
+            trackPosition: null,
+          },
         ],
         listeningPosition: null,
         finished: false,

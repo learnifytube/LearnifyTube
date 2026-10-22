@@ -25,11 +25,14 @@ import {
   saveCoverFromImage,
 } from "@/api/audiobooks/covers";
 import { planRescan } from "@/api/audiobooks/rescan-plan";
-import { recordDesktopListening } from "@/api/audiobooks/listening";
+import { recordDesktopListening, startBookOver } from "@/api/audiobooks/listening";
+import { recordTrackPosition } from "@/api/audiobooks/track-positions";
 import { trackFiles } from "@/main/security/track-files";
 import {
   audiobookListeningSchema,
+  audiobookTrackPositionSchema,
   type AudiobookListening,
+  type AudiobookTrackPosition,
 } from "../../../../../shared/mobile-sync-contract";
 import {
   devicesHoldingAudiobook,
@@ -364,6 +367,37 @@ export const audiobooksRouter = t.router({
     .mutation(({ input, ctx }) =>
       recordDesktopListening(ctx.db ?? defaultDb, input, () => void notifyDevices())
     ),
+
+  // A Track's place as the desktop Book player leaves it; newest wins, as from a Device.
+  recordTrackPosition: publicProcedure
+    .input(
+      z.custom<AudiobookTrackPosition>(
+        (value) => audiobookTrackPositionSchema.safeParse(value).success
+      )
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = ctx.db ?? defaultDb;
+      const kept = await recordTrackPosition(db, input);
+      if (!kept) return;
+      const [book] = await db
+        .select({ sentToDevices: audiobooks.sentToDevices })
+        .from(audiobooks)
+        .where(eq(audiobooks.id, input.audiobookId));
+      if (book?.sentToDevices) await notifyDevices();
+    }),
+
+  // Start over: a desktop mark clearing every Track position, so older Device reports lose.
+  startOver: publicProcedure
+    .input(z.object({ id: z.string(), at: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = ctx.db ?? defaultDb;
+      await startBookOver(db, input.id, input.at);
+      const [book] = await db
+        .select({ sentToDevices: audiobooks.sentToDevices })
+        .from(audiobooks)
+        .where(eq(audiobooks.id, input.id));
+      if (book?.sentToDevices) await notifyDevices();
+    }),
 
   devicesHolding: publicProcedure
     .input(z.object({ id: z.string() }))

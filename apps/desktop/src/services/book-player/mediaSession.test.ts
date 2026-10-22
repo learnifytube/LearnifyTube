@@ -46,7 +46,7 @@ const book: DesktopAudiobook = {
   tracks: [
     { id: "t1", filePath: "/books/Frankl/Track 01.mp3", durationSeconds: 300, missing: false },
     { id: "t2", filePath: "/books/Frankl/Track 02.mp3", durationSeconds: 300, missing: false },
-  ],
+  ].map((track) => ({ ...track, resumeSeconds: null, playedToEnd: false, resumeUpdatedAt: null })),
 };
 
 const setup = () => {
@@ -55,6 +55,8 @@ const setup = () => {
     audio,
     page: { addEventListener: () => undefined },
     saveListening: () => undefined,
+    saveTrackPosition: () => undefined,
+    saveStartOver: () => undefined,
   });
   const session = createFakeMediaSession();
   connectMediaSession(player, session, (metadata) => metadata);

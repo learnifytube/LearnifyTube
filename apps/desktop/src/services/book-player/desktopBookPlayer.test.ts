@@ -1,4 +1,5 @@
 import type { ListeningSave } from "../../../../shared/book-player/keepListeningPosition";
+import type { AudiobookTrackPosition } from "../../../../shared/mobile-sync-contract";
 import { createDesktopBookPlayer, type DesktopAudiobook } from "./desktopBookPlayer";
 
 // An <audio> element as Chromium drives it, without the sound.
@@ -72,6 +73,9 @@ const createFakeAudio = () => {
   return audio;
 };
 
+// A Track never played: no Track position yet.
+const notStarted = { resumeSeconds: null, playedToEnd: false, resumeUpdatedAt: null };
+
 const frankl = (overrides: Partial<DesktopAudiobook> = {}): DesktopAudiobook => ({
   id: "frankl",
   title: "Man's Search for Meaning",
@@ -81,9 +85,27 @@ const frankl = (overrides: Partial<DesktopAudiobook> = {}): DesktopAudiobook => 
   listeningSeconds: null,
   finished: false,
   tracks: [
-    { id: "t1", filePath: "/books/Frankl/CD 1/Track 01.mp3", durationSeconds: 300, missing: false },
-    { id: "t2", filePath: "/books/Frankl/CD 1/Track 02.mp3", durationSeconds: 300, missing: false },
-    { id: "t3", filePath: "/books/Frankl/CD 2/Track 01.mp3", durationSeconds: 300, missing: false },
+    {
+      id: "t1",
+      filePath: "/books/Frankl/CD 1/Track 01.mp3",
+      durationSeconds: 300,
+      missing: false,
+      ...notStarted,
+    },
+    {
+      id: "t2",
+      filePath: "/books/Frankl/CD 1/Track 02.mp3",
+      durationSeconds: 300,
+      missing: false,
+      ...notStarted,
+    },
+    {
+      id: "t3",
+      filePath: "/books/Frankl/CD 2/Track 01.mp3",
+      durationSeconds: 300,
+      missing: false,
+      ...notStarted,
+    },
   ],
   ...overrides,
 });
@@ -112,10 +134,14 @@ const setup = ({ savedSpeed = 1 }: { savedSpeed?: number } = {}) => {
   const saves: ListeningSave[] = [];
   const speed = { saved: savedSpeed };
   const skipped: string[][] = [];
+  const trackPositions: AudiobookTrackPosition[] = [];
+  const startedOver: { audiobookId: string; at: number }[] = [];
   const player = createDesktopBookPlayer({
     audio,
     page,
     saveListening: (save) => saves.push(save),
+    saveTrackPosition: (position) => trackPositions.push(position),
+    saveStartOver: (audiobookId, at) => startedOver.push({ audiobookId, at }),
     speed: {
       get: () => speed.saved,
       set: (rate) => {
@@ -124,7 +150,7 @@ const setup = ({ savedSpeed = 1 }: { savedSpeed?: number } = {}) => {
     },
   });
   player.onTracksSkipped((tracks) => skipped.push(tracks.map((track) => track.title)));
-  return { audio, page, saves, speed, skipped, player };
+  return { audio, page, saves, speed, skipped, trackPositions, startedOver, player };
 };
 
 const trackPlaying = (player: ReturnType<typeof setup>["player"]) => {
@@ -237,7 +263,7 @@ describe("Desktop Book player", () => {
     expect(player.getState().status).toBe("playing");
   });
 
-  it("plays a picked Track from its start, and Start over from Track 1", async () => {
+  it("plays a picked Track never played from its start, and Start over from Track 1", async () => {
     const { audio, player } = setup();
     const book = frankl({ listeningTrackId: "t2", listeningSeconds: 754 });
 
@@ -247,6 +273,95 @@ describe("Desktop Book player", () => {
     await player.startOver(book);
     audio.ready();
     expect(audio.src).toBe(TRACK_1);
+    expect(audio.currentTime).toBe(0);
+  });
+
+  it("resumes a picked Track from its Track position", async () => {
+    const { audio, player } = setup();
+    const book = frankl();
+    book.tracks[1] = { ...book.tracks[1], resumeSeconds: 2400, resumeUpdatedAt: 1_000 };
+
+    await player.jumpTo(book, 1);
+    audio.ready(3000);
+
+    expect(audio.src).toBe(TRACK_2);
+    expect(audio.currentTime).toBe(2400);
+  });
+
+  it("plays a picked Track played to its end from 0", async () => {
+    const { audio, player } = setup();
+    const book = frankl();
+    book.tracks[0] = {
+      ...book.tracks[0],
+      resumeSeconds: 300,
+      playedToEnd: true,
+      resumeUpdatedAt: 1_000,
+    };
+
+    await player.jumpTo(book, 0);
+    audio.ready();
+
+    expect(audio.src).toBe(TRACK_1);
+    expect(audio.currentTime).toBe(0);
+  });
+
+  it("resumes Track 2 at 40:00 after jumping to another Track and back", async () => {
+    const { audio, trackPositions, player } = setup();
+    const book = frankl();
+    await player.jumpTo(book, 1);
+    audio.ready(3000);
+    jest.setSystemTime(7_000);
+    audio.playTo(2400);
+
+    await player.jumpTo(book, 2);
+    expect(trackPositions).toEqual([
+      { audiobookId: "frankl", trackId: "t2", seconds: 2400, playedToEnd: false, updatedAt: 7_000 },
+    ]);
+
+    await player.jumpTo(book, 1);
+    audio.ready(3000);
+    expect(audio.src).toBe(TRACK_2);
+    expect(audio.currentTime).toBe(2400);
+  });
+
+  it("saves a Track that played to its end as played to its end", async () => {
+    const { audio, trackPositions, player } = setup();
+    await player.play(frankl());
+    audio.ready();
+    audio.playTo(299.8);
+
+    audio.finish();
+    await player.settled();
+
+    expect(trackPositions.at(-1)).toMatchObject({ trackId: "t1", playedToEnd: true });
+  });
+
+  it("plays the book from the Track last played, at that Track's own time", async () => {
+    const { audio, player } = setup();
+    const book = frankl({ listeningTrackId: "t2", listeningSeconds: 754 });
+    book.tracks[1] = { ...book.tracks[1], resumeSeconds: 1200, resumeUpdatedAt: 2_000 };
+
+    await player.play(book);
+    audio.ready(3000);
+
+    expect(audio.src).toBe(TRACK_2);
+    expect(audio.currentTime).toBe(1200);
+  });
+
+  it("records Start over, and forgets the Track positions it knew", async () => {
+    const { audio, startedOver, player } = setup();
+    const book = frankl();
+    await player.jumpTo(book, 1);
+    audio.ready(3000);
+    audio.playTo(2400);
+    await player.jumpTo(book, 2);
+    jest.setSystemTime(9_000);
+
+    await player.startOver(book);
+    expect(startedOver).toEqual([{ audiobookId: "frankl", at: 9_000 }]);
+
+    await player.jumpTo(book, 1);
+    audio.ready(3000);
     expect(audio.currentTime).toBe(0);
   });
 

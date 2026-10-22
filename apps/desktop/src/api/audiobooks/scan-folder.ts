@@ -3,9 +3,11 @@ import fs from "fs";
 import path from "path";
 import { logger } from "@/helpers/logger";
 import { getFfmpegPath } from "@/services/optimization-queue/optimization-worker";
+import { isVideoPath } from "@/api/movies/import-plan";
 import { isAudioPath, type FolderListing, type ListedFile } from "./import-plan";
 
-// Reads the picked folder for the import planner. Only ever reads the user's files.
+// Reads the picked folder for the Import planners (Audiobooks and Movies). Only
+// ever reads the user's files.
 
 const PROBE_CONCURRENCY = 6;
 
@@ -23,7 +25,24 @@ const walk = async (root: string, relative = ""): Promise<string[]> => {
   return nested.flat();
 };
 
-type Probe = Pick<ListedFile, "artist" | "durationSeconds" | "hasEmbeddedArt">;
+type Streams = Pick<ListedFile, "videoCodec" | "audioCodec" | "attachedPicStream">;
+
+type Probe = Pick<ListedFile, "artist" | "durationSeconds" | "hasEmbeddedArt"> & Streams;
+
+const STREAM_LINE = /^\s*Stream #\d+:(\d+)\S*: (Video|Audio): (\w+)(.*)$/gm;
+
+// A video file's codecs and its embedded art ("attached pic") stream, if any.
+const parseStreams = (output: string): Streams => {
+  let videoCodec: string | null = null;
+  let audioCodec: string | null = null;
+  let attachedPicStream: number | null = null;
+  for (const [, index, type, codec, rest] of output.matchAll(STREAM_LINE)) {
+    if (type === "Video" && rest.includes("(attached pic)")) attachedPicStream ??= Number(index);
+    else if (type === "Video") videoCodec ??= codec;
+    else audioCodec ??= codec;
+  }
+  return { videoCodec, audioCodec, attachedPicStream };
+};
 
 // `ffmpeg -i` prints the container's tags, duration and streams to stderr.
 const parseProbe = (output: string): Probe => {
@@ -32,7 +51,12 @@ const parseProbe = (output: string): Probe => {
   const durationSeconds = duration
     ? Number(duration[1]) * 3600 + Number(duration[2]) * 60 + Number(duration[3])
     : null;
-  return { artist, durationSeconds, hasEmbeddedArt: /Stream #\d+:\d+.*: Video:/.test(output) };
+  return {
+    artist,
+    durationSeconds,
+    hasEmbeddedArt: /Stream #\d+:\d+.*: Video:/.test(output),
+    ...parseStreams(output),
+  };
 };
 
 const probe = (ffmpegPath: string, filePath: string): Promise<Probe> =>
@@ -62,11 +86,29 @@ const mapLimited = async <T, R>(
 export const scanFolder = async (folderPath: string): Promise<FolderListing> => {
   const paths = await walk(folderPath);
   const ffmpegPath = getFfmpegPath();
-  if (!ffmpegPath) logger.warn("[audiobooks] ffmpeg not found; importing without tags");
-  const files = await mapLimited(paths, PROBE_CONCURRENCY, async (relative) => {
-    if (!ffmpegPath || !isAudioPath(relative)) return { path: relative };
-    return { path: relative, ...(await probe(ffmpegPath, path.join(folderPath, relative))) };
-  });
+  if (!ffmpegPath) logger.warn("[import] ffmpeg not found; importing without tags");
+  const files = await mapLimited(
+    paths,
+    PROBE_CONCURRENCY,
+    async (relative): Promise<ListedFile> => {
+      if (!ffmpegPath) return { path: relative };
+      if (isAudioPath(relative)) {
+        const { artist, durationSeconds, hasEmbeddedArt } = await probe(
+          ffmpegPath,
+          path.join(folderPath, relative)
+        );
+        return { path: relative, artist, durationSeconds, hasEmbeddedArt };
+      }
+      if (isVideoPath(relative)) {
+        const { durationSeconds, videoCodec, audioCodec, attachedPicStream } = await probe(
+          ffmpegPath,
+          path.join(folderPath, relative)
+        );
+        return { path: relative, durationSeconds, videoCodec, audioCodec, attachedPicStream };
+      }
+      return { path: relative };
+    }
+  );
   return { name: path.basename(folderPath), files };
 };
 

@@ -11,6 +11,11 @@ export type ListedFile = {
   artist?: string | null;
   durationSeconds?: number | null;
   hasEmbeddedArt?: boolean;
+  // Video files only (Movies and Episodes): the first video and audio streams'
+  // codecs, and the stream holding embedded art ("attached pic"), if any.
+  videoCodec?: string | null;
+  audioCodec?: string | null;
+  attachedPicStream?: number | null;
 };
 
 export type FolderListing = {

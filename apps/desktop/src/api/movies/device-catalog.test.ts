@@ -43,7 +43,7 @@ const importFilms = (db: Db): Promise<string[]> =>
     1000
   );
 
-// Series import is #51; until then a Series is written as Import will save it.
+// Written as rows, with a sent Season and Shown on Devices set directly: their setters come with #56 and #58.
 const addSeries = async (db: Db, shownOnDevices = true): Promise<void> => {
   await db.insert(schema.series).values({
     id: "office",

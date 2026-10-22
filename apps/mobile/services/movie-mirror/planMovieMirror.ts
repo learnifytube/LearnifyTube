@@ -1,6 +1,9 @@
 import type { MovieCatalog } from "../../../shared/mobile-sync-contract";
 import type { HeldTitle, MovieHoldReason } from "../held-movies/types";
-import { heldTitleOfMovie } from "../held-movies/heldTitle";
+import {
+  heldTitleOfEpisode,
+  heldTitleOfMovie,
+} from "../held-movies/heldTitle";
 
 /** A Movie or Episode the desktop sent to Devices. */
 export type SentTitle = HeldTitle & {
@@ -9,13 +12,25 @@ export type SentTitle = HeldTitle & {
 };
 
 /**
- * Everything the desktop sent, one entry per file: each sent Movie. Episodes
- * of sent Seasons join here, so the plan stays per file.
+ * Everything the desktop sent, one entry per file: each sent Movie, and every
+ * Episode of each sent Season (a Series is only ever sent a Season at a time),
+ * so Episodes a Rescan adds to a sent Season come along.
  */
 export function sentTitles(catalog: MovieCatalog): SentTitle[] {
-  return catalog.movies
+  const movies = catalog.movies
     .filter((movie) => movie.sentToDevices)
     .map((movie) => ({ ...heldTitleOfMovie(movie), missing: movie.missing }));
+  const episodes = catalog.series.flatMap((series) =>
+    series.seasons
+      .filter((season) => season.sentToDevices)
+      .flatMap((season) =>
+        season.episodes.map((episode) => ({
+          ...heldTitleOfEpisode(series, episode),
+          missing: episode.missing,
+        })),
+      ),
+  );
+  return [...movies, ...episodes];
 }
 
 /**

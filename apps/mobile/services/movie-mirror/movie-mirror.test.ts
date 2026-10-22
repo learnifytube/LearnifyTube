@@ -1,4 +1,10 @@
-import type { Movie, MovieCatalog } from "../../../shared/mobile-sync-contract";
+import type {
+  Episode,
+  Movie,
+  MovieCatalog,
+  Season,
+  Series,
+} from "../../../shared/mobile-sync-contract";
 import { planMovieMirror, sentTitles } from "./planMovieMirror";
 
 const movie = (id: string, overrides: Partial<Movie> = {}): Movie => ({
@@ -14,6 +20,30 @@ const movie = (id: string, overrides: Partial<Movie> = {}): Movie => ({
 });
 
 const sent = (id: string, missing = false) => ({ id, missing });
+
+const episode = (id: string, overrides: Partial<Episode> = {}): Episode => ({
+  id,
+  title: id,
+  number: null,
+  durationSeconds: 1200,
+  missing: false,
+  captions: [],
+  watch: null,
+  ...overrides,
+});
+
+const season = (
+  id: string,
+  sentToDevices: boolean,
+  episodes: Episode[],
+): Season => ({ id, title: id, number: null, sentToDevices, episodes });
+
+const office = (...seasons: Season[]): Series => ({
+  id: "office",
+  title: "The Office",
+  posterUrl: "/api/series/office/poster?v=1",
+  seasons,
+});
 
 describe("planMovieMirror", () => {
   it("Downloads every sent Movie the phone doesn't hold", () => {
@@ -124,5 +154,69 @@ describe("sentTitles", () => {
         missing: true,
       },
     ]);
+  });
+
+  it("lists every Episode of a sent Season, as the phone shows it, and none of an unsent one", () => {
+    const catalog: MovieCatalog = {
+      movies: [],
+      series: [
+        office(
+          season("s1", true, [
+            episode("e1", { title: "Pilot" }),
+            episode("e2", { title: "Diversity Day", missing: true }),
+          ]),
+          season("s2", false, [episode("e3")]),
+        ),
+      ],
+    };
+
+    expect(sentTitles(catalog)).toEqual([
+      {
+        kind: "episode",
+        id: "e1",
+        title: "The Office · Pilot",
+        posterUrl: "/api/series/office/poster?v=1",
+        durationSeconds: 1200,
+        missing: false,
+      },
+      {
+        kind: "episode",
+        id: "e2",
+        title: "The Office · Diversity Day",
+        posterUrl: "/api/series/office/poster?v=1",
+        durationSeconds: 1200,
+        missing: true,
+      },
+    ]);
+  });
+
+  it("lets go of the Episodes the Mirror brought once their Season is no longer sent", () => {
+    const plan = planMovieMirror({
+      sent: sentTitles({
+        movies: [],
+        series: [office(season("s1", false, [episode("e1")]))],
+      }),
+      holds: [
+        { id: "e1", reasons: ["mirrored"] },
+        // Downloaded to this phone by the user: stays.
+        { id: "e2", reasons: ["pulled"] },
+      ],
+    });
+
+    expect(plan.download).toEqual([]);
+    expect(plan.release).toEqual(["e1"]);
+  });
+
+  it("Downloads an Episode a Rescan added to a sent Season", () => {
+    const plan = planMovieMirror({
+      sent: sentTitles({
+        movies: [],
+        series: [office(season("s1", true, [episode("e1"), episode("e2")]))],
+      }),
+      holds: [{ id: "e1", reasons: ["mirrored"] }],
+    });
+
+    expect(plan.download).toEqual(["e1", "e2"]);
+    expect(plan.release).toEqual([]);
   });
 });

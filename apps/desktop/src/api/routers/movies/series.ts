@@ -7,6 +7,7 @@ import defaultDb from "@/api/db";
 import { removeAppCover } from "@/api/audiobooks/covers";
 import type { FolderListing } from "@/api/audiobooks/import-plan";
 import { scanFolder } from "@/api/audiobooks/scan-folder";
+import { devicesHoldingSeason, setSeasonSentToDevices } from "@/api/movies/send-to-devices";
 import { rescanSeries } from "@/api/movies/series-rescan";
 import { planSeriesImport, reorderSeries } from "@/api/movies/series-plan";
 import {
@@ -111,11 +112,24 @@ export const seriesRouter = t.router({
     const result = await rescanSeries(db, input.id, listing);
     if (!result) return { added: 0, missing: 0 };
     if (result.filesChanged) movieFiles.tracksChanged();
-    // #56: Episodes added to a Season sent to Devices (`result.seasonsWithNewEpisodes`)
-    // are sent with it; send them here, before Devices are told.
+    // Sent is the Season's state, so Episodes added to a sent Season are sent
+    // with it: Devices Mirror them once they are told.
     await notifyDevicesOfMovies();
     return { added: result.added, missing: result.missing };
   }),
+
+  // Send to Devices / Remove from Devices, one Season at a time; a whole
+  // Series is never sent at once.
+  setSeasonSentToDevices: publicProcedure
+    .input(z.object({ id: z.string(), sent: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      const changed = await setSeasonSentToDevices(ctx.db ?? defaultDb, input.id, input.sent);
+      if (changed) await notifyDevicesOfMovies();
+    }),
+
+  devicesHoldingSeason: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(({ input, ctx }) => devicesHoldingSeason(ctx.db ?? defaultDb, input.id)),
 
   // Removes the Series from the app only; its files are never touched.
   forget: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input, ctx }) => {

@@ -5,6 +5,7 @@ import { WatchStateBadge } from "@/components/WatchStateBadge";
 import { cn } from "@/lib/utils";
 import type { EpisodesTarget, SeriesSeason } from "@/api/movies/series-catalog";
 import { formatListeningTime } from "@/pages/audiobooks/format";
+import { SeasonOnDevices } from "./SeasonOnDevices";
 
 function MarkButton({
   watched,
@@ -61,6 +62,9 @@ export function SeriesSeasons({
               disabled={marking}
               onMark={(watched) => onMark({ seasonId: season.id }, watched)}
             />
+          </div>
+          <div className="border-b px-3 py-2">
+            <SeasonOnDevices id={season.id} sentToDevices={season.sentToDevices} />
           </div>
           <ol className="divide-y">
             {season.episodes.map((episode) => (

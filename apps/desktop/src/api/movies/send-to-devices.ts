@@ -1,6 +1,6 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { Database } from "@/api/db";
-import { movies, syncDevices } from "@/api/db/schema";
+import { episodes, movies, seasons, syncDevices } from "@/api/db/schema";
 
 // Sending to Devices (ADR-0005): a Movie goes whole, a Series one Season at a
 // time. Devices Mirror what was sent and report the Movies and Episodes they hold.
@@ -65,3 +65,41 @@ export const devicesHoldingTitles = async (
 /** The Devices that last reported holding the Movie, most recently seen first. */
 export const devicesHoldingMovie = (db: Database, movieId: string): Promise<TitleDevice[]> =>
   devicesHoldingTitles(db, "movie", [movieId]);
+
+/**
+ * Sends one Season to Devices, or removes it from them; a whole Series is never
+ * sent at once. Episodes a later Rescan adds to the Season are sent with it.
+ * Returns whether anything changed.
+ */
+export const setSeasonSentToDevices = async (
+  db: Database,
+  seasonId: string,
+  sent: boolean
+): Promise<boolean> => {
+  const [season] = await db
+    .select({ sentToDevices: seasons.sentToDevices })
+    .from(seasons)
+    .where(eq(seasons.id, seasonId));
+  if (!season || season.sentToDevices === sent) return false;
+  await db.update(seasons).set({ sentToDevices: sent }).where(eq(seasons.id, seasonId));
+  return true;
+};
+
+/**
+ * The Devices holding every Episode of the Season that can play (a missing
+ * file can't be Downloaded), most recently seen first.
+ */
+export const devicesHoldingSeason = async (
+  db: Database,
+  seasonId: string
+): Promise<TitleDevice[]> => {
+  const playable = await db
+    .select({ id: episodes.id })
+    .from(episodes)
+    .where(and(eq(episodes.seasonId, seasonId), eq(episodes.missing, false)));
+  return devicesHoldingTitles(
+    db,
+    "episode",
+    playable.map((episode) => episode.id)
+  );
+};

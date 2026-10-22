@@ -19,6 +19,45 @@ const catalogOf = (...movies: Movie[]): MovieCatalog => ({
   series: [],
 });
 
+// The Office, with Season 1 (e1, e2) sent or not, and Season 2 (e3) never sent.
+const officeCatalog = (season1Sent: boolean): MovieCatalog => {
+  const episode = (id: string) => ({
+    id,
+    title: id,
+    number: null,
+    durationSeconds: 1200,
+    missing: false,
+    captions: [],
+    watch: null,
+  });
+  return {
+    movies: [],
+    series: [
+      {
+        id: "office",
+        title: "The Office",
+        posterUrl: null,
+        seasons: [
+          {
+            id: "s1",
+            title: "Season 1",
+            number: 1,
+            sentToDevices: season1Sent,
+            episodes: [episode("e1"), episode("e2")],
+          },
+          {
+            id: "s2",
+            title: "Season 2",
+            number: 2,
+            sentToDevices: false,
+            episodes: [episode("e3")],
+          },
+        ],
+      },
+    ],
+  };
+};
+
 function createHarness() {
   const fake = createFakeHeldMoviesPlatform();
   const held = createHeldMovies(fake.platform);
@@ -82,5 +121,47 @@ describe("Movie Mirror", () => {
 
     expect(held.getHold("up")?.reasons).toEqual(["pulled"]);
     expect(fake.copies()).toEqual(["up"]);
+  });
+});
+
+describe("Season Mirror", () => {
+  it("Downloads every Episode of a sent Season and reports them once held", async () => {
+    const { fake, held, mirror } = createHarness();
+    await mirror.mirror(officeCatalog(true));
+
+    expect(fake.queued()).toEqual(["e1", "e2"]);
+    expect(held.getHold("e1")).toMatchObject({
+      kind: "episode",
+      title: "The Office · e1",
+      reasons: ["mirrored"],
+    });
+
+    fake.finishDownload("e1");
+    fake.finishDownload("e2");
+    expect(mirror.heldIds()).toEqual({
+      movieIds: [],
+      episodeIds: expect.arrayContaining(["e1", "e2"]),
+    });
+  });
+
+  it("removes the Episodes it brought once the Season is removed from Devices, but not one the user downloaded", async () => {
+    const { fake, held, mirror } = createHarness();
+    await mirror.mirror(officeCatalog(true));
+    fake.finishDownload("e1");
+    fake.finishDownload("e2");
+    held.pull({
+      kind: "episode",
+      id: "e3",
+      title: "The Office · e3",
+      posterUrl: null,
+      durationSeconds: 1200,
+    });
+    fake.finishDownload("e3");
+
+    await mirror.mirror(officeCatalog(false));
+
+    expect(held.getHold("e1")).toBeNull();
+    expect(held.getHold("e2")).toBeNull();
+    expect(fake.copies()).toEqual(["e3"]);
   });
 });

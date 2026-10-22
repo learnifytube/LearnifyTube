@@ -92,6 +92,8 @@ export type SeriesSeason = {
   id: string;
   title: string;
   number: number | null;
+  // The Season is what the desktop sends to Devices.
+  sentToDevices: boolean;
   watchState: WatchState;
   episodes: SeriesEpisode[];
 };
@@ -135,6 +137,7 @@ export const getSeries = async (db: Database, id: string): Promise<SeriesDetail 
       id: season.id,
       title: season.title,
       number: season.number,
+      sentToDevices: season.sentToDevices,
       watchState: watchStateOfAll(seasonEpisodes),
       episodes: seasonEpisodes,
     };

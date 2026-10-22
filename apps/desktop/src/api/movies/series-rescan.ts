@@ -14,8 +14,8 @@ export type SeriesRescanResult = {
   missing: number;
   // Whether Episodes were added, so the file allowlist must be refreshed.
   filesChanged: boolean;
-  // Seasons that gained Episodes, new Seasons included; a Season sent to
-  // Devices sends what it gained (#56 notifies Devices from these).
+  // Seasons that gained Episodes, new Seasons included. A Season sent to
+  // Devices sends what it gained without anything more: sent is the Season's state.
   seasonsWithNewEpisodes: string[];
 };
 

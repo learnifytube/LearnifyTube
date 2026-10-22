@@ -50,8 +50,12 @@ describe("buildPhoneHome", () => {
   });
 
   it("adds the Movies and Episodes with an Offline copy to On this phone, newest first", () => {
-    const hold = (id: string, heldAt: number) => ({
-      kind: "movie" as const,
+    const hold = (
+      id: string,
+      heldAt: number,
+      kind: "movie" | "episode" = "movie",
+    ) => ({
+      kind,
       id,
       title: id,
       posterUrl: null,
@@ -62,14 +66,23 @@ describe("buildPhoneHome", () => {
     const rows = buildPhoneHome(
       base({
         connected: false,
-        heldMovies: [hold("up", 2), hold("arriving", 3), hold("alien", 1)],
+        heldMovies: [
+          hold("up", 2),
+          hold("arriving", 3),
+          hold("alien", 1),
+          hold("pilot", 4, "episode"),
+        ],
         hasMovieOfflineCopy: (id) => id !== "arriving",
       }),
     );
 
     expect(rows.map((row) => row.id)).toEqual([ON_THIS_PHONE_ID]);
     expect(rows[0].videos).toEqual([]);
-    expect(rows[0].movies?.map((item) => item.id)).toEqual(["up", "alien"]);
+    expect(rows[0].movies?.map((item) => [item.kind, item.id])).toEqual([
+      ["episode", "pilot"],
+      ["movie", "up"],
+      ["movie", "alien"],
+    ]);
   });
 
   it("omits On this phone row when empty or when no videos have an offline copy", () => {

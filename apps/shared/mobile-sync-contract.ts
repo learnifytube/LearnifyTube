@@ -157,7 +157,10 @@ export const titleWatchSchema = z.object({
 
 export type TitleWatch = z.infer<typeof titleWatchSchema>;
 
-/** A sidecar subtitle file of a Movie or Episode. Its file is GET /api/caption/:id. */
+/**
+ * A sidecar subtitle file of a Movie or Episode. GET /api/caption/:id serves
+ * it as WebVTT (text/vtt), whether the file is .srt or .vtt.
+ */
 export const captionSchema = z.object({
   id: z.string(),
   /** The language from the file name (`Up.en.srt` -> "en"), if any. */

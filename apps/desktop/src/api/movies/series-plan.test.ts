@@ -53,7 +53,22 @@ describe("planSeriesImport", () => {
       videoCodec: "h264",
       audioCodec: null,
       codecWarnings: [],
+      captions: [],
     });
+  });
+
+  it("pairs each Episode's sidecar subtitles as its Captions", () => {
+    const plan = planSeriesImport({
+      ...office,
+      files: [...office.files, { path: "Season 1/The.Office.S01E01.de.vtt" }],
+    });
+    expect(plan.seasons[0].episodes.map((episode) => episode.captions)).toEqual([
+      [
+        { path: "Season 1/The.Office.S01E01.srt", language: null, label: "Captions" },
+        { path: "Season 1/The.Office.S01E01.de.vtt", language: "de", label: "German" },
+      ],
+      [],
+    ]);
   });
 
   it("goes by SxxEyy over the folder a file sits in, and reads 1x02 too", () => {

@@ -26,7 +26,7 @@ import { videoThumbnails } from "../../../services/video-thumbnails";
 import { useWatchProgressRecorder } from "../../../hooks/useWatchProgressRecorder";
 import * as videoRepo from "../../../db/repositories/videos";
 import { colors, fontSize, fontWeight, spacing } from "../../../theme";
-import { currentCaption } from "../../../components/phone/captions";
+import { currentCaption } from "../../../components/captions";
 import {
   holdPlayerOrientation,
   setFullScreenBars,

@@ -4,6 +4,7 @@
 
 import { isAudioPath, type FolderListing, type ListedFile } from "@/api/audiobooks/import-plan";
 import { codecWarningsFor, type CodecWarning } from "./codec-warnings";
+import { pairCaptions, type ProposedCaption } from "./caption-pairing";
 
 const VIDEO_EXTENSIONS = new Set(["mp4", "m4v", "mkv", "webm", "mov", "avi", "ts", "wmv"]);
 
@@ -56,6 +57,8 @@ export type ProposedMovie = {
   audioCodec: string | null;
   // What Android is likely to refuse to play; the preview warns before saving.
   codecWarnings: CodecWarning[];
+  // Sidecar subtitle files named after the video.
+  captions: ProposedCaption[];
 };
 
 export type MovieImportPlan = { suggestedLayout: MovieLayout; movies: ProposedMovie[] };
@@ -114,7 +117,8 @@ const proposeMovie = (
   video: ListedFile,
   title: string,
   images: string[],
-  ownFolders: string[]
+  ownFolders: string[],
+  paths: string[]
 ): ProposedMovie => ({
   path: video.path,
   title,
@@ -123,6 +127,7 @@ const proposeMovie = (
   videoCodec: video.videoCodec ?? null,
   audioCodec: video.audioCodec ?? null,
   codecWarnings: codecWarningsFor(video),
+  captions: pairCaptions(video.path, paths),
 });
 
 const byLength = (a: ListedFile, b: ListedFile): number =>
@@ -134,16 +139,17 @@ const oneMovie = (
   videos: ListedFile[],
   images: string[]
 ): ProposedMovie[] => {
+  const paths = listing.files.map((file) => file.path);
   const [main] = [...videos].sort(
     (a, b) => Number(isExtra(a.path)) - Number(isExtra(b.path)) || byLength(a, b)
   );
   if (!main) return [];
   const folders = [...new Set(["", dirOf(main.path)])];
-  return [proposeMovie(main, listing.name, images, folders)];
+  return [proposeMovie(main, listing.name, images, folders, paths)];
 };
 
 // Each video is a Movie, named after its folder when it is that folder's only video.
-const moviePerFile = (videos: ListedFile[], images: string[]): ProposedMovie[] => {
+const moviePerFile = (videos: ListedFile[], images: string[], paths: string[]): ProposedMovie[] => {
   const videosPerDir = new Map<string, number>();
   for (const video of videos) {
     const dir = dirOf(video.path);
@@ -154,7 +160,7 @@ const moviePerFile = (videos: ListedFile[], images: string[]): ProposedMovie[] =
       const dir = dirOf(video.path);
       const alone = dir !== "" && videosPerDir.get(dir) === 1;
       const title = alone ? (segmentsOf(dir).at(-1) ?? dir) : baseNameOf(video.path);
-      return proposeMovie(video, title, images, alone ? [dir] : []);
+      return proposeMovie(video, title, images, alone ? [dir] : [], paths);
     })
     .sort((a, b) => collator.compare(a.title, b.title) || collator.compare(a.path, b.path));
 };
@@ -169,6 +175,10 @@ export const planMovieImport = (listing: FolderListing, layout?: MovieLayout): M
   const movies =
     (layout ?? suggestedLayout) === "one-movie"
       ? oneMovie(listing, videos, images)
-      : moviePerFile(videos, images);
+      : moviePerFile(
+          videos,
+          images,
+          listing.files.map((file) => file.path)
+        );
   return { suggestedLayout, movies };
 };

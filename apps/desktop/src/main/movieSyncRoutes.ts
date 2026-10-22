@@ -8,7 +8,13 @@ import {
   loadMovieCatalog,
   type MovieKind,
 } from "../api/movies/device-catalog";
-import { resolveMovieFile, resolveWithinAllowed } from "./security/path-confinement";
+import { findCaptionForDevices } from "../api/movies/captions";
+import { readCaptionAsWebVtt } from "../api/movies/caption-file";
+import {
+  resolveCaptionFile,
+  resolveMovieFile,
+  resolveWithinAllowed,
+} from "./security/path-confinement";
 import { getAllowedBaseDirs } from "./security/allowed-dirs";
 import { IMAGE_CONTENT_TYPES, serveFileWithRanges, serveImage } from "./serve-file";
 
@@ -22,7 +28,7 @@ type MovieSyncRoutesDeps = {
 
 /**
  * The sync routes for Movies and Series (ADR-0005): the catalog, each Movie's
- * and Episode's file (by id, with Range support for seeking) and posters. A
+ * and Episode's file (by id, with Range support for seeking), Captions and posters. A
  * title that isn't Shown on Devices is neither listed nor served.
  */
 export const createMovieSyncRoutes = ({
@@ -49,6 +55,19 @@ export const createMovieSyncRoutes = ({
       return;
     }
     serveFileWithRanges(req, res, file.realPath, file.contentType);
+  };
+
+  // Every Caption goes out as WebVTT, whether its file is .srt or .vtt.
+  const handleCaption = async (res: http.ServerResponse, id: string): Promise<void> => {
+    const file = await resolveCaptionFile(id, (captionId) => findCaptionForDevices(db, captionId));
+    if (!file.ok) {
+      logger.warn("[MobileSyncServer] Refused Caption file", { id, ...file });
+      sendError(res, "Not found", 404);
+      return;
+    }
+    const vtt = await readCaptionAsWebVtt(file.realPath);
+    res.writeHead(200, { "Content-Type": "text/vtt; charset=utf-8", "Cache-Control": "no-cache" });
+    res.end(vtt);
   };
 
   const handlePoster = async (
@@ -84,6 +103,11 @@ export const createMovieSyncRoutes = ({
       const fileMatch = pathname.match(/^\/api\/(movie|episode)\/([^/]+)\/file$/);
       if (fileMatch) {
         await handleFile(req, res, fileMatch[1] as MovieKind, decodeURIComponent(fileMatch[2]));
+        return true;
+      }
+      const captionMatch = pathname.match(/^\/api\/caption\/([^/]+)$/);
+      if (captionMatch) {
+        await handleCaption(res, decodeURIComponent(captionMatch[1]));
         return true;
       }
       const posterMatch = pathname.match(/^\/api\/(movie|series)\/([^/]+)\/poster$/);

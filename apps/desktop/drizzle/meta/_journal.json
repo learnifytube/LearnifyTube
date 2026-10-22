@@ -162,6 +162,13 @@
       "when": 1792648912216,
       "tag": "0022_device_movies",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1792650219281,
+      "tag": "0023_captions",
+      "breakpoints": true
     }
   ]
 }

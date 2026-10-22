@@ -5,6 +5,8 @@ import type { Database } from "@/api/db";
 import type { FolderListing } from "@/api/audiobooks/import-plan";
 import { episodes, seasons, series } from "@/api/db/schema";
 import { planSeriesRescan, type CurrentSeason } from "./series-rescan-plan";
+import { pairCaptions } from "./caption-pairing";
+import { syncCaptions } from "./captions";
 
 // Rescan of a Series (ADR-0005): applies the Rescan plan to its stored Seasons
 // and Episodes. Only rows change; the user's files are only ever read.
@@ -55,6 +57,18 @@ export const rescanSeries = async (
   const plan = planSeriesRescan(current, listing);
 
   const seasonsWithNewEpisodes: string[] = [];
+  const listed = listing.files.map((file) => file.path);
+  const pathOf = new Map(
+    episodeRows.map((episode) => [episode.id, relativeTo(row.sourceFolder, episode.filePath)])
+  );
+  // Sidecars come and go with the folder too.
+  const pairAgain = (episodeId: string, episodePath: string): Promise<boolean> =>
+    syncCaptions(
+      db,
+      { kind: "episode", id: episodeId },
+      row.sourceFolder,
+      pairCaptions(episodePath, listed)
+    );
   for (const [position, season] of plan.seasons.entries()) {
     let seasonId: string;
     if (season.kind === "existing") {
@@ -75,11 +89,13 @@ export const rescanSeries = async (
           .update(episodes)
           .set({ missing: episode.missing, position: episodePosition })
           .where(eq(episodes.id, episode.id));
+        await pairAgain(episode.id, pathOf.get(episode.id) ?? "");
         continue;
       }
       const proposed = episode.episode;
+      const episodeId = randomUUID();
       await db.insert(episodes).values({
-        id: randomUUID(),
+        id: episodeId,
         seriesId,
         seasonId,
         title: proposed.title,
@@ -92,6 +108,7 @@ export const rescanSeries = async (
         audioCodec: proposed.audioCodec,
         createdAt: now,
       });
+      await pairAgain(episodeId, proposed.path);
     }
   }
   if (plan.added > 0) {

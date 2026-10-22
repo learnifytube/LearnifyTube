@@ -5,12 +5,15 @@ import type { Database } from "@/api/db";
 import { episodes, movies, type Movie } from "@/api/db/schema";
 import type { WatchState } from "@/lib/watch-state";
 import type { ProposedMovie } from "./import-plan";
+import { syncCaptions } from "./captions";
 import { markedWatched, playedTo, watchStateOf } from "./watch-progress";
 
 // The desktop's Movies (ADR-0005). Files are referenced in place: nothing here
 // copies, moves or deletes the user's video files.
 
-export type ImportedMovie = Omit<ProposedMovie, "poster" | "codecWarnings"> & {
+export type ImportedMovie = Omit<ProposedMovie, "poster" | "codecWarnings" | "captions"> & {
+  // Paired sidecar subtitles; none when left out.
+  captions?: ProposedMovie["captions"];
   // The app-owned poster copy, already saved, or null for the placeholder.
   posterPath: string | null;
 };
@@ -38,6 +41,9 @@ export const saveImportedMovies = async (
     updatedAt: now,
   }));
   if (rows.length > 0) await db.insert(movies).values(rows);
+  for (const [index, movie] of imported.entries()) {
+    await syncCaptions(db, { kind: "movie", id: rows[index].id }, folderPath, movie.captions ?? []);
+  }
   return rows.map((row) => row.id);
 };
 

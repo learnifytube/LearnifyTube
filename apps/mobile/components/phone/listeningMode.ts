@@ -1,5 +1,5 @@
 import type { TranscriptSegment } from "../../types";
-import { currentCaption } from "./captions";
+import { currentCaption } from "../captions";
 
 const HOLD_SECONDS = 0.8;
 

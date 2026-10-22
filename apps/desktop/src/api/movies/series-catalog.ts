@@ -7,6 +7,7 @@ import type { WatchState } from "@/lib/watch-state";
 import { nextUpEpisode } from "../../../../shared/series/nextUp";
 import type { ProposedEpisode, ProposedSeason } from "./series-plan";
 import { markedWatched, playedTo, watchStateOf } from "./watch-progress";
+import { syncCaptions } from "./captions";
 
 // The desktop's Series, Seasons and Episodes (ADR-0005). Files are referenced in
 // place: nothing here copies, moves or deletes the user's video files.
@@ -17,7 +18,10 @@ export type ImportedSeries = {
   posterPath: string | null;
   // In the order the preview confirmed.
   seasons: (Pick<ProposedSeason, "title" | "number"> & {
-    episodes: Omit<ProposedEpisode, "codecWarnings">[];
+    episodes: (Omit<ProposedEpisode, "codecWarnings" | "captions"> & {
+      // Paired sidecar subtitles; none when left out.
+      captions?: ProposedEpisode["captions"];
+    })[];
   })[];
 };
 
@@ -64,6 +68,11 @@ export const saveImportedSeries = async (
   });
   if (seasonRows.length > 0) await db.insert(seasons).values(seasonRows);
   if (episodeRows.length > 0) await db.insert(episodes).values(episodeRows);
+  const importedEpisodes = imported.seasons.flatMap((season) => season.episodes);
+  for (const [index, episode] of importedEpisodes.entries()) {
+    const owner = { kind: "episode" as const, id: episodeRows[index].id };
+    await syncCaptions(db, owner, folderPath, episode.captions ?? []);
+  }
   return seriesId;
 };
 

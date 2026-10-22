@@ -740,7 +740,30 @@ export const episodes = sqliteTable(
   (table) => [index("episodes_season_position_idx").on(table.seasonId, table.position)]
 );
 
+// Sidecar Captions: subtitle files beside a Movie's or an Episode's video, read
+// in place. Exactly one of movieId and episodeId is set.
+export const captions = sqliteTable(
+  "captions",
+  {
+    id: text("id").primaryKey(),
+    movieId: text("movie_id").references(() => movies.id, { onDelete: "cascade" }),
+    episodeId: text("episode_id").references(() => episodes.id, { onDelete: "cascade" }),
+    // Absolute path of the user's .srt or .vtt file.
+    filePath: text("file_path").notNull(),
+    // A language tag from the file name (en, pt-BR), if any.
+    language: text("language"),
+    label: text("label").notNull(),
+    // Place in the language picker, from 0.
+    position: integer("position").notNull(),
+  },
+  (table) => [
+    index("captions_movie_idx").on(table.movieId),
+    index("captions_episode_idx").on(table.episodeId),
+  ]
+);
+
 export type Movie = typeof movies.$inferSelect;
 export type Series = typeof series.$inferSelect;
 export type Season = typeof seasons.$inferSelect;
 export type Episode = typeof episodes.$inferSelect;
+export type Caption = typeof captions.$inferSelect;

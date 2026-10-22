@@ -30,6 +30,7 @@ import { planSeriesImport, suggestVideoLayout } from "@/api/movies/series-plan";
 import { devicesHoldingMovie, setMovieSentToDevices } from "@/api/movies/send-to-devices";
 import { setShownOnDevices } from "@/api/movies/shown-on-devices";
 import { notifyDevicesOfMovies } from "./notify-devices";
+import { checkMovieCaptions, loadCaptionTracks } from "./caption-tracks";
 import { previewedListings } from "./previewed-listings";
 import { seriesRouter } from "./series";
 
@@ -145,8 +146,15 @@ export const moviesRouter = t.router({
   get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input, ctx }) => {
     const db = ctx.db ?? defaultDb;
     await checkMovieFiles(db);
-    return findMovie(db, input.id);
+    const movie = await findMovie(db, input.id);
+    if (movie) await checkMovieCaptions(db, movie);
+    return movie;
   }),
+
+  // A Movie's or Episode's Captions as WebVTT, for the desktop player's tracks.
+  captions: publicProcedure
+    .input(z.object({ kind: z.enum(["movie", "episode"]), id: z.string() }))
+    .query(({ input, ctx }) => loadCaptionTracks(ctx.db ?? defaultDb, input)),
 
   rename: publicProcedure
     .input(z.object({ id: z.string(), title: z.string().trim().min(1) }))

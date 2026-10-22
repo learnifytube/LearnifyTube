@@ -3,6 +3,7 @@ import type { Database } from "@/api/db";
 import { episodes, movies, seasons, series } from "@/api/db/schema";
 import type { MovieCatalog, TitleWatch } from "../../../../shared/mobile-sync-contract";
 import type { WatchProgress } from "./watch-progress";
+import { captionsByOwner } from "./captions";
 
 // What Devices see of the Movies section (ADR-0005): only titles Shown on Devices.
 
@@ -20,11 +21,12 @@ export const loadMovieCatalog = async (
   db: Database,
   assetUrl: (pathname: string) => string
 ): Promise<MovieCatalog> => {
-  const [movieRows, seriesRows, seasonRows, episodeRows] = await Promise.all([
+  const [movieRows, seriesRows, seasonRows, episodeRows, captionsOf] = await Promise.all([
     db.select().from(movies).where(eq(movies.shownOnDevices, true)).orderBy(asc(movies.title)),
     db.select().from(series).where(eq(series.shownOnDevices, true)).orderBy(asc(series.title)),
     db.select().from(seasons).orderBy(asc(seasons.position)),
     db.select().from(episodes).orderBy(asc(episodes.position)),
+    captionsByOwner(db),
   ]);
   // Versioned, so a changed poster isn't shown from a Device's image cache.
   const posterUrl = (
@@ -42,8 +44,7 @@ export const loadMovieCatalog = async (
       posterUrl: posterUrl("movie", movie),
       durationSeconds: movie.durationSeconds,
       missing: movie.missing,
-      // Sidecar Captions arrive with #59.
-      captions: [],
+      captions: captionsOf.get(movie.id) ?? [],
       sentToDevices: movie.sentToDevices,
       watch: titleWatch(movie),
     })),
@@ -66,7 +67,7 @@ export const loadMovieCatalog = async (
               number: episode.number,
               durationSeconds: episode.durationSeconds,
               missing: episode.missing,
-              captions: [],
+              captions: captionsOf.get(episode.id) ?? [],
               watch: titleWatch(episode),
             })),
         })),

@@ -16,6 +16,7 @@ import { MoviePoster } from "./components/MoviePoster";
 import { SeriesSeasons } from "./components/SeriesSeasons";
 import { ShownOnDevicesSwitch } from "./components/ShownOnDevicesSwitch";
 import { useMovieProgress } from "./useMovieProgress";
+import { useCaptionTracks } from "./useCaptionTracks";
 
 // Plays one Episode from its Watch progress; mounted once per Episode.
 function EpisodePlayer({
@@ -30,6 +31,7 @@ function EpisodePlayer({
   const videoSrc = toLocalFileUrl(episode.filePath);
   // Playing it pauses the Book player, as any Video does.
   useMovieProgress(videoRef, episode, videoSrc, "episode");
+  const captions = useCaptionTracks("episode", episode.id);
   if (unplayable) {
     return (
       <div className="flex aspect-video w-full items-center justify-center rounded border bg-muted text-sm text-muted-foreground">
@@ -44,6 +46,7 @@ function EpisodePlayer({
       onTimeUpdate={() => undefined}
       onError={() => setUnplayable(true)}
       onEnded={onEnded}
+      captions={captions}
       className="max-h-[70vh]"
     />
   );

@@ -19,6 +19,7 @@ import {
   seriesEpisodeAfter,
 } from "../../../services/movie-watch/seriesWatch";
 import { useMovieProgressRecorder } from "../../../hooks/useMovieProgressRecorder";
+import { useMovieCaptions } from "../../../hooks/useMovieCaptions";
 import { goBackOrTVHome } from "../../../components/tv/tvBack";
 import { TVFocusPressable } from "../../../components/tv/TVFocusPressable";
 import {
@@ -42,7 +43,9 @@ import {
   type PendingSeek,
 } from "../../../components/playerSeek";
 import {
+  Captions,
   colors,
+  fontSize,
   fontWeight,
   Pause,
   Play,
@@ -96,7 +99,8 @@ export default function TVMoviePlayerScreen() {
 
   const player = useVideoPlayer(uri, (instance) => {
     instance.loop = false;
-    instance.timeUpdateEventInterval = 1;
+    // Often enough for Captions to keep up with the picture.
+    instance.timeUpdateEventInterval = 0.25;
     const start =
       source.kind === "offline" && source.resumeAt !== null
         ? source.resumeAt
@@ -106,6 +110,7 @@ export default function TVMoviePlayerScreen() {
   });
   playerRef.current = player;
   useMovieProgressRecorder(player, kind, id);
+  const captions = useMovieCaptions(player, movie?.captions ?? []);
 
   const { status, error } = useEvent(player, "statusChange", {
     status: player.status,
@@ -299,6 +304,17 @@ export default function TVMoviePlayerScreen() {
         surfaceType="surfaceView"
       />
 
+      {captions.text ? (
+        <View
+          style={[styles.caption, overlayVisible && styles.captionAboveOverlay]}
+          pointerEvents="none"
+        >
+          <Text style={styles.captionLine}>
+            <Text style={styles.captionText}>{` ${captions.text} `}</Text>
+          </Text>
+        </View>
+      ) : null}
+
       <SafeAreaView
         style={[styles.overlay, !overlayVisible && styles.overlayHidden]}
         edges={["bottom", "left", "right"]}
@@ -354,6 +370,36 @@ export default function TVMoviePlayerScreen() {
               <Play size={34} color={colors.primaryForeground} />
             )}
           </TVFocusPressable>
+          {captions.available ? (
+            <TVFocusPressable
+              style={styles.captionsButton}
+              focusedStyle={styles.captionsButtonFocused}
+              accessibilityLabel={
+                captions.selected
+                  ? `Captions: ${captions.selected.label}`
+                  : "Captions off"
+              }
+              onPress={() => {
+                // A press that wakes the overlay only wakes it.
+                if (!overlayVisible || suppressNextPressRef.current) {
+                  suppressNextPressRef.current = false;
+                  showOverlay();
+                  return;
+                }
+                captions.next();
+                showOverlay();
+              }}
+              onFocus={() => showOverlay()}
+            >
+              <Captions
+                size={30}
+                color={captions.selected ? colors.primary : colors.foreground}
+              />
+              <Text style={styles.captionsLabel} numberOfLines={1}>
+                {captions.selected ? captions.selected.label : "Captions off"}
+              </Text>
+            </TVFocusPressable>
+          ) : null}
         </View>
       </SafeAreaView>
     </View>
@@ -418,7 +464,50 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   progressFill: { height: "100%", backgroundColor: colors.primary },
-  controls: { flexDirection: "row", justifyContent: "center" },
+  controls: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: spacing.lg,
+  },
+  captionsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    height: 56,
+    borderRadius: radius.full,
+    ...tvRestingBorder,
+  },
+  captionsButtonFocused: {
+    borderColor: colors.foreground,
+    backgroundColor: colors.overlayLight,
+  },
+  captionsLabel: {
+    color: colors.foreground,
+    fontSize: tvFontSize.body,
+    fontWeight: fontWeight.semibold,
+    maxWidth: 320,
+  },
+  caption: {
+    position: "absolute",
+    left: "12%",
+    right: "12%",
+    bottom: spacing["2xl"],
+    alignItems: "center",
+  },
+  // Clear of the overlay while it shows.
+  captionAboveOverlay: { bottom: 240 },
+  captionLine: {
+    textAlign: "center",
+    fontSize: fontSize["3xl"],
+    lineHeight: Math.round(fontSize["3xl"] * 1.4),
+  },
+  captionText: {
+    color: "#fff",
+    fontWeight: fontWeight.semibold,
+    backgroundColor: "rgba(8,8,8,0.72)",
+  },
   playPause: {
     width: 72,
     height: 72,

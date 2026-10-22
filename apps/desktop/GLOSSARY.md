@@ -23,15 +23,19 @@ The highest resolution a Keep fetches, set by the user to keep files small. It i
 _Avoid_: download quality, quality target
 
 **List**:
-A user-made, ordered group of Videos from the Library. The only thing the user organises with. A Video can be in many Lists.
+A user-made, ordered group of Videos from the Library. The only thing the user organises with. A Video can be in many Lists. A List remembers its Current Video.
 _Avoid_: my playlist, collection, folder
+
+**Current Video**:
+The Video a List or YouTube playlist was last playing, so playing it again resumes that Video from where it stopped. It changes as soon as a Video starts playing from that List, and only then: watching the same Video from the Library or another List does not move it. It is a Video, not a place in the order: reordering the List does not move it. Once it is watched, playing the List starts the next unwatched Video after it, or the List from the top when none is left; if it has left the List, playing starts the first unwatched Video. Playing the List from the start begins at its first Video instead. It is the same on the desktop and every Device; the newest change wins.
+_Avoid_: current index, playlist position
 
 **Favorites**:
 A built-in List the app creates for every user.
 _Avoid_: liked videos
 
 **Watch state**:
-Whether a Video in the Library is unwatched, in progress, or watched. A Video becomes watched when about 90% of it has been played on any device, or when the user marks it; the user can also mark it back to unwatched.
+Whether a Video in the Library is unwatched, in progress, or watched. A Video becomes watched when about 90% of it has been played on any device, or when the user marks it; the user can also mark it back to unwatched. Playing a Video in progress resumes where it stopped; playing a watched Video starts it from the beginning.
 _Avoid_: seen, read
 
 ### Devices
@@ -61,7 +65,7 @@ _Avoid_: library section
 A YouTube channel, used as a Source.
 
 **YouTube playlist**:
-A playlist published on YouTube, used as a Source. Not a List.
+A playlist published on YouTube, used as a Source. Not a List, but like one it remembers its Current Video.
 _Avoid_: playlist (unqualified)
 
 **Subscription**:
@@ -79,8 +83,12 @@ To turn a folder on the computer into Audiobooks, Movies or a Series. The files 
 _Avoid_: add files, upload, keep (for Audiobooks)
 
 **Track**:
-One audio file in an Audiobook. An Audiobook plays its Tracks in its Track order from the first to the last. A Track is not necessarily a chapter: it may be a disc track, or the whole book in one file.
+One audio file in an Audiobook. An Audiobook plays its Tracks in its Track order from the first to the last. A Track is not necessarily a chapter: it may be a disc track, or the whole book in one file. Each Track keeps its own Track position.
 _Avoid_: chapter, part, episode
+
+**Track position**:
+Where the user stopped inside one Track, and whether it was played to its end. Picking a Track resumes it from its Track position; a Track played to its end starts again from the beginning. It is the same on the desktop and every Device; the newest wins.
+_Avoid_: listening position (that is the whole book's)
 
 **Track order**:
 The order an Audiobook plays its Tracks in. Import sets it by subfolder and then by file name, reading numbers as numbers (Track 2 before Track 10); the user can rearrange it at Import or any time later.
@@ -91,7 +99,7 @@ Looking at the folder of an Audiobook or Series again after Import. New files jo
 _Avoid_: re-import, refresh
 
 **Listening position**:
-Where the user is in an Audiobook: one Track and a time inside it, the same wherever it is played, on the desktop or any Device. Playing an Audiobook always resumes from it and carries on to the end, skipping missing Tracks. The newest position wins, even when the book plays in two places at once: nothing hands playback from one to the other. An Audiobook is finished when its last Track ends.
+Where the user is in an Audiobook: the Track last played and that Track's Track position, the same wherever it is played, on the desktop or any Device. Playing an Audiobook always resumes from it and carries on to the end, skipping missing Tracks. The newest position wins, even when the book plays in two places at once: nothing hands playback from one to the other. An Audiobook is finished when its last Track ends. Starting it over clears every Track position.
 _Avoid_: watch state, progress (for Audiobooks)
 
 **Book player**:
@@ -105,7 +113,7 @@ One film the user imported from a video file on their computer. It is not a Vide
 _Avoid_: local video, imported video, film file
 
 **Series**:
-A show the user imported from a folder of video files, made of Seasons of Episodes. A Series is never sent as a whole: the user sends one Season at a time. Playing a Series resumes the Episode in progress, or else starts the first unwatched Episode, and moves on to the next Episode by itself. The user can mark a whole Series, or one Season, watched or unwatched.
+A show the user imported from a folder of video files, made of Seasons of Episodes. A Series is never sent as a whole: the user sends one Season at a time. A Series remembers the Episode last played: playing the Series resumes it, or, once it is watched, starts the next unwatched Episode after it; with none played yet, it starts the first unwatched Episode. It moves on to the next Episode by itself. The user can mark a whole Series, or one Season, watched or unwatched. Marking the whole Series unwatched forgets the Episode last played, and so does marking unwatched the Season it is in.
 _Avoid_: show, playlist, TV show
 
 **Season**:

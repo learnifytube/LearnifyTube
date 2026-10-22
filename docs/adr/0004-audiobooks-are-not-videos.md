@@ -1,5 +1,7 @@
 # Audiobooks are their own concept, not imported Videos
 
+_Partly superseded by ADR-0006: each Track now keeps its own Track position._
+
 The user wants to import audio from their computer, starting with an audiobook folder, and play it on the phone from start to end. The cheapest path was to widen **Video** to "anything playable, from YouTube or a file", which would have reused Lists, the On-device set, Download and the Play queue unchanged. We chose a separate **Audiobook** concept instead (made of **Tracks**, with one **Listening position**), because a book behaves differently from a Video: its order comes from the files, it is sent and held as a whole, and "where am I" belongs to the book rather than to each file. Mixing the two would have bent Library, List and Watch state language around a case they don't fit.
 
 Audiobooks are **referenced in place**: Import reads the user's folder and never copies or deletes it. **Rescan** picks up new files (at the end of the Track order) and marks missing ones.

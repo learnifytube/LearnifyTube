@@ -66,7 +66,7 @@ Playing a Video straight from the desktop when the Device has no Offline copy. A
 _Avoid_: remote playback, desktop playback
 
 **Play queue**:
-The Videos the player moves through after the user presses play on a Home row (Continue watching, On this phone, Recently added, a Channel, or a List), with the one playing now. It knows no desktop and no file: each Video's Offline copy or Stream is chosen when that Video starts. In Offline mode it skips Videos without an Offline copy. On the TV, starting a Play queue also puts it in History.
+The Videos the player moves through after the user presses play on a Home row (Continue watching, On this phone, Recently added, a Channel, or a List), with the one playing now. It knows no desktop and no file: each Video's Offline copy or Stream is chosen when that Video starts. In Offline mode it skips Videos without an Offline copy. On the TV, starting a Play queue also puts it in History. A Play queue started from a List or YouTube playlist starts at its Current Video (see the desktop glossary), which the phone offers as Resume at the top of the List; starting one again from the TV's History does the same.
 _Avoid_: playlist (for this), streaming queue
 
 **On-device set**:

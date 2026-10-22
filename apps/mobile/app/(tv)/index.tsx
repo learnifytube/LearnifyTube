@@ -72,6 +72,7 @@ import {
   type TVCatalogInput,
 } from "../../components/tv/tvCatalog";
 import { useLibraryCatalog } from "../../core/hooks/useLibraryCatalog";
+import { useHeldTitles } from "../../hooks/useHeldTitles";
 import { videoThumbnails } from "../../services/video-thumbnails";
 import {
   describeConnectionProblem,
@@ -178,6 +179,7 @@ export default function TVHomeScreen() {
   const history = useTVHistoryStore((state) => state.entries);
   const movieCatalogState = useMovieCatalogStore();
   const movieProgress = useMovieWatchStore((state) => state.progress);
+  const heldTitles = useHeldTitles();
 
   // The tab picked; the one shown falls back to Playlists when it has gone (an empty Movies tab).
   const [selectedMode, setMode] = useState<TVBrowseMode>("playlists");
@@ -397,25 +399,28 @@ export default function TVHomeScreen() {
       getStoredThumbnail,
       onDeviceSet,
       history,
-      // Only the connected desktop's own catalog: another desktop's ids mean nothing here.
+      // While connected, only that desktop's own catalog: another desktop's ids
+      // mean nothing here. Offline, the saved one names what the TV holds.
       movies:
-        movieCatalogState.serverUrl === serverUrl
+        !serverUrl || movieCatalogState.serverUrl === serverUrl
           ? movieCatalogState.movies
           : [],
       keptMovieWatch: (movieId) =>
         movieProgress[movieWatchKey("movie", movieId)],
       series:
-        movieCatalogState.serverUrl === serverUrl
+        !serverUrl || movieCatalogState.serverUrl === serverUrl
           ? movieCatalogState.series
           : [],
       keptEpisodeWatch: (episodeId) =>
         movieProgress[movieWatchKey("episode", episodeId)],
+      heldTitles,
     }),
     [
       cachedCollections,
       channels,
       getOfflineUri,
       getStoredThumbnail,
+      heldTitles,
       myLists,
       history,
       movieCatalogState,

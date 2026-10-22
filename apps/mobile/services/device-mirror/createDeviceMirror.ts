@@ -66,7 +66,7 @@ export type DeviceMirrorPlatform = {
      */
     refreshCatalog: (serverUrl: string) => Promise<MovieCatalog | null>;
     /** The Movie Mirror (`createMovieMirror`), planned from the catalog just refetched. */
-    mirror: (catalog: MovieCatalog) => Promise<void>;
+    mirror: (serverUrl: string, catalog: MovieCatalog) => Promise<void>;
     /** Movies and Episodes with an Offline copy on this Device. */
     heldIds: () => { movieIds: string[]; episodeIds: string[] };
   };
@@ -150,7 +150,7 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
         return null;
       });
     if (movieCatalog) {
-      await platform.movies.mirror(movieCatalog).catch((error) => {
+      await platform.movies.mirror(serverUrl, movieCatalog).catch((error) => {
         console.warn("[DeviceMirror] Movie Mirror failed", error);
       });
     }

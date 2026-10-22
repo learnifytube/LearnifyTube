@@ -39,12 +39,6 @@ export const phonePlaybackSource = createPlaybackSource({
   log: (message, data) => logger.info(message, data),
 });
 
-// The TV holds no Movie yet: it doesn't Mirror them.
-const noOfflineCopies = {
-  getUri: (_id: string): string | null => null,
-  subscribe: (_listener: () => void) => () => {},
-};
-
 // The phone's Movie player: the Offline copy when the Mirror or the user brought
 // one, else a Stream; it never fetches or Downloads (ADR-0005).
 export const phoneMoviePlaybackSource = createPlaybackSource({
@@ -64,21 +58,22 @@ export const phoneEpisodePlaybackSource = createPlaybackSource({
   log: (message, data) => logger.info(message, data),
 });
 
-// The TV's Movie player: Stream-only from the Desktop connection (ADR-0005).
+// The TV's Movie player: the Offline copy the Mirror brought, else a Stream from
+// the Desktop connection; never fetches or Downloads (ADR-0005).
 export const tvMoviePlaybackSource = createPlaybackSource({
   getDesktop: desktopConnection.getState,
   onDesktopChange: desktopConnection.subscribe,
-  offlineCopy: noOfflineCopies,
+  offlineCopy: movieOfflineCopy,
   desktopFetch: null,
   streamUrl: api.getMovieFileUrl,
   log: (message, data) => logger.info(message, data),
 });
 
-// The TV's Episode player, Stream-only like the TV's Movies.
+// The TV's Episode player, like the TV's Movies.
 export const tvEpisodePlaybackSource = createPlaybackSource({
   getDesktop: desktopConnection.getState,
   onDesktopChange: desktopConnection.subscribe,
-  offlineCopy: noOfflineCopies,
+  offlineCopy: movieOfflineCopy,
   desktopFetch: null,
   streamUrl: api.getEpisodeFileUrl,
   log: (message, data) => logger.info(message, data),

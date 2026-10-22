@@ -193,7 +193,7 @@ function createHarness({
         state.movieCatalogRefreshes.push(serverUrl);
         return state.movieCatalog;
       },
-      mirror: async (catalog) => {
+      mirror: async (_serverUrl, catalog) => {
         if (state.movieMirrorFails) throw new Error("Disk full");
         state.movieMirrors.push(catalog);
       },

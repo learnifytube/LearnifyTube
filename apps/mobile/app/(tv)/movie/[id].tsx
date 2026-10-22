@@ -20,6 +20,9 @@ import {
 } from "../../../services/movie-watch/seriesWatch";
 import { useMovieProgressRecorder } from "../../../hooks/useMovieProgressRecorder";
 import { useMovieCaptions } from "../../../hooks/useMovieCaptions";
+import { useHeldTitles } from "../../../hooks/useHeldTitles";
+import { heldSeries } from "../../../components/tv/tvCatalog";
+import { desktopConnection } from "../../../services/desktop-connection";
 import { goBackOrTVHome } from "../../../components/tv/tvBack";
 import { TVFocusPressable } from "../../../components/tv/TVFocusPressable";
 import {
@@ -72,9 +75,10 @@ function startPosition(kind: TitleKind, id: string): number {
 
 /**
  * Plays a Movie, or an Episode (`kind=episode`) and then the Episodes after it,
- * on the TV: Streamed from the desktop, never Downloaded (ADR-0005), and put in
- * History (an Episode puts its Series there). A file the TV's player refuses
- * says so.
+ * on the TV: from its Offline copy when the Mirror brought one, else Streamed
+ * from the desktop, never Downloaded (ADR-0005), and put in History (an
+ * Episode puts its Series there). In Offline mode the Episodes after it are
+ * the ones the TV holds. A file the TV's player refuses says so.
  */
 export default function TVMoviePlayerScreen() {
   const params = useLocalSearchParams<{ id: string; kind?: string }>();
@@ -82,6 +86,9 @@ export default function TVMoviePlayerScreen() {
   const kind: TitleKind = params.kind === "episode" ? "episode" : "movie";
   const catalog = useMovieCatalogStore();
   const movie = findTitle(catalog, kind, id);
+  const heldTitles = useHeldTitles();
+  const hold = heldTitles.find((title) => title.id === id);
+  const connected = desktopConnection.useConnection().status === "connected";
   const showNotice = useTVNoticeStore((state) => state.show);
 
   const playerRef = useRef<VideoPlayer | null>(null);
@@ -110,7 +117,7 @@ export default function TVMoviePlayerScreen() {
   });
   playerRef.current = player;
   useMovieProgressRecorder(player, kind, id);
-  const captions = useMovieCaptions(player, movie?.captions ?? []);
+  const captions = useMovieCaptions(player, id, movie?.captions ?? []);
 
   const { status, error } = useEvent(player, "statusChange", {
     status: player.status,
@@ -135,11 +142,17 @@ export default function TVMoviePlayerScreen() {
       );
   }, [id, seriesId, historyTitle]);
 
-  // Episodes autoplay: the next one in Series order that can play.
+  // Episodes autoplay: the next one in Series order that can play; in Offline
+  // mode, the next one the TV holds.
   useEffect(() => {
     if (!series) return;
     const subscription = player.addListener("playToEnd", () => {
-      const next = seriesEpisodeAfter(series, id);
+      const playable = connected
+        ? series
+        : heldSeries(series, (episodeId) =>
+            heldTitles.some((title) => title.id === episodeId),
+          );
+      const next = playable && seriesEpisodeAfter(playable, id);
       if (!next) return;
       router.replace({
         pathname: "/(tv)/movie/[id]",
@@ -147,7 +160,7 @@ export default function TVMoviePlayerScreen() {
       } as Href);
     });
     return () => subscription.remove();
-  }, [player, series, id]);
+  }, [player, series, id, connected, heldTitles]);
 
   // The desktop went away mid-Stream and the TV doesn't hold this title.
   const desktopLost = source.kind === "desktopLost";
@@ -257,7 +270,10 @@ export default function TVMoviePlayerScreen() {
   if (!uri || problem) {
     const message = problem
       ? describeMovieProblem(problem, kind)
-      : { title: movie?.title ?? "Starting", text: "Please wait" };
+      : {
+          title: movie?.title ?? hold?.title ?? "Starting",
+          text: "Please wait",
+        };
     const canRetry =
       !!problem &&
       source.kind === "failed" &&
@@ -321,11 +337,11 @@ export default function TVMoviePlayerScreen() {
         pointerEvents={overlayVisible ? "auto" : "none"}
       >
         <Text style={styles.title} numberOfLines={1}>
-          {movie?.title ?? "Now Playing"}
+          {movie?.title ?? hold?.title ?? "Now Playing"}
         </Text>
-        {source.kind === "stream" ? (
-          <Text style={styles.meta}>Streaming</Text>
-        ) : null}
+        <Text style={styles.meta}>
+          {source.kind === "stream" ? "Streaming" : "On this TV"}
+        </Text>
 
         <TVFocusPressable
           style={styles.progressRow}

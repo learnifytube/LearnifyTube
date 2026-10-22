@@ -13,6 +13,7 @@ export function createFakeHeldMoviesPlatform({
   const files = new Set(copies);
   const queued = new Set<string>();
   const requested: string[] = [];
+  const forgotten: string[] = [];
   const listeners = new Set<() => void>();
   let clock = 1_000;
 
@@ -36,6 +37,11 @@ export function createFakeHeldMoviesPlatform({
       },
       cancel: (id) => {
         queued.delete(id);
+      },
+    },
+    captions: {
+      forget: async (id) => {
+        forgotten.push(id);
       },
     },
     offlineCopy: {
@@ -66,6 +72,8 @@ export function createFakeHeldMoviesPlatform({
       notify();
     },
     copies: () => [...files],
+    /** The titles whose kept Captions were forgotten, in order. */
+    forgottenCaptions: () => [...forgotten],
     stored: () => [...records.values()],
   };
 }

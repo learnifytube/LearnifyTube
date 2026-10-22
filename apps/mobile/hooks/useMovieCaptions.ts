@@ -15,6 +15,7 @@ import type { TranscriptSegment } from "../types";
  */
 export function useMovieCaptions(
   player: VideoPlayer,
+  titleId: string,
   captions: Caption[],
   maxChars = Infinity,
 ) {
@@ -29,18 +30,18 @@ export function useMovieCaptions(
   } | null>(null);
   const [text, setText] = useState<string | null>(null);
 
-  // The Caption's lines come from the desktop; with none connected there are none.
+  // The lines kept with a held title, else the desktop's while one is connected.
   const shownId = selected?.id ?? null;
   useEffect(() => {
-    if (!shownId || !serverUrl) return;
+    if (!shownId) return;
     let current = true;
-    void captionCues.load(serverUrl, shownId).then((segments) => {
+    void captionCues.load(serverUrl, titleId, shownId).then((segments) => {
       if (current) setLoaded({ id: shownId, segments });
     });
     return () => {
       current = false;
     };
-  }, [shownId, serverUrl]);
+  }, [shownId, serverUrl, titleId]);
 
   const segments = shownId && loaded?.id === shownId ? loaded.segments : null;
   useEffect(() => {

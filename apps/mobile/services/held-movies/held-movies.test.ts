@@ -94,6 +94,19 @@ describe("Held Movies", () => {
     expect(fake.stored()).toEqual([]);
   });
 
+  it("forgets a title's kept Captions with its Offline copy", async () => {
+    const { fake, held } = createHarness();
+    held.hold(up, "mirrored");
+    held.pull(pilot);
+    fake.finishDownload("up");
+    fake.finishDownload("pilot");
+
+    await held.release("up", "mirrored");
+    await held.remove("pilot");
+
+    expect(fake.forgottenCaptions()).toEqual(["up", "pilot"]);
+  });
+
   it("refreshes what it shows of a held title from the desktop's catalog", () => {
     const { held } = createHarness();
     held.hold(up, "mirrored");

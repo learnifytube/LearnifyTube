@@ -13,6 +13,8 @@ export type HeldMoviesPlatform = {
     request: (title: HeldTitle) => void;
     cancel: (id: string) => void;
   };
+  /** The Captions kept with each held title (`createKeptCaptions`). */
+  captions: { forget: (id: string) => Promise<void> };
   /** The Movies' Offline copies. */
   offlineCopy: {
     getUri: (id: string) => string | null;
@@ -73,6 +75,7 @@ export function createHeldMovies(platform: HeldMoviesPlatform) {
     }
     platform.downloads.cancel(id);
     await platform.offlineCopy.remove(id);
+    await platform.captions.forget(id);
   };
 
   /** Drops one reason; the file goes only when no reason is left. */

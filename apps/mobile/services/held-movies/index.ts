@@ -1,6 +1,7 @@
 import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "../api";
+import { keptCaptions } from "../movie-captions";
 import { movieOfflineCopy } from "../offline-copy";
 import {
   createDownloadQueue,
@@ -87,6 +88,7 @@ export const heldMovies = createHeldMovies({
     },
   },
   offlineCopy: movieOfflineCopy,
+  captions: keptCaptions,
 });
 
 export type { HeldTitle, MovieHold, MovieHoldReason } from "./types";

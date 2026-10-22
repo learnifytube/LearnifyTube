@@ -38,13 +38,6 @@ const noAudiobooks: DeviceMirrorPlatform["audiobooks"] = {
   heldIds: async () => [],
 };
 
-// Until the TV Mirrors Movies, it holds and reports none.
-const noMovieMirror: Pick<DeviceMirrorPlatform["movies"], "mirror" | "heldIds"> =
-  {
-    mirror: async () => {},
-    heldIds: () => ({ movieIds: [], episodeIds: [] }),
-  };
-
 // Changes whenever a Movie or Episode's Offline copy arrives or goes.
 const heldMoviesKey = () => {
   const { movieIds, episodeIds } = heldMovies.heldIds();
@@ -157,11 +150,8 @@ const platform: DeviceMirrorPlatform = {
     AsyncStorage.setItem(MIRRORED_IDS_KEY, JSON.stringify(videoIds)),
   saveOnDeviceSet: (videos) => useOnDeviceSetStore.setState({ videos }),
   audiobooks: kind === "tv" ? noAudiobooks : audiobookMirror,
-  // The TV keeps the Movie catalog too, but doesn't Mirror Movies yet.
-  movies: {
-    refreshCatalog: refreshMovieCatalog,
-    ...(kind === "tv" ? noMovieMirror : movieMirror),
-  },
+  // Phone and TV both Mirror the Movies and Seasons sent to Devices (ADR-0005).
+  movies: { refreshCatalog: refreshMovieCatalog, ...movieMirror },
 };
 
 export const deviceMirror = createDeviceMirror(platform);

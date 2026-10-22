@@ -4,6 +4,7 @@ import type {
   MovieWatch,
   Series,
 } from "../../../shared/mobile-sync-contract";
+import type { HeldTitle } from "../../services/held-movies/types";
 import type { StreamingVideo } from "../../stores/playback";
 import type {
   TVRecentMovie,
@@ -65,6 +66,14 @@ const movie = (id: string, overrides: Partial<Movie> = {}): Movie => ({
   ...overrides,
 });
 
+const heldMovie = (id: string): HeldTitle => ({
+  kind: "movie",
+  id,
+  title: `Held ${id}`,
+  posterUrl: null,
+  durationSeconds: 6000,
+});
+
 const movieEntry = (movieId: string): TVRecentMovie => ({
   kind: "movie",
   movieId,
@@ -87,6 +96,7 @@ function input(overrides: Partial<TVCatalogInput> = {}): TVCatalogInput {
     keptMovieWatch: () => undefined,
     series: [],
     keptEpisodeWatch: () => undefined,
+    heldTitles: [],
     ...overrides,
   };
 }
@@ -416,13 +426,72 @@ describe("buildTVCatalog", () => {
       ]);
     });
 
-    it("shows no Movies in Offline mode, as the TV holds none yet", () => {
+    it("shows only the Movies the TV holds in Offline mode", () => {
+      const catalog = buildTVCatalog(
+        input({
+          movies: [movie("m1"), movie("m2", { title: "The Matrix" })],
+          heldTitles: [heldMovie("m2")],
+        }),
+      );
+
+      expect(catalog.tabs.movies).toEqual([
+        {
+          id: "movie:m2",
+          title: "The Matrix",
+          subtitle: "1 h 40 min",
+          thumbnailUrl: null,
+          action: { kind: "movie", movieId: "m2", title: "The Matrix" },
+        },
+      ]);
+      expect(catalog.modes).toContain("movies");
+    });
+
+    it("hides the Movies tab in Offline mode when the TV holds none", () => {
       const catalog = buildTVCatalog(
         input({ movies: [movie("m1")], library: [video("a")] }),
       );
 
       expect(catalog.tabs.movies).toEqual([]);
       expect(catalog.modes).not.toContain("movies");
+    });
+
+    it("shows a held Movie the saved catalog doesn't list, as the TV holds it", () => {
+      const catalog = buildTVCatalog(
+        input({
+          heldTitles: [
+            { ...heldMovie("m9"), title: "Alien", durationSeconds: 3600 },
+          ],
+        }),
+      );
+
+      expect(catalog.tabs.movies).toEqual([
+        {
+          id: "movie:m9",
+          title: "Alien",
+          subtitle: "1 h 0 min",
+          thumbnailUrl: null,
+          action: { kind: "movie", movieId: "m9", title: "Alien" },
+        },
+      ]);
+    });
+
+    it("doesn't say the TV holds nothing when it holds a Movie", () => {
+      const catalog = buildTVCatalog(input({ heldTitles: [heldMovie("m1")] }));
+
+      expect(catalog.holdsNothing).toBe(false);
+      expect(catalog.emptyText.playlists).toBe("No playlists on this TV");
+    });
+
+    it("resumes a held Movie from History in Offline mode", () => {
+      const catalog = buildTVCatalog(
+        input({
+          movies: [movie("m1", { title: "The Matrix" })],
+          heldTitles: [heldMovie("m1")],
+          history: [movieEntry("m1"), movieEntry("m2")],
+        }),
+      );
+
+      expect(catalog.tabs.history.map((card) => card.id)).toEqual(["movie:m1"]);
     });
 
     it("resumes a Movie from History as the desktop lists it now", () => {
@@ -568,7 +637,15 @@ describe("Series", () => {
     ]);
   });
 
-  it("hides the Series tab when there are none, and in Offline mode", () => {
+  const heldEpisode = (id: string): HeldTitle => ({
+    kind: "episode",
+    id,
+    title: `Held ${id}`,
+    posterUrl: null,
+    durationSeconds: 3000,
+  });
+
+  it("hides the Series tab when there are none, and offline when the TV holds no Episode", () => {
     expect(buildTVCatalog(input(connected)).modes).not.toContain("series");
 
     const offline = buildTVCatalog(
@@ -576,6 +653,63 @@ describe("Series", () => {
     );
     expect(offline.tabs.series).toEqual([]);
     expect(offline.modes).not.toContain("series");
+  });
+
+  it("shows Series with an Episode the TV holds in Offline mode, counting only those", () => {
+    const catalog = buildTVCatalog(
+      input({
+        series: [
+          series("s1", [episode("e1"), episode("e2"), episode("e3")]),
+          series("s2", [episode("x1")]),
+        ],
+        heldTitles: [heldEpisode("e1"), heldEpisode("e3")],
+      }),
+    );
+
+    expect(catalog.tabs.series).toEqual([
+      {
+        id: "series:s1",
+        title: "Series s1",
+        subtitle: "2 Episodes",
+        thumbnailUrl: null,
+        action: { kind: "series", seriesId: "s1", title: "Series s1" },
+      },
+    ]);
+    expect(catalog.modes).toContain("series");
+  });
+
+  it("plays a held Episode offline even when the desktop lost its file", () => {
+    const catalog = buildTVCatalog(
+      input({
+        series: [series("s1", [episode("e1", { missing: true })])],
+        heldTitles: [heldEpisode("e1")],
+      }),
+    );
+
+    expect(catalog.tabs.series.map((card) => card.subtitle)).toEqual([
+      "1 Episode",
+    ]);
+  });
+
+  it("resumes a Series from History offline at the next Episode the TV holds", () => {
+    const catalog = buildTVCatalog(
+      input({
+        series: [
+          series("s1", [
+            episode("e1", { watch: watched }),
+            episode("e2"),
+            episode("e3"),
+          ]),
+        ],
+        heldTitles: [heldEpisode("e1"), heldEpisode("e3")],
+        history: [seriesEntry("s1")],
+      }),
+    );
+
+    expect(catalog.tabs.history[0]).toMatchObject({
+      subtitle: "Series · Next: Episode e3",
+      action: { kind: "episode", episodeId: "e3", title: "Series s1" },
+    });
   });
 
   it("resumes a Series from History at its Episode in progress", () => {
@@ -645,7 +779,7 @@ describe("Series", () => {
     });
   });
 
-  it("leaves out History Series the desktop no longer shows, and all of them offline", () => {
+  it("leaves out History Series the desktop no longer shows, and offline those the TV holds nothing of", () => {
     const shown = [series("s1", [episode("e1")])];
 
     const whileConnected = buildTVCatalog(

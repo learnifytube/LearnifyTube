@@ -50,10 +50,12 @@ Hello &amp; welcome
 Bye
 `;
 
-function createHarness() {
+function createHarness(kept: Record<string, string> = {}) {
   const requests: string[] = [];
   let failNext = false;
   const cues = createCaptionCues({
+    readKept: async (titleId, captionId) =>
+      kept[`${titleId}/${captionId}`] ?? null,
     getCaption: async (serverUrl, captionId) => {
       requests.push(`${serverUrl}/${captionId}`);
       if (failNext) {
@@ -75,7 +77,7 @@ function createHarness() {
 describe("createCaptionCues", () => {
   it("reads a Caption the desktop serves as timed lines", async () => {
     const { cues } = createHarness();
-    expect(await cues.load("http://desktop", "en")).toEqual([
+    expect(await cues.load("http://desktop", "m1", "en")).toEqual([
       { start: 1, end: 2.5, text: "Hello & welcome" },
       { start: 3, end: 4, text: "Bye" },
     ]);
@@ -83,17 +85,31 @@ describe("createCaptionCues", () => {
 
   it("fetches each Caption once", async () => {
     const { cues, requests } = createHarness();
-    await cues.load("http://desktop", "en");
-    await cues.load("http://desktop", "en");
-    await cues.load("http://desktop", "fr");
+    await cues.load("http://desktop", "m1", "en");
+    await cues.load("http://desktop", "m1", "en");
+    await cues.load("http://desktop", "m1", "fr");
     expect(requests).toEqual(["http://desktop/en", "http://desktop/fr"]);
   });
 
   it("shows nothing when the desktop can't be reached, and asks again next time", async () => {
     const { cues, requests, failOnce } = createHarness();
     failOnce();
-    expect(await cues.load("http://desktop", "en")).toEqual([]);
-    expect(await cues.load("http://desktop", "en")).toHaveLength(2);
+    expect(await cues.load("http://desktop", "m1", "en")).toEqual([]);
+    expect(await cues.load("http://desktop", "m1", "en")).toHaveLength(2);
     expect(requests).toHaveLength(2);
+  });
+
+  it("reads a held title's kept Caption first, with no desktop at all", async () => {
+    const { cues, requests } = createHarness({ "m1/en": VTT });
+    expect(await cues.load(null, "m1", "en")).toHaveLength(2);
+    expect(await cues.load("http://desktop", "m1", "en")).toHaveLength(2);
+    expect(requests).toEqual([]);
+  });
+
+  it("shows nothing for a Caption neither kept nor reachable, and finds it once the desktop is back", async () => {
+    const { cues, requests } = createHarness();
+    expect(await cues.load(null, "m1", "en")).toEqual([]);
+    expect(await cues.load("http://desktop", "m1", "en")).toHaveLength(2);
+    expect(requests).toEqual(["http://desktop/en"]);
   });
 });

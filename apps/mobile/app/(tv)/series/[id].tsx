@@ -22,6 +22,8 @@ import {
   TVMessageCard,
 } from "../../../components/tv/TVMessage";
 import { seriesNotFound } from "../../../components/tv/tvMessages";
+import { heldSeries } from "../../../components/tv/tvCatalog";
+import { useHeldTitles } from "../../../hooks/useHeldTitles";
 import {
   buildTVSeriesView,
   type TVEpisodeCard,
@@ -33,15 +35,23 @@ const EPISODE_ROW_GAP = spacing.sm;
 /**
  * A Series on the TV: Seasons as tabs, each Season's Episodes as a list the
  * D-pad moves through. It opens on the next-up Episode; pressing an Episode
- * Streams it and the Episodes after it.
+ * plays it and the Episodes after it. In Offline mode it shows only the
+ * Episodes the TV holds.
  */
 export default function TVSeriesScreen() {
   const { id = "" } = useLocalSearchParams<{ id: string }>();
   const connection = desktopConnection.useConnection();
   const serverUrl = connection.status === "connected" ? connection.url : null;
-  const series = useMovieCatalogStore((state) =>
+  const listed = useMovieCatalogStore((state) =>
     state.series.find((item) => item.id === id),
   );
+  const heldTitles = useHeldTitles();
+  const series =
+    listed && !serverUrl
+      ? (heldSeries(listed, (episodeId) =>
+          heldTitles.some((title) => title.id === episodeId),
+        ) ?? undefined)
+      : listed;
   const progress = useMovieWatchStore((state) => state.progress);
 
   const view = series

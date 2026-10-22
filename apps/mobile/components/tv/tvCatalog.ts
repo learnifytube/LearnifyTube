@@ -9,6 +9,7 @@ import {
   seriesEpisodes,
   seriesNextUp,
 } from "../../services/movie-watch/seriesWatch";
+import type { HeldTitle } from "../../services/held-movies/types";
 import type { StreamingVideo } from "../../stores/playback";
 import type {
   TVHistoryEntry,
@@ -76,6 +77,8 @@ export type TVCatalogInput = {
   series: Series[];
   /** Where this TV last stopped in an Episode. */
   keptEpisodeWatch: (episodeId: string) => MovieWatch | undefined;
+  /** The Movies and Episodes whose Offline copy is on this TV. */
+  heldTitles: HeldTitle[];
 };
 
 /** What pressing a card does. */
@@ -190,6 +193,38 @@ export function describeTitleWatch(
   return hours > 0 ? `${hours} h ${minutes % 60} min` : `${minutes} min`;
 }
 
+/**
+ * A Series cut down to the Episodes this TV holds (Seasons left empty go), as
+ * it shows and plays in Offline mode; null when it holds none of them.
+ */
+export function heldSeries(
+  series: Series,
+  isHeld: (episodeId: string) => boolean,
+): Series | null {
+  const seasons = series.seasons
+    .map((season) => ({
+      ...season,
+      // The TV's own copy plays, even when the desktop lost its file.
+      episodes: season.episodes
+        .filter((episode) => isHeld(episode.id))
+        .map((episode) => ({ ...episode, missing: false })),
+    }))
+    .filter((season) => season.episodes.length > 0);
+  return seasons.length > 0 ? { ...series, seasons } : null;
+}
+
+/** A held Movie as the TV shows it when the saved catalog doesn't list it. */
+const movieOfHeldTitle = (title: HeldTitle): Movie => ({
+  id: title.id,
+  title: title.title,
+  posterUrl: null,
+  durationSeconds: title.durationSeconds,
+  missing: false,
+  captions: [],
+  sentToDevices: false,
+  watch: null,
+});
+
 const countEpisodes = (count: number) =>
   count === 1 ? "1 Episode" : `${count} Episodes`;
 
@@ -278,10 +313,19 @@ export function buildTVCatalog(input: TVCatalogInput) {
     ];
   };
 
-  // The TV holds no Movies yet, so only a connected desktop's catalog plays them.
+  // Offline, only the Movies the TV holds play, including any the saved catalog no longer lists.
+  const heldIds = new Set(input.heldTitles.map((title) => title.id));
   const playableMovies = desktop
     ? input.movies.filter((movie) => !movie.missing)
-    : [];
+    : [
+        ...input.movies.filter((movie) => heldIds.has(movie.id)),
+        ...input.heldTitles.flatMap((title) =>
+          title.kind === "movie" &&
+          !input.movies.some((movie) => movie.id === title.id)
+            ? [movieOfHeldTitle(title)]
+            : [],
+        ),
+      ];
   const movieCard = (movie: Movie, subtitlePrefix = ""): TVCatalogCard => ({
     id: `movie:${movie.id}`,
     title: movie.title,
@@ -296,12 +340,15 @@ export function buildTVCatalog(input: TVCatalogInput) {
     return movie ? [movieCard(movie, "Movie · ")] : [];
   };
 
-  // Like Movies, Series play only from a connected desktop for now.
+  // Offline, a Series shows only the Episodes the TV holds.
   const playableSeries = desktop
     ? input.series.filter((item) =>
         seriesEpisodes(item).some((episode) => !episode.missing),
       )
-    : [];
+    : input.series.flatMap((item) => {
+        const held = heldSeries(item, (id) => heldIds.has(id));
+        return held ? [held] : [];
+      });
   const seriesCard = (series: Series): TVCatalogCard => ({
     id: `series:${series.id}`,
     title: series.title,
@@ -474,7 +521,7 @@ export function buildTVCatalog(input: TVCatalogInput) {
       };
     });
 
-  const holdsNothing = held.length === 0;
+  const holdsNothing = held.length === 0 && input.heldTitles.length === 0;
   return {
     tabs: {
       playlists: collectionCards("playlist"),

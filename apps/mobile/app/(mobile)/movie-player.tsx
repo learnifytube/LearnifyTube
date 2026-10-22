@@ -162,6 +162,7 @@ export default function MoviePlayerScreen() {
   const captionWidth = width * (isLandscape ? 0.7 : 0.92);
   const captions = useMovieCaptions(
     player,
+    id,
     movie?.captions ?? [],
     2 * Math.floor(captionWidth / (captionFontSize * 0.55)),
   );

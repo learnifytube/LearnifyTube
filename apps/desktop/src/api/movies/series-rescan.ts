@@ -1,12 +1,13 @@
 import path from "path";
 import { randomUUID } from "crypto";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import type { Database } from "@/api/db";
 import type { FolderListing } from "@/api/audiobooks/import-plan";
-import { episodes, seasons, series } from "@/api/db/schema";
+import { captions, episodes, seasons, series } from "@/api/db/schema";
 import { planSeriesRescan, type CurrentSeason } from "./series-rescan-plan";
 import { pairCaptions } from "./caption-pairing";
-import { syncCaptions } from "./captions";
+import { applyWrites, type Write } from "./batch-writes";
+import { captionWrites } from "./captions";
 
 // Rescan of a Series (ADR-0005): applies the Rescan plan to its stored Seasons
 // and Episodes. Only rows change; the user's files are only ever read.
@@ -56,64 +57,84 @@ export const rescanSeries = async (
   }));
   const plan = planSeriesRescan(current, listing);
 
+  const existingCaptions = await db
+    .select()
+    .from(captions)
+    .where(
+      inArray(
+        captions.episodeId,
+        db.select({ id: episodes.id }).from(episodes).where(eq(episodes.seriesId, seriesId))
+      )
+    );
+
+  // Every write is built after the reads, then applied all or none.
+  const writes: Write[] = [];
   const seasonsWithNewEpisodes: string[] = [];
   const listed = listing.files.map((file) => file.path);
   const pathOf = new Map(
     episodeRows.map((episode) => [episode.id, relativeTo(row.sourceFolder, episode.filePath)])
   );
   // Sidecars come and go with the folder too.
-  const pairAgain = (episodeId: string, episodePath: string): Promise<boolean> =>
-    syncCaptions(
+  const pairAgain = (episodeId: string, episodePath: string): Write[] =>
+    captionWrites(
       db,
       { kind: "episode", id: episodeId },
       row.sourceFolder,
-      pairCaptions(episodePath, listed)
+      pairCaptions(episodePath, listed),
+      existingCaptions.filter((caption) => caption.episodeId === episodeId)
     );
   for (const [position, season] of plan.seasons.entries()) {
     let seasonId: string;
     if (season.kind === "existing") {
       seasonId = season.id;
-      await db.update(seasons).set({ position }).where(eq(seasons.id, seasonId));
+      writes.push(db.update(seasons).set({ position }).where(eq(seasons.id, seasonId)));
     } else {
       seasonId = randomUUID();
-      await db
-        .insert(seasons)
-        .values({ id: seasonId, seriesId, title: season.title, number: season.number, position });
+      writes.push(
+        db
+          .insert(seasons)
+          .values({ id: seasonId, seriesId, title: season.title, number: season.number, position })
+      );
     }
     if (season.episodes.some((episode) => episode.kind === "new")) {
       seasonsWithNewEpisodes.push(seasonId);
     }
     for (const [episodePosition, episode] of season.episodes.entries()) {
       if (episode.kind === "existing") {
-        await db
-          .update(episodes)
-          .set({ missing: episode.missing, position: episodePosition })
-          .where(eq(episodes.id, episode.id));
-        await pairAgain(episode.id, pathOf.get(episode.id) ?? "");
+        writes.push(
+          db
+            .update(episodes)
+            .set({ missing: episode.missing, position: episodePosition })
+            .where(eq(episodes.id, episode.id)),
+          ...pairAgain(episode.id, pathOf.get(episode.id) ?? "")
+        );
         continue;
       }
       const proposed = episode.episode;
       const episodeId = randomUUID();
-      await db.insert(episodes).values({
-        id: episodeId,
-        seriesId,
-        seasonId,
-        title: proposed.title,
-        filePath: path.join(row.sourceFolder, proposed.path),
-        number: proposed.number,
-        position: episodePosition,
-        durationSeconds:
-          proposed.durationSeconds === null ? null : Math.round(proposed.durationSeconds),
-        videoCodec: proposed.videoCodec,
-        audioCodec: proposed.audioCodec,
-        createdAt: now,
-      });
-      await pairAgain(episodeId, proposed.path);
+      writes.push(
+        db.insert(episodes).values({
+          id: episodeId,
+          seriesId,
+          seasonId,
+          title: proposed.title,
+          filePath: path.join(row.sourceFolder, proposed.path),
+          number: proposed.number,
+          position: episodePosition,
+          durationSeconds:
+            proposed.durationSeconds === null ? null : Math.round(proposed.durationSeconds),
+          videoCodec: proposed.videoCodec,
+          audioCodec: proposed.audioCodec,
+          createdAt: now,
+        }),
+        ...pairAgain(episodeId, proposed.path)
+      );
     }
   }
   if (plan.added > 0) {
-    await db.update(series).set({ updatedAt: now }).where(eq(series.id, seriesId));
+    writes.push(db.update(series).set({ updatedAt: now }).where(eq(series.id, seriesId)));
   }
+  await applyWrites(db, writes);
   return {
     added: plan.added,
     missing: plan.missing,

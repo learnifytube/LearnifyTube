@@ -2,6 +2,7 @@ import path from "path";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
+import { sql } from "drizzle-orm";
 import * as schema from "@/api/db/schema";
 import type { FolderListing } from "@/api/audiobooks/import-plan";
 import { listMovieFilePaths } from "./catalog";
@@ -128,5 +129,17 @@ describe("Series Rescan", () => {
 
   it("does nothing for a Series that was forgotten", async () => {
     expect(await rescanSeries(db, "gone", listing(S01E01))).toBeNull();
+  });
+  it("changes nothing when a write fails part way", async () => {
+    const id = await importOffice(db);
+    await db.run(
+      sql`CREATE TRIGGER fail_episodes BEFORE INSERT ON episodes BEGIN SELECT RAISE(ABORT, 'disk full'); END`
+    );
+
+    await expect(
+      rescanSeries(db, id, listing(S01E02, "Season 1/S01E03.mkv"), 2000)
+    ).rejects.toThrow();
+
+    expect(await outline(db, id)).toEqual([["Season 1", ["S01E01", "S01E02"]]]);
   });
 });

@@ -2,6 +2,7 @@ import path from "path";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
+import { sql } from "drizzle-orm";
 import * as schema from "@/api/db/schema";
 import { listMovieFilePaths } from "./catalog";
 import {
@@ -211,5 +212,32 @@ describe("Series catalog", () => {
     expect(await getSeries(db, id)).toBeNull();
     expect(await listMovieFilePaths(db)).toEqual([]);
     expect(await forgetSeries(db, id)).toBeNull();
+  });
+  it("saves nothing of a Series when a write fails part way", async () => {
+    await db.run(
+      sql`CREATE TRIGGER fail_captions BEFORE INSERT ON captions BEGIN SELECT RAISE(ABORT, 'disk full'); END`
+    );
+
+    await expect(
+      saveImportedSeries(db, "/series/Office", {
+        title: "The Office",
+        posterPath: null,
+        seasons: [
+          {
+            title: "Season 1",
+            number: 1,
+            episodes: [
+              {
+                ...episode("S01E01.mkv", 1),
+                captions: [{ path: "S01E01.en.srt", language: "en", label: "English" }],
+              },
+            ],
+          },
+        ],
+      })
+    ).rejects.toThrow();
+
+    expect(await listSeries(db)).toEqual([]);
+    expect(await listMovieFilePaths(db)).toEqual([]);
   });
 });

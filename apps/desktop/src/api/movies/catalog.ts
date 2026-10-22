@@ -2,10 +2,11 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { asc, eq } from "drizzle-orm";
 import type { Database } from "@/api/db";
-import { episodes, movies, type Movie } from "@/api/db/schema";
+import { captions, episodes, movies, type Movie } from "@/api/db/schema";
 import type { WatchState } from "@/lib/watch-state";
 import type { ProposedMovie } from "./import-plan";
-import { syncCaptions } from "./captions";
+import { applyWrites, type Write } from "./batch-writes";
+import { captionWrites } from "./captions";
 import { markedWatched, playedTo, watchStateOf } from "./watch-progress";
 
 // The desktop's Movies (ADR-0005). Files are referenced in place: nothing here
@@ -40,10 +41,13 @@ export const saveImportedMovies = async (
     createdAt: now,
     updatedAt: now,
   }));
-  if (rows.length > 0) await db.insert(movies).values(rows);
-  for (const [index, movie] of imported.entries()) {
-    await syncCaptions(db, { kind: "movie", id: rows[index].id }, folderPath, movie.captions ?? []);
-  }
+  if (rows.length === 0) return [];
+  await applyWrites(db, [
+    db.insert(movies).values(rows),
+    ...imported.flatMap((movie, index) =>
+      captionWrites(db, { kind: "movie", id: rows[index].id }, folderPath, movie.captions ?? [])
+    ),
+  ]);
   return rows.map((row) => row.id);
 };
 
@@ -131,7 +135,11 @@ export const forgetMovie = async (
 ): Promise<{ posterPath: string | null } | null> => {
   const movie = await findMovie(db, id);
   if (!movie) return null;
-  await db.delete(movies).where(eq(movies.id, id));
+  // Captions first: the connection may not enforce the cascade.
+  await applyWrites(db, [
+    db.delete(captions).where(eq(captions.movieId, id)),
+    db.delete(movies).where(eq(movies.id, id)),
+  ]);
   return { posterPath: movie.posterPath };
 };
 
@@ -144,14 +152,14 @@ export const markMissingMovies = async (
   exists: (filePath: string) => Promise<boolean>
 ): Promise<number> => {
   const rows = await db.select().from(movies);
-  let changed = 0;
+  const writes: Write[] = [];
   for (const movie of rows) {
     const missing = !(await exists(movie.filePath));
     if (missing === movie.missing) continue;
-    await db.update(movies).set({ missing }).where(eq(movies.id, movie.id));
-    changed += 1;
+    writes.push(db.update(movies).set({ missing }).where(eq(movies.id, movie.id)));
   }
-  return changed;
+  await applyWrites(db, writes);
+  return writes.length;
 };
 
 /** The video file of every Movie and Episode, as recorded. */

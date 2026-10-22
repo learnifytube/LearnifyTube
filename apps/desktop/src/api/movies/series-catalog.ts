@@ -1,13 +1,14 @@
 import path from "path";
 import { randomUUID } from "crypto";
-import { asc, eq, type SQL } from "drizzle-orm";
+import { asc, eq, inArray, type SQL } from "drizzle-orm";
 import type { Database } from "@/api/db";
-import { episodes, seasons, series, type Episode } from "@/api/db/schema";
+import { captions, episodes, seasons, series, type Episode } from "@/api/db/schema";
 import type { WatchState } from "@/lib/watch-state";
 import { nextUpEpisode } from "../../../../shared/series/nextUp";
 import type { ProposedEpisode, ProposedSeason } from "./series-plan";
 import { markedWatched, playedTo, watchStateOf } from "./watch-progress";
-import { syncCaptions } from "./captions";
+import { applyWrites } from "./batch-writes";
+import { captionWrites } from "./captions";
 
 // The desktop's Series, Seasons and Episodes (ADR-0005). Files are referenced in
 // place: nothing here copies, moves or deletes the user's video files.
@@ -58,21 +59,27 @@ export const saveImportedSeries = async (
       createdAt: now,
     }))
   );
-  await db.insert(series).values({
-    id: seriesId,
-    title: imported.title.trim(),
-    sourceFolder: folderPath,
-    posterPath: imported.posterPath,
-    createdAt: now,
-    updatedAt: now,
-  });
-  if (seasonRows.length > 0) await db.insert(seasons).values(seasonRows);
-  if (episodeRows.length > 0) await db.insert(episodes).values(episodeRows);
   const importedEpisodes = imported.seasons.flatMap((season) => season.episodes);
-  for (const [index, episode] of importedEpisodes.entries()) {
-    const owner = { kind: "episode" as const, id: episodeRows[index].id };
-    await syncCaptions(db, owner, folderPath, episode.captions ?? []);
-  }
+  await applyWrites(db, [
+    db.insert(series).values({
+      id: seriesId,
+      title: imported.title.trim(),
+      sourceFolder: folderPath,
+      posterPath: imported.posterPath,
+      createdAt: now,
+      updatedAt: now,
+    }),
+    ...(seasonRows.length > 0 ? [db.insert(seasons).values(seasonRows)] : []),
+    ...(episodeRows.length > 0 ? [db.insert(episodes).values(episodeRows)] : []),
+    ...importedEpisodes.flatMap((episode, index) =>
+      captionWrites(
+        db,
+        { kind: "episode", id: episodeRows[index].id },
+        folderPath,
+        episode.captions ?? []
+      )
+    ),
+  ]);
   return seriesId;
 };
 
@@ -251,12 +258,15 @@ export const setEpisodesWatched = async (
   now: number = Date.now()
 ): Promise<void> => {
   const rows = await db.select().from(episodes).where(whereTarget(target));
-  for (const episode of rows) {
-    await db
-      .update(episodes)
-      .set(markedWatched(episode, watched, now))
-      .where(eq(episodes.id, episode.id));
-  }
+  await applyWrites(
+    db,
+    rows.map((episode) =>
+      db
+        .update(episodes)
+        .set(markedWatched(episode, watched, now))
+        .where(eq(episodes.id, episode.id))
+    )
+  );
 };
 
 /** Removes the Series from the app only; resolves its poster copy for cleanup. */
@@ -267,8 +277,12 @@ export const forgetSeries = async (
   const [row] = await db.select().from(series).where(eq(series.id, id)).limit(1);
   if (!row) return null;
   // Children first, whether or not the connection enforces cascades.
-  await db.delete(episodes).where(eq(episodes.seriesId, id));
-  await db.delete(seasons).where(eq(seasons.seriesId, id));
-  await db.delete(series).where(eq(series.id, id));
+  const ofSeries = db.select({ id: episodes.id }).from(episodes).where(eq(episodes.seriesId, id));
+  await applyWrites(db, [
+    db.delete(captions).where(inArray(captions.episodeId, ofSeries)),
+    db.delete(episodes).where(eq(episodes.seriesId, id)),
+    db.delete(seasons).where(eq(seasons.seriesId, id)),
+    db.delete(series).where(eq(series.id, id)),
+  ]);
   return { posterPath: row.posterPath };
 };

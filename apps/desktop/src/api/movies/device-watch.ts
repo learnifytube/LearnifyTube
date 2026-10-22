@@ -3,6 +3,7 @@ import type { Database } from "@/api/db";
 import { episodes, movies } from "@/api/db/schema";
 import type { MovieWatch } from "../../../../shared/mobile-sync-contract";
 import { playedOnDevice } from "./watch-progress";
+import { applyWrites, type Write } from "./batch-writes";
 
 /** Takes the Movie and Episode progress of a Device report into the desktop's Watch state. */
 export const recordDeviceMovieWatch = async (
@@ -10,6 +11,7 @@ export const recordDeviceMovieWatch = async (
   entries: MovieWatch[],
   now: number
 ): Promise<void> => {
+  const writes: Write[] = [];
   for (const kind of ["movie", "episode"] as const) {
     const table = kind === "movie" ? movies : episodes;
     const reported = entries.filter((entry) => entry.kind === kind);
@@ -30,8 +32,9 @@ export const recordDeviceMovieWatch = async (
       if (!row) continue;
       const progress = playedOnDevice(row, entry, row.durationSeconds, now);
       if (!progress) continue;
-      await db.update(table).set(progress).where(eq(table.id, entry.id));
+      writes.push(db.update(table).set(progress).where(eq(table.id, entry.id)));
       byId.set(entry.id, { ...row, ...progress });
     }
   }
+  await applyWrites(db, writes);
 };

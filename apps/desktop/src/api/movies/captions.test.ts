@@ -2,12 +2,18 @@ import path from "path";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
+import { sql } from "drizzle-orm";
 import * as schema from "@/api/db/schema";
 import type { FolderListing } from "@/api/audiobooks/import-plan";
 import { forgetMovie, saveImportedMovies } from "./catalog";
-import { findCaptionForDevices, listCaptions, pairMovieCaptionsAgain } from "./captions";
+import {
+  captionsByOwner,
+  findCaptionForDevices,
+  listCaptions,
+  pairMovieCaptionsAgain,
+} from "./captions";
 import { loadMovieCatalog } from "./device-catalog";
-import { getSeries, saveImportedSeries } from "./series-catalog";
+import { forgetSeries, getSeries, saveImportedSeries } from "./series-catalog";
 import { rescanSeries } from "./series-rescan";
 import { setShownOnDevices } from "./shown-on-devices";
 
@@ -172,5 +178,15 @@ describe("Sidecar Captions", () => {
     ]);
     expect(await pairMovieCaptionsAgain(db, id, ["Up.mp4", "Up.en.srt", "Up.es.srt"])).toBe(false);
     expect(await pairMovieCaptionsAgain(db, "nope", [])).toBe(false);
+  });
+  it("forgets a title's Captions with it, even on a connection that doesn't cascade", async () => {
+    const movieId = await importUp(db);
+    const seriesId = await importOffice(db);
+    await db.run(sql`PRAGMA foreign_keys = OFF`);
+
+    await forgetMovie(db, movieId);
+    await forgetSeries(db, seriesId);
+
+    expect((await captionsByOwner(db)).size).toBe(0);
   });
 });

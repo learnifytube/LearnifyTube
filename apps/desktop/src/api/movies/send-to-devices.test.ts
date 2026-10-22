@@ -90,10 +90,7 @@ describe("Send a Movie to Devices", () => {
     expect(await devicesHoldingMovie(db, up)).toEqual([
       { id: "phone-1", name: "Pixel", kind: "phone", lastSeenAt: 5_000 },
     ]);
-    expect((await devicesHoldingMovie(db, alien)).map((d) => d.name)).toEqual([
-      "Tablet",
-      "Pixel",
-    ]);
+    expect((await devicesHoldingMovie(db, alien)).map((d) => d.name)).toEqual(["Tablet", "Pixel"]);
 
     // A later report without the Movie means the Device no longer holds it.
     await recordDeviceReport(db, report("phone-1", "Pixel", { heldMovieIds: [alien] }), 8_000);
@@ -101,12 +98,16 @@ describe("Send a Movie to Devices", () => {
   });
 
   it("counts a Device as holding Episodes only when it holds every one of them", async () => {
-    await recordDeviceReport(db, report("phone-1", "Pixel", { heldEpisodeIds: ["e1", "e2"] }), 5_000);
+    await recordDeviceReport(
+      db,
+      report("phone-1", "Pixel", { heldEpisodeIds: ["e1", "e2"] }),
+      5_000
+    );
     await recordDeviceReport(db, report("phone-2", "Tablet", { heldEpisodeIds: ["e1"] }), 6_000);
 
-    expect(
-      (await devicesHoldingTitles(db, "episode", ["e1", "e2"])).map((d) => d.name)
-    ).toEqual(["Pixel"]);
+    expect((await devicesHoldingTitles(db, "episode", ["e1", "e2"])).map((d) => d.name)).toEqual([
+      "Pixel",
+    ]);
     // Movie and Episode ids are reported apart.
     expect(await devicesHoldingTitles(db, "movie", ["e1"])).toEqual([]);
     // Nothing to hold means no Device holds it.

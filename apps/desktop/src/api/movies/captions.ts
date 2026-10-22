@@ -2,7 +2,8 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Database } from "@/api/db";
-import { captions, episodes, movies, series } from "@/api/db/schema";
+import { captions, episodes, movies, series, type Caption } from "@/api/db/schema";
+import { applyWrites, type Write } from "./batch-writes";
 import { pairCaptions, type ProposedCaption } from "./caption-pairing";
 
 // Sidecar Captions of Movies and Episodes (ADR-0005). The subtitle files are
@@ -23,21 +24,19 @@ const ownerColumn = (
   kind === "movie" ? captions.movieId : captions.episodeId;
 
 /**
- * Makes the owner's Captions the paired ones, in their order: a file still
- * paired keeps its Caption id, new files are added and gone ones removed.
- * `folder` is the imported folder the paired paths are relative to.
+ * The writes that make the owner's Captions the paired ones, in their order: a
+ * file still paired keeps its Caption id, new files are added and gone ones
+ * removed. `existing` is the owner's stored Captions; `folder` is the imported
+ * folder the paired paths are relative to. No writes means nothing changes.
  */
-export const syncCaptions = async (
+export const captionWrites = (
   db: Database,
   owner: CaptionOwner,
   folder: string,
-  paired: ProposedCaption[]
-): Promise<boolean> => {
-  let changed = false;
-  const existing = await db
-    .select()
-    .from(captions)
-    .where(eq(ownerColumn(owner.kind), owner.id));
+  paired: ProposedCaption[],
+  existing: Caption[] = []
+): Write[] => {
+  const writes: Write[] = [];
   const byPath = new Map(existing.map((row) => [row.filePath, row]));
   const kept = new Set<string>();
   for (const [position, caption] of paired.entries()) {
@@ -53,22 +52,22 @@ export const syncCaptions = async (
       ) {
         continue;
       }
-      changed = true;
-      await db.update(captions).set(fields).where(eq(captions.id, row.id));
+      writes.push(db.update(captions).set(fields).where(eq(captions.id, row.id)));
       continue;
     }
-    changed = true;
-    await db.insert(captions).values({
-      id: randomUUID(),
-      movieId: owner.kind === "movie" ? owner.id : null,
-      episodeId: owner.kind === "episode" ? owner.id : null,
-      filePath,
-      ...fields,
-    });
+    writes.push(
+      db.insert(captions).values({
+        id: randomUUID(),
+        movieId: owner.kind === "movie" ? owner.id : null,
+        episodeId: owner.kind === "episode" ? owner.id : null,
+        filePath,
+        ...fields,
+      })
+    );
   }
   const gone = existing.filter((row) => !kept.has(row.id)).map((row) => row.id);
-  if (gone.length > 0) await db.delete(captions).where(inArray(captions.id, gone));
-  return changed || gone.length > 0;
+  if (gone.length > 0) writes.push(db.delete(captions).where(inArray(captions.id, gone)));
+  return writes;
 };
 
 /**
@@ -87,8 +86,12 @@ export const pairMovieCaptionsAgain = async (
     .where(eq(movies.id, movieId))
     .limit(1);
   if (!movie) return false;
+  const owner: CaptionOwner = { kind: "movie", id: movieId };
+  const existing = await db.select().from(captions).where(eq(captions.movieId, movieId));
   const paired = pairCaptions(path.basename(movie.filePath), namesBesideVideo);
-  return syncCaptions(db, { kind: "movie", id: movieId }, path.dirname(movie.filePath), paired);
+  const writes = captionWrites(db, owner, path.dirname(movie.filePath), paired, existing);
+  await applyWrites(db, writes);
+  return writes.length > 0;
 };
 
 /** A Movie's or Episode's Captions, in picker order. */

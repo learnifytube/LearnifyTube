@@ -9,7 +9,8 @@ import {
 
 const SERVER = "http://desktop.local:8384";
 
-function createHarness({ connected = true } = {}) {
+/** `streamOnly`: the Movies and Episodes source, whose files are already on the desktop. */
+function createHarness({ connected = true, streamOnly = false } = {}) {
   const desktop = createFakeDesktopFetchPlatform();
   const connection = {
     status: (connected ? "connected" : "offline") as ConnectionStatus,
@@ -33,8 +34,11 @@ function createHarness({ connected = true } = {}) {
         return () => offlineCopyListeners.delete(listener);
       },
     },
-    desktopFetch: createDesktopFetch(desktop.platform),
-    streamUrl: (serverUrl, videoId) => `${serverUrl}/api/video/${videoId}/file`,
+    desktopFetch: streamOnly ? null : createDesktopFetch(desktop.platform),
+    streamUrl: (serverUrl, videoId) =>
+      streamOnly
+        ? `${serverUrl}/api/movie/${videoId}/file`
+        : `${serverUrl}/api/video/${videoId}/file`,
     log: () => {},
   });
 
@@ -255,7 +259,6 @@ describe("Playback source", () => {
 
       expect(state().source).toEqual({ kind: "desktopLost", nextIndex: null });
     });
-
   });
 
   describe("when the desktop drops out while it is still fetching", () => {
@@ -367,5 +370,86 @@ describe("Playback source", () => {
     await jest.advanceTimersByTimeAsync(20_000);
 
     expect(h.desktop.statusRequests).toHaveLength(polls);
+  });
+});
+
+describe("Playback source, Stream-only (Movies and Episodes)", () => {
+  it("Streams from the desktop at once, never asking it to fetch", async () => {
+    const h = createHarness({ streamOnly: true });
+
+    const { state } = h.play({ videoId: "up" });
+    await flush();
+
+    expect(state().source).toEqual({
+      kind: "stream",
+      uri: `${SERVER}/api/movie/up/file`,
+    });
+    expect(h.desktop.requests).toEqual([]);
+    expect(h.desktop.statusRequests).toEqual([]);
+  });
+
+  it("prefers an Offline copy", async () => {
+    const h = createHarness({ streamOnly: true });
+    h.holds("up");
+
+    const { state } = h.play({ videoId: "up" });
+    await flush();
+
+    expect(state().source).toEqual({
+      kind: "offline",
+      uri: "file:///videos/up.mp4",
+      resumeAt: null,
+    });
+  });
+
+  it("can't play in Offline mode what this Device doesn't hold", async () => {
+    const h = createHarness({ connected: false, streamOnly: true });
+
+    const { state } = h.play({ videoId: "up" });
+    await flush();
+
+    expect(state().source).toMatchObject({
+      kind: "failed",
+      failure: { kind: "notOnThisTV" },
+      canRetry: false,
+    });
+  });
+
+  it("Streams once the desktop connects", async () => {
+    const h = createHarness({ connected: false, streamOnly: true });
+    const { state } = h.play({ videoId: "up" });
+
+    h.connect();
+    await flush();
+
+    expect(state().source).toEqual({
+      kind: "stream",
+      uri: `${SERVER}/api/movie/up/file`,
+    });
+  });
+
+  it("has the next Episode ready without warming it", async () => {
+    const h = createHarness({ streamOnly: true });
+
+    const { state } = h.play({
+      videoId: "e1",
+      queue: queueOf("e1", "e2"),
+      index: 0,
+    });
+    await flush();
+
+    expect(state().upNext).toBe("ready");
+    expect(h.desktop.requests).toEqual([]);
+  });
+
+  it("goes back when the desktop drops out mid-Stream and nothing is held", async () => {
+    const h = createHarness({ streamOnly: true });
+    const { state } = h.play({ videoId: "up" });
+    await flush();
+
+    h.disconnect();
+    await flush();
+
+    expect(state().source).toEqual({ kind: "desktopLost", nextIndex: null });
   });
 });

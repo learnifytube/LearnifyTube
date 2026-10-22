@@ -16,21 +16,41 @@ export const playbackSource = createPlaybackSource({
   log: (message, data) => logger.info(message, data),
 });
 
-// The phone player; the address is the connection store's current desktop.
-export const phonePlaybackSource = createPlaybackSource({
+// The phone players' desktop: the connection store's current one.
+const phoneDesktop = {
   getDesktop: () => {
     const url = useConnectionStore.getState().serverUrl;
     return url
       ? { status: "connected" as const, url }
       : { status: "offline" as const, url: null };
   },
-  onDesktopChange: (listener) =>
+  onDesktopChange: (listener: () => void) =>
     useConnectionStore.subscribe((state, previous) => {
       if (state.serverUrl !== previous.serverUrl) listener();
     }),
+};
+
+// The phone player.
+export const phonePlaybackSource = createPlaybackSource({
+  ...phoneDesktop,
   offlineCopy,
   desktopFetch,
   streamUrl: api.getVideoFileUrl,
+  log: (message, data) => logger.info(message, data),
+});
+
+// No Movie is held on a Device yet: sent Movies arrive with the Movie Mirror.
+const noOfflineCopies = {
+  getUri: (_id: string): string | null => null,
+  subscribe: (_listener: () => void) => () => {},
+};
+
+// The phone's Movie player: Stream-only, it never fetches or Downloads (ADR-0005).
+export const phoneMoviePlaybackSource = createPlaybackSource({
+  ...phoneDesktop,
+  offlineCopy: noOfflineCopies,
+  desktopFetch: null,
+  streamUrl: api.getMovieFileUrl,
   log: (message, data) => logger.info(message, data),
 });
 

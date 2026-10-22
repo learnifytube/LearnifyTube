@@ -2,7 +2,7 @@ import { api } from "../api";
 import { desktopConnection } from "../desktop-connection";
 import { desktopFetch } from "../desktop-fetch";
 import { logger } from "../logger";
-import { offlineCopy } from "../offline-copy";
+import { movieOfflineCopy, offlineCopy } from "../offline-copy";
 import { useConnectionStore } from "../../stores/connection";
 import { createPlaybackSource } from "./createPlaybackSource";
 
@@ -39,25 +39,26 @@ export const phonePlaybackSource = createPlaybackSource({
   log: (message, data) => logger.info(message, data),
 });
 
-// No Movie is held on a Device yet: sent Movies arrive with the Movie Mirror.
+// The TV holds no Movie yet: it doesn't Mirror them.
 const noOfflineCopies = {
   getUri: (_id: string): string | null => null,
   subscribe: (_listener: () => void) => () => {},
 };
 
-// The phone's Movie player: Stream-only, it never fetches or Downloads (ADR-0005).
+// The phone's Movie player: the Offline copy when the Mirror or the user brought
+// one, else a Stream; it never fetches or Downloads (ADR-0005).
 export const phoneMoviePlaybackSource = createPlaybackSource({
   ...phoneDesktop,
-  offlineCopy: noOfflineCopies,
+  offlineCopy: movieOfflineCopy,
   desktopFetch: null,
   streamUrl: api.getMovieFileUrl,
   log: (message, data) => logger.info(message, data),
 });
 
-// The phone's Episode player, Stream-only like Movies.
+// The phone's Episode player, like Movies (Episodes share the Movies' Offline copies).
 export const phoneEpisodePlaybackSource = createPlaybackSource({
   ...phoneDesktop,
-  offlineCopy: noOfflineCopies,
+  offlineCopy: movieOfflineCopy,
   desktopFetch: null,
   streamUrl: api.getEpisodeFileUrl,
   log: (message, data) => logger.info(message, data),

@@ -8,17 +8,24 @@ export type MoviesRowItem = {
 
 /**
  * The cards of the Movies Home row: the desktop's Movies (its latest catalog,
- * or the last one seen in Offline mode) that it can play. No Movie is held on
- * the phone yet, so in Offline mode each one Needs the desktop.
+ * or the last one seen in Offline mode) that can play: the desktop has the
+ * file, or this phone holds an Offline copy. In Offline mode a Movie without
+ * one Needs the desktop.
  */
 export function moviesRowItems({
   connected,
   movies,
+  onThisPhone = () => false,
 }: {
   connected: boolean;
   movies: Movie[];
+  /** Whether this phone holds the Movie's Offline copy. */
+  onThisPhone?: (id: string) => boolean;
 }): MoviesRowItem[] {
   return movies
-    .filter((movie) => !movie.missing)
-    .map((movie) => ({ movie, needsDesktop: !connected }));
+    .filter((movie) => !movie.missing || onThisPhone(movie.id))
+    .map((movie) => ({
+      movie,
+      needsDesktop: !connected && !onThisPhone(movie.id),
+    }));
 }

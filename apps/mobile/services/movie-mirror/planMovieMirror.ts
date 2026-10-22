@@ -1,5 +1,6 @@
 import type { MovieCatalog } from "../../../shared/mobile-sync-contract";
 import type { HeldTitle, MovieHoldReason } from "../held-movies/types";
+import { heldTitleOfMovie } from "../held-movies/heldTitle";
 
 /** A Movie or Episode the desktop sent to Devices. */
 export type SentTitle = HeldTitle & {
@@ -14,14 +15,7 @@ export type SentTitle = HeldTitle & {
 export function sentTitles(catalog: MovieCatalog): SentTitle[] {
   return catalog.movies
     .filter((movie) => movie.sentToDevices)
-    .map((movie) => ({
-      kind: "movie",
-      id: movie.id,
-      title: movie.title,
-      posterUrl: movie.posterUrl,
-      durationSeconds: movie.durationSeconds,
-      missing: movie.missing,
-    }));
+    .map((movie) => ({ ...heldTitleOfMovie(movie), missing: movie.missing }));
 }
 
 /**

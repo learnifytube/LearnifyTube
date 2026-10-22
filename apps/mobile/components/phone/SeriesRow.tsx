@@ -1,5 +1,6 @@
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useMovieCatalogStore } from "../../stores/movieCatalog";
+import { movieOfflineCopy } from "../../services/offline-copy";
 import type { Series } from "../../../shared/mobile-sync-contract";
 import { colors, fontSize, fontWeight, spacing } from "../../theme";
 import { MoviePoster } from "./MoviesRow";
@@ -25,9 +26,11 @@ export function SeriesRow({
   onOpen: (series: Series) => void;
 }) {
   const catalog = useMovieCatalogStore();
+  const getMovieOfflineUri = movieOfflineCopy.useLookup();
   const items = seriesRowItems({
     connected: !!serverUrl,
     series: !serverUrl || catalog.serverUrl === serverUrl ? catalog.series : [],
+    onThisPhone: (id) => getMovieOfflineUri(id) !== null,
   });
   if (items.length === 0) return null;
 

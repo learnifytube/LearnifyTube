@@ -1,4 +1,5 @@
 import type { StreamingVideo } from "../../stores/playback";
+import type { MovieHold } from "../../services/held-movies/types";
 
 export const CONTINUE_WATCHING_ID = "continue-watching";
 export const ON_THIS_PHONE_ID = "on-this-phone";
@@ -9,6 +10,8 @@ export type PhoneHomeRow = {
   id: string;
   title: string;
   videos: StreamingVideo[];
+  /** On this phone only: the held Movies and Episodes, which never join a Play queue. */
+  movies?: MovieHold[];
 };
 
 export type PhoneContinueItem = StreamingVideo & {
@@ -23,6 +26,9 @@ export type PhoneHomeInput = {
   resolveAssetUrl?: (assetUrl?: string | null) => string | null;
   continueWatching: PhoneContinueItem[];
   onThisPhone?: StreamingVideo[];
+  /** Movies and Episodes held on this phone, arrived or still Downloading. */
+  heldMovies?: MovieHold[];
+  hasMovieOfflineCopy?: (id: string) => boolean;
   recentlyAdded: StreamingVideo[];
 };
 
@@ -58,20 +64,23 @@ export function buildPhoneHome(input: PhoneHomeInput): PhoneHomeRow[] {
     });
   }
 
-  if (input.onThisPhone && input.onThisPhone.length > 0) {
-    const onThisPhoneVideos = input.onThisPhone
-      .filter((video) => hasOfflineCopy(video.id))
-      .map((video) => ({
-        ...video,
-        thumbnailUrl: getStoredThumbnail(video.id) ?? video.thumbnailUrl,
-      }));
-    if (onThisPhoneVideos.length > 0) {
-      rows.push({
-        id: ON_THIS_PHONE_ID,
-        title: "On this phone",
-        videos: onThisPhoneVideos,
-      });
-    }
+  const onThisPhoneVideos = (input.onThisPhone ?? [])
+    .filter((video) => hasOfflineCopy(video.id))
+    .map((video) => ({
+      ...video,
+      thumbnailUrl: getStoredThumbnail(video.id) ?? video.thumbnailUrl,
+    }));
+  const hasMovieOfflineCopy = input.hasMovieOfflineCopy ?? (() => false);
+  const onThisPhoneMovies = [...(input.heldMovies ?? [])]
+    .filter((hold) => hasMovieOfflineCopy(hold.id))
+    .sort((a, b) => b.heldAt - a.heldAt);
+  if (onThisPhoneVideos.length > 0 || onThisPhoneMovies.length > 0) {
+    rows.push({
+      id: ON_THIS_PHONE_ID,
+      title: "On this phone",
+      videos: onThisPhoneVideos,
+      movies: onThisPhoneMovies,
+    });
   }
 
   const recentVideos = visibleVideos(

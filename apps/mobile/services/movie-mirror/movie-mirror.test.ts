@@ -1,7 +1,4 @@
-import type {
-  Movie,
-  MovieCatalog,
-} from "../../../shared/mobile-sync-contract";
+import type { Movie, MovieCatalog } from "../../../shared/mobile-sync-contract";
 import { planMovieMirror, sentTitles } from "./planMovieMirror";
 
 const movie = (id: string, overrides: Partial<Movie> = {}): Movie => ({

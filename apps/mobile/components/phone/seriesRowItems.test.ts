@@ -16,7 +16,13 @@ const series = (id: string, episodes: Episode[]): Series => ({
   title: id,
   posterUrl: null,
   seasons: [
-    { id: `${id}-s1`, title: "Season 1", number: 1, sentToDevices: false, episodes },
+    {
+      id: `${id}-s1`,
+      title: "Season 1",
+      number: 1,
+      sentToDevices: false,
+      episodes,
+    },
   ],
 });
 
@@ -25,7 +31,10 @@ describe("Series row", () => {
     expect(
       seriesRowItems({
         connected: true,
-        series: [series("office", [episode("o1")]), series("lost", [episode("l1")])],
+        series: [
+          series("office", [episode("o1")]),
+          series("lost", [episode("l1")]),
+        ],
       }).map((item) => [item.series.id, item.needsDesktop]),
     ).toEqual([
       ["office", false],
@@ -42,12 +51,22 @@ describe("Series row", () => {
     ).toEqual([]);
   });
 
-  it("dims every Series in Offline mode: none is on this phone", () => {
+  it("dims a Series in Offline mode when none of its Episodes is on this phone", () => {
     expect(
       seriesRowItems({
         connected: false,
         series: [series("office", [episode("o1")])],
       })[0].needsDesktop,
     ).toBe(true);
+  });
+
+  it("keeps a Series playable in Offline mode while an Episode is on this phone", () => {
+    expect(
+      seriesRowItems({
+        connected: false,
+        series: [series("office", [episode("o1"), episode("o2")])],
+        onThisPhone: (id) => id === "o2",
+      })[0].needsDesktop,
+    ).toBe(false);
   });
 });

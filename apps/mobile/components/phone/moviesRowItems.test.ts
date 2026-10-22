@@ -35,9 +35,26 @@ describe("Movies row", () => {
     ).toEqual(["up"]);
   });
 
-  it("dims every Movie in Offline mode: none is on this phone", () => {
-    expect(moviesRowItems({ connected: false, movies: [movie("up")] })).toEqual(
-      [{ movie: movie("up"), needsDesktop: true }],
-    );
+  it("dims a Movie in Offline mode unless it is on this phone", () => {
+    expect(
+      moviesRowItems({
+        connected: false,
+        movies: [movie("up"), movie("alien")],
+        onThisPhone: (id) => id === "alien",
+      }),
+    ).toEqual([
+      { movie: movie("up"), needsDesktop: true },
+      { movie: movie("alien"), needsDesktop: false },
+    ]);
+  });
+
+  it("keeps a Movie on this phone whose file went missing on the desktop", () => {
+    expect(
+      moviesRowItems({
+        connected: true,
+        movies: [movie("up", { missing: true })],
+        onThisPhone: (id) => id === "up",
+      }).map((item) => item.movie.id),
+    ).toEqual(["up"]);
   });
 });

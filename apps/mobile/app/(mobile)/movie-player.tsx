@@ -13,6 +13,7 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useConnectionStore } from "../../stores/connection";
 import { useMovieCatalogStore } from "../../stores/movieCatalog";
+import { heldMovies } from "../../services/held-movies";
 import { movieWatchKey, useMovieWatchStore } from "../../stores/movieWatch";
 import {
   phoneEpisodePlaybackSource,
@@ -88,7 +89,8 @@ function findTitle(
 
 /**
  * Plays a Movie, or an Episode (`kind=episode`) and then the Episodes after it:
- * Streamed from the desktop, never Downloaded (ADR-0005).
+ * its Offline copy when this phone holds one, else Streamed from the desktop;
+ * playing never Downloads (ADR-0005).
  */
 export default function MoviePlayerScreen() {
   const params = useLocalSearchParams<{ id: string; kind?: string }>();
@@ -100,6 +102,9 @@ export default function MoviePlayerScreen() {
   const serverUrl = useConnectionStore((state) => state.serverUrl);
   const catalog = useMovieCatalogStore();
   const movie = findTitle(catalog, kind, id);
+  // A title held here that the desktop no longer lists still plays.
+  const hold = heldMovies.useHolds().find((item) => item.id === id);
+  const shownTitle = movie?.title ?? hold?.title;
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(movie?.durationSeconds ?? 0);
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -138,7 +143,7 @@ export default function MoviePlayerScreen() {
         ? {
             uri: sourceUri,
             metadata: {
-              title: movie?.title,
+              title: shownTitle,
               artwork:
                 resolveRemoteAssetUrl(serverUrl, movie?.posterUrl) ?? undefined,
             },
@@ -302,7 +307,7 @@ export default function MoviePlayerScreen() {
             ]}
           >
             <Text style={styles.title} numberOfLines={isLandscape ? 1 : 2}>
-              {movie?.title ?? ""}
+              {shownTitle ?? ""}
             </Text>
             <PlayerProgressBar
               currentTime={currentTime}

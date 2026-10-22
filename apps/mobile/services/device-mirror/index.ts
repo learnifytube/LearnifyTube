@@ -157,7 +157,7 @@ const platform: DeviceMirrorPlatform = {
     AsyncStorage.setItem(MIRRORED_IDS_KEY, JSON.stringify(videoIds)),
   saveOnDeviceSet: (videos) => useOnDeviceSetStore.setState({ videos }),
   audiobooks: kind === "tv" ? noAudiobooks : audiobookMirror,
-  // The TV keeps the Movie catalog too; it Mirrors Movies from #57 on.
+  // The TV keeps the Movie catalog too, but doesn't Mirror Movies yet.
   movies: {
     refreshCatalog: refreshMovieCatalog,
     ...(kind === "tv" ? noMovieMirror : movieMirror),

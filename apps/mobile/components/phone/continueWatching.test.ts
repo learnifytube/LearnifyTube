@@ -45,11 +45,21 @@ const series = (id: string, episodes: Episode[]): Series => ({
   title: id,
   posterUrl: null,
   seasons: [
-    { id: `${id}-s1`, title: "Season 1", number: 1, sentToDevices: false, episodes },
+    {
+      id: `${id}-s1`,
+      title: "Season 1",
+      number: 1,
+      sentToDevices: false,
+      episodes,
+    },
   ],
 });
 
-const onDesktop = (positionSeconds: number, updatedAt: number, watched = false) => ({
+const onDesktop = (
+  positionSeconds: number,
+  updatedAt: number,
+  watched = false,
+) => ({
   watch: { positionSeconds, watched, updatedAt },
 });
 
@@ -85,7 +95,12 @@ const ids = (input: ContinueWatchingInput) =>
 describe("Continue watching", () => {
   it("is empty when nothing was started", () => {
     expect(
-      ids(base({ movies: [movie("up")], series: [series("office", [episode("e1")])] })),
+      ids(
+        base({
+          movies: [movie("up")],
+          series: [series("office", [episode("e1")])],
+        }),
+      ),
     ).toEqual([]);
   });
 
@@ -107,7 +122,13 @@ describe("Continue watching", () => {
           kept: keptOnPhone({ "movie:alien": [600, 50] }),
         }),
       ),
-    ).toEqual(["movie:alien", "video:v1", "movie:up", "episode:o2", "video:v2"]);
+    ).toEqual([
+      "movie:alien",
+      "video:v1",
+      "movie:up",
+      "episode:o2",
+      "video:v2",
+    ]);
   });
 
   it("keeps each Video's place in the Video queue the row plays", () => {
@@ -146,7 +167,10 @@ describe("Continue watching", () => {
         base({
           movies: [movie("up", onDesktop(0, 70))],
           series: [series("office", [episode("o1", onDesktop(0, 70, true))])],
-          kept: keptOnPhone({ "movie:up": [1200, 60], "episode:o1": [300, 60] }),
+          kept: keptOnPhone({
+            "movie:up": [1200, 60],
+            "episode:o1": [300, 60],
+          }),
         }),
       ),
     ).toEqual([]);
@@ -191,7 +215,11 @@ describe("Continue watching", () => {
 
   it("leaves out Movies whose file is missing", () => {
     expect(
-      ids(base({ movies: [movie("up", { missing: true, ...onDesktop(1200, 30) })] })),
+      ids(
+        base({
+          movies: [movie("up", { missing: true, ...onDesktop(1200, 30) })],
+        }),
+      ),
     ).toEqual([]);
   });
 
@@ -203,9 +231,22 @@ describe("Continue watching", () => {
         series: [series("office", [episode("o1", onDesktop(300, 20))])],
       }),
     );
-    expect(items.map((item) => item.kind !== "video" && item.needsDesktop)).toEqual([
-      true,
-      true,
-    ]);
+    expect(
+      items.map((item) => item.kind !== "video" && item.needsDesktop),
+    ).toEqual([true, true]);
+  });
+
+  it("plays a Movie or Episode with an Offline copy in Offline mode", () => {
+    const items = mergeContinueWatching({
+      ...base({
+        connected: false,
+        movies: [movie("up", onDesktop(1200, 30))],
+        series: [series("office", [episode("o1", onDesktop(300, 20))])],
+      }),
+      onThisPhone: (id) => id === "up" || id === "o1",
+    });
+    expect(
+      items.map((item) => item.kind !== "video" && item.needsDesktop),
+    ).toEqual([false, false]);
   });
 });

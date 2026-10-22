@@ -17,7 +17,9 @@ const pilot: HeldTitle = {
   durationSeconds: 1300,
 };
 
-function createHarness(options?: Parameters<typeof createFakeHeldMoviesPlatform>[0]) {
+function createHarness(
+  options?: Parameters<typeof createFakeHeldMoviesPlatform>[0],
+) {
   const fake = createFakeHeldMoviesPlatform(options);
   return { fake, held: createHeldMovies(fake.platform) };
 }
@@ -29,7 +31,10 @@ describe("Held Movies", () => {
     held.pull(up);
 
     expect(fake.queued()).toEqual(["up"]);
-    expect(held.getHold("up")).toMatchObject({ title: "Up", reasons: ["pulled"] });
+    expect(held.getHold("up")).toMatchObject({
+      title: "Up",
+      reasons: ["pulled"],
+    });
   });
 
   it("reports only the Movies and Episodes whose Offline copy is here", () => {

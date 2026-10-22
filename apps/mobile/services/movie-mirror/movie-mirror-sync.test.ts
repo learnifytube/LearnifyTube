@@ -1,7 +1,4 @@
-import type {
-  Movie,
-  MovieCatalog,
-} from "../../../shared/mobile-sync-contract";
+import type { Movie, MovieCatalog } from "../../../shared/mobile-sync-contract";
 import { createHeldMovies } from "../held-movies/createHeldMovies";
 import { createFakeHeldMoviesPlatform } from "../held-movies/fakeHeldMoviesPlatform";
 import { createMovieMirror } from "./createMovieMirror";
@@ -17,7 +14,10 @@ const movie = (id: string, sentToDevices: boolean): Movie => ({
   watch: null,
 });
 
-const catalogOf = (...movies: Movie[]): MovieCatalog => ({ movies, series: [] });
+const catalogOf = (...movies: Movie[]): MovieCatalog => ({
+  movies,
+  series: [],
+});
 
 function createHarness() {
   const fake = createFakeHeldMoviesPlatform();
@@ -68,7 +68,13 @@ describe("Movie Mirror", () => {
 
   it("never removes a Movie the user downloaded to this phone", async () => {
     const { fake, held, mirror } = createHarness();
-    held.pull({ kind: "movie", id: "up", title: "up", posterUrl: null, durationSeconds: 6000 });
+    held.pull({
+      kind: "movie",
+      id: "up",
+      title: "up",
+      posterUrl: null,
+      durationSeconds: 6000,
+    });
     fake.finishDownload("up");
 
     await mirror.mirror(catalogOf(movie("up", true)));

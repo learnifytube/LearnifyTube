@@ -33,6 +33,8 @@ import {
   ContinueListeningRow,
 } from "../../../components/phone/AudiobooksRow";
 import { MoviesRow } from "../../../components/phone/MoviesRow";
+import { HeldMovieCards } from "../../../components/phone/HeldMovieCards";
+import { heldMovies, type MovieHold } from "../../../services/held-movies";
 import { SeriesRow } from "../../../components/phone/SeriesRow";
 import {
   ContinueWatchingRow,
@@ -47,7 +49,7 @@ import {
   ON_THIS_PHONE_ID,
 } from "../../../components/phone/phoneCatalog";
 import { videoThumbnails } from "../../../services/video-thumbnails";
-import { offlineCopy } from "../../../services/offline-copy";
+import { movieOfflineCopy, offlineCopy } from "../../../services/offline-copy";
 import * as watchHistoryRepo from "../../../db/repositories/watchHistory";
 import { colors, spacing, fontSize, fontWeight } from "../../../theme";
 import { ArrowLeft, Smartphone } from "../../../theme/icons";
@@ -134,6 +136,17 @@ function openAudiobook(book: Audiobook) {
 // Tapping a Movie Streams it; it is never Downloaded from here (ADR-0005).
 function playMovie(movie: Movie) {
   router.push({ pathname: "/movie-player", params: { id: movie.id } });
+}
+
+// A Movie or Episode On this phone plays its Offline copy.
+function playHeldMovie(hold: MovieHold) {
+  router.push({
+    pathname: "/movie-player",
+    params:
+      hold.kind === "episode"
+        ? { kind: "episode", id: hold.id }
+        : { id: hold.id },
+  });
 }
 
 // An Episode Streams like a Movie; the Episodes after it autoplay.
@@ -247,6 +260,9 @@ export default function HomeScreen() {
     }
   }, [serverUrl]);
 
+  const movieHolds = heldMovies.useHolds();
+  const getMovieOfflineUri = movieOfflineCopy.useLookup();
+
   const rows = useMemo(
     () =>
       buildPhoneHome({
@@ -257,9 +273,13 @@ export default function HomeScreen() {
           resolveRemoteAssetUrl(serverUrl, assetUrl),
         continueWatching,
         onThisPhone: onThisPhoneVideos,
+        heldMovies: movieHolds,
+        hasMovieOfflineCopy: (id) => getMovieOfflineUri(id) !== null,
         recentlyAdded: toStreaming(recentlyAddedVideos, serverUrl),
       }),
     [
+      movieHolds,
+      getMovieOfflineUri,
       connected,
       getOfflineUri,
       getStoredThumbnail,
@@ -321,6 +341,13 @@ export default function HomeScreen() {
           keyExtractor={(item) => item.id}
           numColumns={2}
           contentContainerStyle={styles.grid}
+          ListHeaderComponent={
+            <HeldMovieCards
+              holds={activeRow.movies ?? []}
+              serverUrl={serverUrl}
+              onPlay={playHeldMovie}
+            />
+          }
           renderItem={({ item, index }) => (
             <View style={styles.gridItem}>
               <VideoGridCard
@@ -431,6 +458,13 @@ export default function HomeScreen() {
               keyExtractor={(video) => video.id}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.rowScroll}
+              ListHeaderComponent={
+                <HeldMovieCards
+                  holds={row.movies ?? []}
+                  serverUrl={serverUrl}
+                  onPlay={playHeldMovie}
+                />
+              }
               initialNumToRender={3}
               maxToRenderPerBatch={4}
               windowSize={3}

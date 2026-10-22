@@ -14,6 +14,7 @@ import { formatListeningTime } from "@/pages/audiobooks/format";
 import { watchStateOf } from "@/api/movies/watch-progress";
 import { ShownOnDevicesSwitch } from "./components/ShownOnDevicesSwitch";
 import { useMovieProgress } from "./useMovieProgress";
+import { useCaptionTracks } from "./useCaptionTracks";
 import { MovieOnDevices } from "./components/MovieOnDevices";
 
 type Movie = NonNullable<Awaited<ReturnType<typeof trpcClient.movies.get.query>>>;
@@ -27,6 +28,7 @@ function MovieView({ movie }: { movie: Movie }): React.JSX.Element {
   const videoSrc = movie.missing ? null : toLocalFileUrl(movie.filePath);
   // Playing it pauses the Book player, as any Video does.
   useMovieProgress(videoRef, movie, videoSrc);
+  const captions = useCaptionTracks("movie", movie.id);
 
   const refresh = (): Promise<void> => queryClient.invalidateQueries({ queryKey: ["movies"] });
 
@@ -63,6 +65,7 @@ function MovieView({ movie }: { movie: Movie }): React.JSX.Element {
           videoSrc={videoSrc}
           onTimeUpdate={() => undefined}
           onError={() => setUnplayable(true)}
+          captions={captions}
           className="max-h-[70vh]"
         />
       ) : (

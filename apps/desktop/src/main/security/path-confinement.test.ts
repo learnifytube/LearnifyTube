@@ -7,6 +7,7 @@ import {
   createTrackFileAllowlist,
   localFileKey,
   resolveAudiobookTrackFile,
+  resolveCaptionFile,
   resolveMovieFile,
   resolveWithinAllowed,
 } from "./path-confinement";
@@ -265,6 +266,34 @@ describe("resolveMovieFile", () => {
     const notes = writeFile("Films/notes.txt");
     const result = await resolveMovieFile("m1", shown({ m1: notes }));
     expect(result).toEqual({ ok: false, reason: "not-video" });
+  });
+
+  test("serves a Caption's subtitle file by its id, inside the imported folder", async () => {
+    const srt = writeFile("Films/Up.en.srt");
+    const vtt = writeFile("Films/Up.fr.vtt");
+    expect(await resolveCaptionFile("c1", shown({ c1: srt }))).toEqual({
+      ok: true,
+      realPath: srt,
+      contentType: "application/x-subrip",
+    });
+    expect(await resolveCaptionFile("c2", shown({ c2: vtt }))).toMatchObject({
+      contentType: "text/vtt",
+    });
+    expect(await resolveCaptionFile("c3", shown({ c1: srt }))).toEqual(UNKNOWN_FILE);
+  });
+
+  test("refuses a Caption that a symlink takes outside the folder, or that isn't subtitles", async () => {
+    const link = path.join(films, "Up.srt");
+    fs.symlinkSync(writeFile("Private/diary.srt"), link);
+    expect(await resolveCaptionFile("c1", shown({ c1: link }))).toEqual({
+      ok: false,
+      reason: "outside-folder",
+    });
+    const film = writeFile("Films/Up.mp4");
+    expect(await resolveCaptionFile("c2", shown({ c2: film }))).toEqual({
+      ok: false,
+      reason: "not-caption",
+    });
   });
 });
 

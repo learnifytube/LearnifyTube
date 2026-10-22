@@ -74,6 +74,7 @@ describe("planMovieImport", () => {
         videoCodec: "h264",
         audioCodec: "aac",
         codecWarnings: [],
+        captions: [],
       },
     ]);
   });
@@ -154,5 +155,44 @@ describe("planMovieImport", () => {
       "Fine.mp4": [],
       "Unprobed.mkv": [],
     });
+  });
+
+  it("pairs subtitle files named after a video as its Captions, reading language suffixes", () => {
+    const [up, alien] = planMovieImport(
+      {
+        name: "Films",
+        files: [
+          { path: "Up (2009).mp4" },
+          { path: "Up (2009).srt" },
+          { path: "Up (2009).en.srt" },
+          { path: "Up (2009).fre.vtt" },
+          { path: "Up (2009).pt-br.forced.srt" },
+          { path: "up (2009).ES.SDH.srt" },
+          { path: "Up (2009).commentary.srt" },
+          { path: "Alien.1979.mkv" },
+          { path: "Alien.1979.English.srt" },
+          // Not named after a video, or not next to it.
+          { path: "Subs/Alien.1979.en.srt" },
+          { path: "Up.srt" },
+          { path: "Up (2009).en.txt" },
+        ],
+      }
+      // Two films: one Movie per file.
+    ).movies.sort((a, b) => (a.path < b.path ? 1 : -1));
+    expect(up.captions).toEqual([
+      {
+        path: "Up (2009).pt-br.forced.srt",
+        language: "pt-BR",
+        label: "Brazilian Portuguese (Forced)",
+      },
+      { path: "Up (2009).srt", language: null, label: "Captions" },
+      { path: "Up (2009).commentary.srt", language: null, label: "commentary" },
+      { path: "Up (2009).en.srt", language: "en", label: "English" },
+      { path: "Up (2009).fre.vtt", language: "fr", label: "French" },
+      { path: "up (2009).ES.SDH.srt", language: "es", label: "Spanish (SDH)" },
+    ]);
+    expect(alien.captions).toEqual([
+      { path: "Alien.1979.English.srt", language: "en", label: "English" },
+    ]);
   });
 });

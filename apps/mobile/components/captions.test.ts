@@ -1,5 +1,5 @@
 import { currentCaption } from "./captions";
-import type { TranscriptSegment } from "../../types";
+import type { TranscriptSegment } from "../types";
 
 const segments: TranscriptSegment[] = [
   { start: 0, end: 2, text: "Hello" },

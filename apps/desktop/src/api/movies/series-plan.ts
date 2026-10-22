@@ -17,6 +17,7 @@ import {
   type PosterSource,
 } from "./import-plan";
 import { codecWarningsFor, type CodecWarning } from "./codec-warnings";
+import { pairCaptions, type ProposedCaption } from "./caption-pairing";
 
 // Every way the preview can import a folder of video files.
 export const VIDEO_LAYOUTS = [...MOVIE_LAYOUTS, "series"] as const;
@@ -34,6 +35,8 @@ export type ProposedEpisode = {
   audioCodec: string | null;
   // What Android is likely to refuse to play; the preview warns before saving.
   codecWarnings: CodecWarning[];
+  // Sidecar subtitle files named after the video.
+  captions: ProposedCaption[];
 };
 
 export type ProposedSeason = {
@@ -93,7 +96,11 @@ const compareEpisodes = (a: ProposedEpisode, b: ProposedEpisode): number => {
   return collator.compare(a.path, b.path);
 };
 
-const proposeEpisode = (video: ListedFile, number: number | null): ProposedEpisode => ({
+const proposeEpisode = (
+  video: ListedFile,
+  number: number | null,
+  paths: string[]
+): ProposedEpisode => ({
   path: video.path,
   title: baseNameOf(video.path),
   number,
@@ -101,9 +108,10 @@ const proposeEpisode = (video: ListedFile, number: number | null): ProposedEpiso
   videoCodec: video.videoCodec ?? null,
   audioCodec: video.audioCodec ?? null,
   codecWarnings: codecWarningsFor(video),
+  captions: pairCaptions(video.path, paths),
 });
 
-const seasonsOf = (videos: ListedFile[]): ProposedSeason[] => {
+const seasonsOf = (videos: ListedFile[], paths: string[]): ProposedSeason[] => {
   const seasons = new Map<string, ProposedSeason>();
   for (const video of videos) {
     const named = numbersInName(video.path);
@@ -124,7 +132,9 @@ const seasonsOf = (videos: ListedFile[]): ProposedSeason[] => {
     };
     const episodeNumber =
       named?.episode ?? Number(EPISODE_ONLY.exec(baseNameOf(video.path))?.[1] ?? NaN);
-    season.episodes.push(proposeEpisode(video, Number.isNaN(episodeNumber) ? null : episodeNumber));
+    season.episodes.push(
+      proposeEpisode(video, Number.isNaN(episodeNumber) ? null : episodeNumber, paths)
+    );
     seasons.set(key, season);
   }
   const ordered = [...seasons.values()].sort(compareSeasons);
@@ -154,7 +164,10 @@ const seriesPoster = (listing: FolderListing, first: ProposedEpisode | undefined
 };
 
 export const planSeriesImport = (listing: FolderListing): SeriesImportPlan => {
-  const seasons = seasonsOf(filmsIn(listing));
+  const seasons = seasonsOf(
+    filmsIn(listing),
+    listing.files.map((file) => file.path)
+  );
   return {
     title: listing.name,
     poster: seriesPoster(listing, seasons[0]?.episodes[0]),

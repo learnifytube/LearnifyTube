@@ -1,4 +1,4 @@
-import type { TranscriptSegment } from "../../types";
+import type { TranscriptSegment } from "../types";
 
 /** How long a Caption stays up after its line ends, so short gaps don't flicker. */
 const HOLD_SECONDS = 0.8;
@@ -16,9 +16,7 @@ export function currentCaption(
   if (!segments?.length) return null;
   const segment =
     segments.find((item) => time >= item.start && time < item.end) ??
-    segments.find(
-      (item) => time >= item.end && time < item.end + HOLD_SECONDS,
-    );
+    segments.find((item) => time >= item.end && time < item.end + HOLD_SECONDS);
   if (!segment) return null;
 
   const chunks = splitCaption(segment.text, maxChars);

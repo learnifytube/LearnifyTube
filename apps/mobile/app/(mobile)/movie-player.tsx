@@ -36,8 +36,10 @@ import {
 } from "../../components/phone/playerOrientation";
 import { colors, fontSize, fontWeight, spacing } from "../../theme";
 import type { MovieWatch } from "../../../shared/mobile-sync-contract";
+import { useMovieCaptions } from "../../hooks/useMovieCaptions";
 import {
   ArrowLeft,
+  Captions,
   Maximize,
   Minimize,
   Pause,
@@ -81,6 +83,7 @@ export default function MoviePlayerScreen() {
   const [duration, setDuration] = useState(movie?.durationSeconds ?? 0);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [interactions, setInteractions] = useState(0);
+  const [chromeHeight, setChromeHeight] = useState(0);
   const positionRef = useRef(0);
 
   useEffect(() => holdPlayerOrientation(), []);
@@ -154,6 +157,14 @@ export default function MoviePlayerScreen() {
   }, [player, sourceUri, kind, id]);
 
   useMovieProgressRecorder(player, kind, id);
+  // Two lines at most across the reading width, as for Videos.
+  const captionFontSize = Math.round(Math.min(Math.max(width / 34, 16), 24));
+  const captionWidth = width * (isLandscape ? 0.7 : 0.92);
+  const captions = useMovieCaptions(
+    player,
+    movie?.captions ?? [],
+    2 * Math.floor(captionWidth / (captionFontSize * 0.55)),
+  );
 
   // Episodes autoplay: the next one in Series order that can play.
   const series = movie?.series ?? null;
@@ -252,6 +263,34 @@ export default function MoviePlayerScreen() {
         </View>
       ) : null}
 
+      {captions.text ? (
+        <View
+          style={[
+            styles.caption,
+            {
+              bottom: controlsVisible
+                ? chromeHeight + spacing.sm
+                : bottomInset + spacing.md,
+            },
+          ]}
+          pointerEvents="none"
+        >
+          <Text
+            style={[
+              styles.captionLine,
+              {
+                maxWidth: captionWidth,
+                fontSize: captionFontSize,
+                lineHeight: Math.round(captionFontSize * 1.45),
+              },
+            ]}
+            textBreakStrategy="balanced"
+          >
+            <Text style={styles.captionText}>{` ${captions.text} `}</Text>
+          </Text>
+        </View>
+      ) : null}
+
       {controlsVisible ? (
         <>
           <Pressable
@@ -277,6 +316,9 @@ export default function MoviePlayerScreen() {
                 paddingHorizontal: sideInset + spacing.md,
               },
             ]}
+            onLayout={(event) =>
+              setChromeHeight(event.nativeEvent.layout.height)
+            }
           >
             <Text style={styles.title} numberOfLines={isLandscape ? 1 : 2}>
               {shownTitle ?? ""}
@@ -324,6 +366,34 @@ export default function MoviePlayerScreen() {
               >
                 <RotateCw size={26} color={colors.foreground} />
               </Pressable>
+              {captions.available ? (
+                <Pressable
+                  testID="captions-toggle"
+                  style={styles.captionsButton}
+                  onPress={() => {
+                    touched();
+                    captions.next();
+                  }}
+                  accessibilityLabel={
+                    captions.selected
+                      ? `Captions: ${captions.selected.label}`
+                      : "Captions off"
+                  }
+                  hitSlop={8}
+                >
+                  <Captions
+                    size={26}
+                    color={
+                      captions.selected ? colors.primary : colors.foreground
+                    }
+                  />
+                  {captions.selected && (movie?.captions.length ?? 0) > 1 ? (
+                    <Text style={styles.captionsLabel} numberOfLines={1}>
+                      {captions.selected.label}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              ) : null}
               <Pressable
                 testID="movie-full-screen-toggle"
                 onPress={() => {
@@ -403,5 +473,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "center",
+  },
+  captionsButton: { alignItems: "center", maxWidth: 96 },
+  captionsLabel: { color: colors.primary, fontSize: fontSize.xs },
+  caption: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    zIndex: 1,
+    alignItems: "center",
+  },
+  captionLine: {
+    textAlign: "center",
+    textShadowColor: "rgba(0,0,0,0.9)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  captionText: {
+    color: "#fff",
+    fontWeight: fontWeight.semibold,
+    backgroundColor: "rgba(8,8,8,0.72)",
   },
 });

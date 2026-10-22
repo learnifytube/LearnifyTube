@@ -250,6 +250,15 @@ export const api = {
     );
   },
 
+  /** A Movie's or Episode's sidecar Caption, as WebVTT. */
+  async getCaption(serverUrl: string, captionId: string): Promise<string> {
+    const response = await fetchWithTimeout(
+      `${serverUrl}/api/caption/${encodeURIComponent(captionId)}`,
+    );
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.text();
+  },
+
   /** Tells the desktop where this phone is in an Audiobook; the desktop keeps the newest. */
   async reportListening(
     serverUrl: string,

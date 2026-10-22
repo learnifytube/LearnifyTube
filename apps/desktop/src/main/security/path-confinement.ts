@@ -96,11 +96,23 @@ const VIDEO_CONTENT_TYPES: Record<string, string> = {
   ".wmv": "video/x-ms-wmv",
 };
 
+// Sidecar Caption files of Movies and Episodes.
+const CAPTION_CONTENT_TYPES: Record<string, string> = {
+  ".srt": "application/x-subrip",
+  ".vtt": "text/vtt",
+};
+
 export type TrackFileResult =
   | { ok: true; realPath: string; contentType: string }
   | {
       ok: false;
-      reason: "unknown-track" | "not-found" | "not-audio" | "not-video" | "outside-folder";
+      reason:
+        | "unknown-track"
+        | "not-found"
+        | "not-audio"
+        | "not-video"
+        | "not-caption"
+        | "outside-folder";
     };
 
 /**
@@ -128,9 +140,27 @@ export const resolveAudiobookTrackFile = async (
  * the title was imported from is its allowed directory: the file must stay
  * inside it once symlinks are resolved, and must be a regular video file.
  */
-export const resolveMovieFile = async (
+export const resolveMovieFile = (
   id: string,
   findShownFile: (id: string) => Promise<{ filePath: string; folder: string } | null>
+): Promise<TrackFileResult> => resolveInImportedFolder(id, findShownFile, resolveVideoFile);
+
+/**
+ * The same for a Caption's subtitle file: found by Caption id, only for a
+ * title Shown on Devices, inside the folder the title was imported from.
+ */
+export const resolveCaptionFile = (
+  id: string,
+  findShownCaption: (id: string) => Promise<{ filePath: string; folder: string } | null>
+): Promise<TrackFileResult> =>
+  resolveInImportedFolder(id, findShownCaption, (recorded) =>
+    resolveRecordedFile(recorded, CAPTION_CONTENT_TYPES, "not-caption")
+  );
+
+const resolveInImportedFolder = async (
+  id: string,
+  findShownFile: (id: string) => Promise<{ filePath: string; folder: string } | null>,
+  resolveFile: (realPath: string) => TrackFileResult
 ): Promise<TrackFileResult> => {
   const recorded = id ? await findShownFile(id) : null;
   if (!recorded) {
@@ -143,7 +173,7 @@ export const resolveMovieFile = async (
       reason: confined.reason === "outside-allowed" ? "outside-folder" : "not-found",
     };
   }
-  return resolveVideoFile(confined.realPath);
+  return resolveFile(confined.realPath);
 };
 
 /**
@@ -250,7 +280,7 @@ const createRecordedFileAllowlist = (
 const resolveRecordedFile = (
   recorded: string,
   contentTypes: Record<string, string>,
-  wrongKind: "not-audio" | "not-video"
+  wrongKind: "not-audio" | "not-video" | "not-caption"
 ): TrackFileResult => {
   const realPath = realpathOrNull(path.resolve(recorded));
   if (!realPath) {

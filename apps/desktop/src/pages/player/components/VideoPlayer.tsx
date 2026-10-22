@@ -15,6 +15,8 @@ interface VideoPlayerProps {
   className?: string;
   autoPlay?: boolean;
   onEnded?: () => void;
+  // Sidecar Captions of a Movie or Episode, off until picked from the CC menu.
+  captions?: { id: string; label: string; language: string | null; src: string }[];
 }
 
 export function VideoPlayer({
@@ -26,6 +28,7 @@ export function VideoPlayer({
   className,
   autoPlay = true,
   onEnded,
+  captions = [],
 }: VideoPlayerProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const isSeekingRef = useRef<boolean>(false);
@@ -450,7 +453,17 @@ export function VideoPlayer({
             onTimeUpdate={onTimeUpdate}
             onError={handleVideoError}
             onEnded={onEnded}
-          />
+          >
+            {captions.map((caption) => (
+              <track
+                key={caption.id}
+                kind="subtitles"
+                label={caption.label}
+                srcLang={caption.language ?? undefined}
+                src={caption.src}
+              />
+            ))}
+          </video>
         )}
 
         {/* Keyboard Shortcuts Hint (shows on hover) */}

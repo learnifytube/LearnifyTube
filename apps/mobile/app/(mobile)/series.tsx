@@ -12,6 +12,10 @@ import {
 import { MoviePoster } from "../../components/phone/MoviesRow";
 import { seasonCountText } from "../../components/phone/SeriesRow";
 import { formatTrackDuration } from "../../components/phone/formatTrackDuration";
+import { showMovieOptions } from "../../components/phone/movieOnThisPhone";
+import { heldMovies } from "../../services/held-movies";
+import { heldTitleOfEpisode } from "../../services/held-movies/heldTitle";
+import { movieOfflineCopy } from "../../services/offline-copy";
 import { colors, fontSize, fontWeight, radius, spacing } from "../../theme";
 import { ArrowLeft, Check, Play } from "../../theme/icons";
 import type { Episode } from "../../../shared/mobile-sync-contract";
@@ -29,7 +33,8 @@ const episodeLabel = (episode: Episode) =>
 /**
  * A Series screen: its Seasons and Episodes in order. Play Streams the
  * next-up Episode (the start again once all are watched); tapping an Episode
- * plays that one. Either way the Episodes after it autoplay.
+ * plays that one. Either way the Episodes after it autoplay. Long-press an
+ * Episode for Download to this phone, or Remove from this phone once held.
  */
 export default function SeriesScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -38,6 +43,8 @@ export default function SeriesScreen() {
     state.series.find((item) => item.id === id),
   );
   const progress = useMovieWatchStore((state) => state.progress);
+  const getOfflineUri = movieOfflineCopy.useLookup();
+  const holds = heldMovies.useHolds();
 
   if (!series || !serverUrl) {
     return (
@@ -111,6 +118,13 @@ export default function SeriesScreen() {
             durationSeconds: episode.durationSeconds,
           });
           const current = episode.id === nextUp?.episode.id;
+          const held = holds.some((hold) => hold.id === episode.id);
+          const onThisPhone =
+            getOfflineUri(episode.id) !== null
+              ? "On this phone"
+              : held
+                ? "Downloading"
+                : null;
           return (
             <Pressable
               testID={`series-episode-${episode.id}`}
@@ -121,14 +135,29 @@ export default function SeriesScreen() {
                 pressed && styles.pressed,
               ]}
               onPress={() => playEpisode(episode)}
+              onLongPress={() =>
+                showMovieOptions({
+                  title: heldTitleOfEpisode(series, episode),
+                  held,
+                  connected: true,
+                })
+              }
               accessibilityLabel={`Play ${episode.title}`}
             >
-              <Text
-                style={[styles.episodeTitle, episode.missing && styles.missing]}
-                numberOfLines={2}
-              >
-                {episodeLabel(episode)}
-              </Text>
+              <View style={styles.episodeText}>
+                <Text
+                  style={[
+                    styles.episodeTitle,
+                    episode.missing && styles.missing,
+                  ]}
+                  numberOfLines={2}
+                >
+                  {episodeLabel(episode)}
+                </Text>
+                {onThisPhone ? (
+                  <Text style={styles.episodeMeta}>{onThisPhone}</Text>
+                ) : null}
+              </View>
               {state === "watched" ? (
                 <Check size={16} color={colors.mutedForeground} />
               ) : null}
@@ -218,7 +247,8 @@ const styles = StyleSheet.create({
   },
   episodeCurrent: { backgroundColor: colors.card },
   pressed: { opacity: 0.7 },
-  episodeTitle: { flex: 1, color: colors.foreground, fontSize: fontSize.sm },
+  episodeText: { flex: 1 },
+  episodeTitle: { color: colors.foreground, fontSize: fontSize.sm },
   missing: {
     color: colors.mutedForeground,
     textDecorationLine: "line-through",

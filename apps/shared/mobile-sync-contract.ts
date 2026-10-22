@@ -58,13 +58,18 @@ export const audiobookListeningSchema = listeningPositionSchema.extend({
 
 export type AudiobookListening = z.infer<typeof audiobookListeningSchema>;
 
+/** Whether a played file is a Movie or an Episode of a Series (ADR-0005). */
+export const movieKindSchema = z.enum(["movie", "episode"]);
+
+export type MovieKind = z.infer<typeof movieKindSchema>;
+
 /**
  * Where a Device stopped in a Movie or Episode (ADR-0005), sent in the Device
  * report. The desktop takes it unless its own Watch state of that title changed
  * since (a desktop mark wins).
  */
 export const movieWatchSchema = z.object({
-  kind: z.enum(["movie", "episode"]),
+  kind: movieKindSchema,
   /** The Movie id or the Episode id. */
   id: z.string(),
   lastPositionSeconds: z.number().min(0),

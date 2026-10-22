@@ -1,34 +1,29 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { DeviceEventEmitter, StyleSheet, Text, View } from "react-native";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { DeviceEventEmitter, StyleSheet, View } from "react-native";
 import { router, useLocalSearchParams, type Href } from "expo-router";
-import { useEvent } from "expo";
+import { useEvent, useEventListener } from "expo";
 import { useVideoPlayer, VideoView, type VideoPlayer } from "expo-video";
-import { SafeAreaView } from "react-native-safe-area-context";
-import type { MovieWatch } from "../../../../shared/mobile-sync-contract";
+import type { MovieKind } from "../../../../shared/mobile-sync-contract";
 import { useMovieCatalogStore } from "../../../stores/movieCatalog";
-import { movieWatchKey, useMovieWatchStore } from "../../../stores/movieWatch";
 import { useTVHistoryStore } from "../../../stores/tvHistory";
 import { useTVNoticeStore } from "../../../stores/tvNotice";
 import {
   tvEpisodePlaybackSource,
   tvMoviePlaybackSource,
 } from "../../../services/playback-source";
-import { resumeAt } from "../../../services/movie-watch/movieWatch";
-import {
-  findTitle,
-  seriesEpisodeAfter,
-} from "../../../services/movie-watch/seriesWatch";
+import { findTitle } from "../../../services/movie-watch/seriesWatch";
 import { useMovieProgressRecorder } from "../../../hooks/useMovieProgressRecorder";
 import { useMovieCaptions } from "../../../hooks/useMovieCaptions";
 import { useHeldTitles } from "../../../hooks/useHeldTitles";
+import { movieStartPosition } from "../../../hooks/useMovieResume";
+import { useEpisodeAutoplay } from "../../../hooks/useEpisodeAutoplay";
+import { usePlayerOverlay } from "../../../hooks/usePlayerOverlay";
+import { usePlayerTime } from "../../../hooks/usePlayerTime";
 import { heldSeries } from "../../../components/tv/tvCatalog";
 import { desktopConnection } from "../../../services/desktop-connection";
 import { goBackOrTVHome } from "../../../components/tv/tvBack";
-import { TVFocusPressable } from "../../../components/tv/TVFocusPressable";
-import {
-  TVMessageButton,
-  TVMessageCard,
-} from "../../../components/tv/TVMessage";
+import { TVMovieMessage } from "../../../components/tv/TVMovieMessage";
+import { TVMovieOverlay } from "../../../components/tv/TVMovieOverlay";
 import {
   desktopGoneEpisode,
   desktopGoneMovie,
@@ -40,37 +35,18 @@ import {
   type RemoteKeyEvent,
 } from "../../../components/tv/remoteKeys";
 import {
-  formatPlaybackTime,
   isSeekPending,
   planSeek,
   type PendingSeek,
 } from "../../../components/playerSeek";
-import {
-  Captions,
-  colors,
-  fontSize,
-  fontWeight,
-  Pause,
-  Play,
-  radius,
-  spacing,
-  tvFontSize,
-  tvRestingBorder,
-  tvScrim,
-} from "../../../theme";
 
 const OVERLAY_AUTO_HIDE_MS = 5000;
 
-type TitleKind = MovieWatch["kind"];
-
-/** Where a press on the title starts: where any device left it, unless that was the end. */
-function startPosition(kind: TitleKind, id: string): number {
-  const title = findTitle(useMovieCatalogStore.getState(), kind, id);
-  return resumeAt({
-    watch: title?.watch ?? null,
-    kept: useMovieWatchStore.getState().progress[movieWatchKey(kind, id)],
-    durationSeconds: title?.durationSeconds ?? null,
-  });
+function openEpisode(episodeId: string) {
+  router.replace({
+    pathname: "/(tv)/movie/[id]",
+    params: { id: episodeId, kind: "episode" },
+  } as Href);
 }
 
 /**
@@ -83,7 +59,7 @@ function startPosition(kind: TitleKind, id: string): number {
 export default function TVMoviePlayerScreen() {
   const params = useLocalSearchParams<{ id: string; kind?: string }>();
   const id = params.id ?? "";
-  const kind: TitleKind = params.kind === "episode" ? "episode" : "movie";
+  const kind: MovieKind = params.kind === "episode" ? "episode" : "movie";
   const catalog = useMovieCatalogStore();
   const movie = findTitle(catalog, kind, id);
   const heldTitles = useHeldTitles();
@@ -111,7 +87,7 @@ export default function TVMoviePlayerScreen() {
     const start =
       source.kind === "offline" && source.resumeAt !== null
         ? source.resumeAt
-        : startPosition(kind, id);
+        : movieStartPosition(kind, id);
     if (start > 0) instance.currentTime = start;
     instance.play();
   });
@@ -119,9 +95,14 @@ export default function TVMoviePlayerScreen() {
   useMovieProgressRecorder(player, kind, id);
   const captions = useMovieCaptions(player, id, movie?.captions ?? []);
 
-  const { status, error } = useEvent(player, "statusChange", {
+  const { status } = useEvent(player, "statusChange", {
     status: player.status,
     error: undefined,
+  });
+  useEventListener(player, "statusChange", ({ status: next, error }) => {
+    if (next === "error") {
+      console.warn("[TVMoviePlayer] The player refused the file:", error);
+    }
   });
   const { isPlaying } = useEvent(player, "playingChange", {
     isPlaying: player.playing,
@@ -142,25 +123,18 @@ export default function TVMoviePlayerScreen() {
       );
   }, [id, seriesId, historyTitle]);
 
-  // Episodes autoplay: the next one in Series order that can play; in Offline
-  // mode, the next one the TV holds.
-  useEffect(() => {
-    if (!series) return;
-    const subscription = player.addListener("playToEnd", () => {
-      const playable = connected
-        ? series
-        : heldSeries(series, (episodeId) =>
+  // In Offline mode, autoplay goes on only to the Episodes the TV holds.
+  useEpisodeAutoplay(player, {
+    series:
+      series && !connected
+        ? heldSeries(series, (episodeId) =>
             heldTitles.some((title) => title.id === episodeId),
-          );
-      const next = playable && seriesEpisodeAfter(playable, id);
-      if (!next) return;
-      router.replace({
-        pathname: "/(tv)/movie/[id]",
-        params: { id: next.id, kind: "episode" },
-      } as Href);
-    });
-    return () => subscription.remove();
-  }, [player, series, id, connected, heldTitles]);
+          )
+        : series,
+    id,
+    hasSource: !!uri,
+    open: openEpisode,
+  });
 
   // The desktop went away mid-Stream and the TV doesn't hold this title.
   const desktopLost = source.kind === "desktopLost";
@@ -170,93 +144,62 @@ export default function TVMoviePlayerScreen() {
     goBackOrTVHome();
   }, [desktopLost, kind, showNotice]);
 
-  useEffect(() => {
-    if (status === "error") {
-      console.warn("[TVMoviePlayer] The player refused the file:", error);
-    }
-  }, [status, error]);
-
-  const [overlayVisible, setOverlayVisible] = useState(true);
-  const [overlayShownAt, setOverlayShownAt] = useState(0);
+  const overlay = usePlayerOverlay(isPlaying, OVERLAY_AUTO_HIDE_MS);
   const [preferPlayFocus, setPreferPlayFocus] = useState(true);
   const progressFocusedRef = useRef(false);
   const suppressNextPressRef = useRef(false);
   const pendingSeekRef = useRef<PendingSeek | null>(null);
-  const [playback, setPlayback] = useState({ position: 0, duration: 0 });
+  // Until the player catches up, keep showing where the seek is heading.
+  const time = usePlayerTime(player, {
+    knownDuration: movie?.durationSeconds ?? null,
+    holdPosition: () => isSeekPending(pendingSeekRef.current, Date.now()),
+  });
 
-  const showOverlay = useCallback((preferFocus = false) => {
-    setOverlayVisible(true);
+  const showOverlay = (preferFocus = false) => {
+    overlay.show();
     if (preferFocus) setPreferPlayFocus(true);
-    setOverlayShownAt(Date.now());
-  }, []);
+  };
 
-  useEffect(() => {
-    if (!overlayVisible || !isPlaying) return;
-    const timeout = setTimeout(
-      () => setOverlayVisible(false),
-      OVERLAY_AUTO_HIDE_MS,
-    );
-    return () => clearTimeout(timeout);
-  }, [overlayVisible, isPlaying, overlayShownAt]);
-
-  useEffect(() => {
-    pendingSeekRef.current = null;
-    const timeSub = player.addListener("timeUpdate", (event) => {
-      // Until the player catches up, keep showing where the seek is heading.
-      if (isSeekPending(pendingSeekRef.current, Date.now())) return;
-      setPlayback({ position: event.currentTime, duration: player.duration });
+  const remoteKey = useEffectEvent((event: RemoteKeyEvent) => {
+    const command = decideRemoteKey(event, {
+      overlayVisible: overlay.visible,
+      progressFocused: progressFocusedRef.current,
     });
-    const loadSub = player.addListener("sourceLoad", (event) =>
-      setPlayback((prev) => ({ ...prev, duration: event.duration })),
-    );
-    return () => {
-      timeSub.remove();
-      loadSub.remove();
-    };
-  }, [player]);
-
-  useEffect(() => {
-    const seek = (direction: 1 | -1): void => {
+    if (command.kind === "ignore") return;
+    suppressNextPressRef.current =
+      command.kind === "wake" && command.suppressPress;
+    if (command.kind === "wake") return showOverlay(true);
+    if (command.kind === "hide") return overlay.hide();
+    if (command.kind === "seek") {
       const next = planSeek({
         currentTime: player.currentTime,
         duration: player.duration,
         pending: pendingSeekRef.current,
         now: Date.now(),
-        direction,
+        direction: command.direction,
       });
       pendingSeekRef.current = next;
       player.currentTime = next.target;
-      setPlayback((prev) => ({ ...prev, position: next.target }));
-    };
+      time.setPosition(next.target);
+    }
+    showOverlay();
+  });
+  useEffect(() => {
     const subscription = DeviceEventEmitter.addListener(
       "onHWKeyEvent",
-      (event: RemoteKeyEvent) => {
-        const command = decideRemoteKey(event, {
-          overlayVisible,
-          progressFocused: progressFocusedRef.current,
-        });
-        if (command.kind === "ignore") return;
-        suppressNextPressRef.current =
-          command.kind === "wake" && command.suppressPress;
-        if (command.kind === "wake") showOverlay(true);
-        else if (command.kind === "hide") setOverlayVisible(false);
-        else {
-          if (command.kind === "seek") seek(command.direction);
-          showOverlay();
-        }
-      },
+      (event: RemoteKeyEvent) => remoteKey(event),
     );
     return () => subscription.remove();
-  }, [overlayVisible, player, showOverlay]);
+  }, []);
 
-  const togglePlayPause = (): void => {
-    if (!overlayVisible || suppressNextPressRef.current) {
+  // A press that wakes the overlay only wakes it.
+  const pressed = (action: () => void, focusPlayOnWake = true): void => {
+    if (!overlay.visible || suppressNextPressRef.current) {
       suppressNextPressRef.current = false;
-      showOverlay(true);
+      showOverlay(focusPlayOnWake);
       return;
     }
-    if (player.playing) player.pause();
-    else player.play();
+    action();
     showOverlay();
   };
 
@@ -279,33 +222,8 @@ export default function TVMoviePlayerScreen() {
       source.kind === "failed" &&
       source.canRetry &&
       describeMovieProblem(problem, kind).canRetry;
-    return (
-      <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
-        <View style={styles.centered}>
-          <TVMessageCard message={message}>
-            {canRetry ? (
-              <TVMessageButton
-                label="Retry"
-                onPress={retry}
-                hasTVPreferredFocus
-              />
-            ) : null}
-            <TVMessageButton
-              label="Back"
-              onPress={goBackOrTVHome}
-              hasTVPreferredFocus={!canRetry}
-            />
-          </TVMessageCard>
-        </View>
-      </SafeAreaView>
-    );
+    return <TVMovieMessage message={message} retry={canRetry ? retry : null} />;
   }
-
-  const duration =
-    playback.duration > 0 ? playback.duration : (movie?.durationSeconds ?? 0);
-  const position =
-    duration > 0 ? Math.min(playback.position, duration) : playback.position;
-  const progressPercent = duration > 0 ? (position / duration) * 100 : 0;
 
   return (
     <View style={styles.fullscreen}>
@@ -320,217 +238,31 @@ export default function TVMoviePlayerScreen() {
         surfaceType="surfaceView"
       />
 
-      {captions.text ? (
-        <View
-          style={[styles.caption, overlayVisible && styles.captionAboveOverlay]}
-          pointerEvents="none"
-        >
-          <Text style={styles.captionLine}>
-            <Text style={styles.captionText}>{` ${captions.text} `}</Text>
-          </Text>
-        </View>
-      ) : null}
-
-      <SafeAreaView
-        style={[styles.overlay, !overlayVisible && styles.overlayHidden]}
-        edges={["bottom", "left", "right"]}
-        pointerEvents={overlayVisible ? "auto" : "none"}
-      >
-        <Text style={styles.title} numberOfLines={1}>
-          {movie?.title ?? hold?.title ?? "Now Playing"}
-        </Text>
-        <Text style={styles.meta}>
-          {source.kind === "stream" ? "Streaming" : "On this TV"}
-        </Text>
-
-        <TVFocusPressable
-          style={styles.progressRow}
-          focusedStyle={styles.progressRowFocused}
-          accessibilityLabel={`${formatPlaybackTime(position)} of ${formatPlaybackTime(duration)}`}
-          onPress={togglePlayPause}
-          onFocus={() => {
-            progressFocusedRef.current = true;
-            showOverlay();
-          }}
-          onBlur={() => {
-            progressFocusedRef.current = false;
-          }}
-        >
-          <Text style={styles.progressTime}>
-            {formatPlaybackTime(position)}
-          </Text>
-          <View style={styles.progressTrack}>
-            <View
-              style={[styles.progressFill, { width: `${progressPercent}%` }]}
-            />
-          </View>
-          <Text style={styles.progressTime}>
-            {formatPlaybackTime(duration)}
-          </Text>
-        </TVFocusPressable>
-
-        <View style={styles.controls}>
-          <TVFocusPressable
-            style={styles.playPause}
-            accessibilityLabel={isPlaying ? "Pause" : "Play"}
-            onPress={togglePlayPause}
-            onFocus={() => {
-              setPreferPlayFocus(false);
-              showOverlay();
-            }}
-            hasTVPreferredFocus={preferPlayFocus}
-          >
-            {isPlaying ? (
-              <Pause size={34} color={colors.primaryForeground} />
-            ) : (
-              <Play size={34} color={colors.primaryForeground} />
-            )}
-          </TVFocusPressable>
-          {captions.available ? (
-            <TVFocusPressable
-              style={styles.captionsButton}
-              focusedStyle={styles.captionsButtonFocused}
-              accessibilityLabel={
-                captions.selected
-                  ? `Captions: ${captions.selected.label}`
-                  : "Captions off"
-              }
-              onPress={() => {
-                // A press that wakes the overlay only wakes it.
-                if (!overlayVisible || suppressNextPressRef.current) {
-                  suppressNextPressRef.current = false;
-                  showOverlay();
-                  return;
-                }
-                captions.next();
-                showOverlay();
-              }}
-              onFocus={() => showOverlay()}
-            >
-              <Captions
-                size={30}
-                color={captions.selected ? colors.primary : colors.foreground}
-              />
-              <Text style={styles.captionsLabel} numberOfLines={1}>
-                {captions.selected ? captions.selected.label : "Captions off"}
-              </Text>
-            </TVFocusPressable>
-          ) : null}
-        </View>
-      </SafeAreaView>
+      <TVMovieOverlay
+        visible={overlay.visible}
+        title={movie?.title ?? hold?.title ?? "Now Playing"}
+        streaming={source.kind === "stream"}
+        position={time.position}
+        duration={time.duration}
+        isPlaying={isPlaying}
+        preferPlayFocus={preferPlayFocus}
+        captions={captions}
+        captionText={captions.text}
+        onPlayPause={() =>
+          pressed(() => (player.playing ? player.pause() : player.play()))
+        }
+        onCaptions={() => pressed(captions.next, false)}
+        onFocusInside={() => showOverlay()}
+        onPlayFocus={() => setPreferPlayFocus(false)}
+        onProgressFocus={(focused) => {
+          progressFocusedRef.current = focused;
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.lg,
-  },
-  centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   fullscreen: { flex: 1, backgroundColor: "#000" },
   video: { flex: 1, backgroundColor: "#000" },
-  // Anchored to the bottom so the picture stays clear above it.
-  overlay: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 1,
-    paddingHorizontal: spacing["2xl"],
-    paddingVertical: spacing.md,
-    backgroundColor: tvScrim,
-    gap: spacing.xs,
-  },
-  overlayHidden: { opacity: 0 },
-  title: {
-    color: colors.foreground,
-    fontSize: tvFontSize.title,
-    fontWeight: fontWeight.bold,
-  },
-  meta: { color: colors.mutedForeground, fontSize: tvFontSize.body },
-  progressRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.full,
-    ...tvRestingBorder,
-  },
-  progressRowFocused: {
-    borderColor: colors.foreground,
-    backgroundColor: colors.overlayLight,
-  },
-  progressTime: {
-    color: colors.foreground,
-    fontSize: tvFontSize.body,
-    fontWeight: fontWeight.semibold,
-    fontVariant: ["tabular-nums"],
-    minWidth: 72,
-    textAlign: "center",
-  },
-  progressTrack: {
-    flex: 1,
-    height: 10,
-    borderRadius: radius.full,
-    backgroundColor: colors.muted,
-    overflow: "hidden",
-  },
-  progressFill: { height: "100%", backgroundColor: colors.primary },
-  controls: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: spacing.lg,
-  },
-  captionsButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    height: 56,
-    borderRadius: radius.full,
-    ...tvRestingBorder,
-  },
-  captionsButtonFocused: {
-    borderColor: colors.foreground,
-    backgroundColor: colors.overlayLight,
-  },
-  captionsLabel: {
-    color: colors.foreground,
-    fontSize: tvFontSize.body,
-    fontWeight: fontWeight.semibold,
-    maxWidth: 320,
-  },
-  caption: {
-    position: "absolute",
-    left: "12%",
-    right: "12%",
-    bottom: spacing["2xl"],
-    alignItems: "center",
-  },
-  // Clear of the overlay while it shows.
-  captionAboveOverlay: { bottom: 240 },
-  captionLine: {
-    textAlign: "center",
-    fontSize: fontSize["3xl"],
-    lineHeight: Math.round(fontSize["3xl"] * 1.4),
-  },
-  captionText: {
-    color: "#fff",
-    fontWeight: fontWeight.semibold,
-    backgroundColor: "rgba(8,8,8,0.72)",
-  },
-  playPause: {
-    width: 72,
-    height: 72,
-    borderRadius: radius.full,
-    backgroundColor: colors.primary,
-    ...tvRestingBorder,
-    alignItems: "center",
-    justifyContent: "center",
-  },
 });

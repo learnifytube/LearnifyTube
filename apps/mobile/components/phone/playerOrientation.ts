@@ -1,3 +1,4 @@
+import { Dimensions, type ScaledSize } from "react-native";
 import * as NavigationBar from "expo-navigation-bar";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { setStatusBarHidden } from "expo-status-bar";
@@ -56,4 +57,18 @@ export function toggleFullScreen(isLandscape: boolean) {
 /** Full screen hides the status and navigation bars; swiping from an edge shows them briefly. */
 export function setFullScreenBars(isLandscape: boolean) {
   setSystemBarsHidden(isLandscape);
+}
+
+/**
+ * Hides the bars in landscape and shows them in portrait, now and at every
+ * rotation, until the returned stop is called.
+ */
+export function followFullScreenBars() {
+  const apply = ({ width, height }: ScaledSize) =>
+    setFullScreenBars(width > height);
+  apply(Dimensions.get("window"));
+  const subscription = Dimensions.addEventListener("change", ({ window }) =>
+    apply(window),
+  );
+  return () => subscription.remove();
 }

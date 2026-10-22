@@ -13,6 +13,7 @@ import { useMovieWatchStore } from "../../stores/movieWatch";
 import { getWatchHistory } from "../../db/repositories/watchHistory";
 import { audiobookMirror } from "../audiobook-mirror";
 import { heldAudiobooks } from "../held-audiobooks";
+import { refreshMovieCatalog } from "../movie-catalog";
 import { listenToSyncEvents } from "../sync-events";
 import {
   createDeviceMirror,
@@ -132,6 +133,8 @@ const platform: DeviceMirrorPlatform = {
     AsyncStorage.setItem(MIRRORED_IDS_KEY, JSON.stringify(videoIds)),
   saveOnDeviceSet: (videos) => useOnDeviceSetStore.setState({ videos }),
   audiobooks: kind === "tv" ? noAudiobooks : audiobookMirror,
+  // The TV keeps the Movie catalog too: it holds Movies, unlike Audiobooks.
+  movies: { refreshCatalog: refreshMovieCatalog },
 };
 
 export const deviceMirror = createDeviceMirror(platform);

@@ -3,6 +3,7 @@
 // scan step. Audiobook plans stay in ../audiobooks/import-plan.
 
 import { isAudioPath, type FolderListing, type ListedFile } from "@/api/audiobooks/import-plan";
+import { codecWarningsFor, type CodecWarning } from "./codec-warnings";
 
 const VIDEO_EXTENSIONS = new Set(["mp4", "m4v", "mkv", "webm", "mov", "avi", "ts", "wmv"]);
 
@@ -53,6 +54,8 @@ export type ProposedMovie = {
   durationSeconds: number | null;
   videoCodec: string | null;
   audioCodec: string | null;
+  // What Android is likely to refuse to play; the preview warns before saving.
+  codecWarnings: CodecWarning[];
 };
 
 export type MovieImportPlan = { suggestedLayout: MovieLayout; movies: ProposedMovie[] };
@@ -119,6 +122,7 @@ const proposeMovie = (
   durationSeconds: video.durationSeconds ?? null,
   videoCodec: video.videoCodec ?? null,
   audioCodec: video.audioCodec ?? null,
+  codecWarnings: codecWarningsFor(video),
 });
 
 const byLength = (a: ListedFile, b: ListedFile): number =>

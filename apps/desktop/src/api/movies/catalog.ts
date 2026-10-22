@@ -10,7 +10,7 @@ import { markedWatched, playedTo, watchStateOf } from "./watch-progress";
 // The desktop's Movies (ADR-0005). Files are referenced in place: nothing here
 // copies, moves or deletes the user's video files.
 
-export type ImportedMovie = Omit<ProposedMovie, "poster"> & {
+export type ImportedMovie = Omit<ProposedMovie, "poster" | "codecWarnings"> & {
   // The app-owned poster copy, already saved, or null for the placeholder.
   posterPath: string | null;
 };

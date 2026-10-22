@@ -73,6 +73,7 @@ describe("planMovieImport", () => {
         durationSeconds: 8160,
         videoCodec: "h264",
         audioCodec: "aac",
+        codecWarnings: [],
       },
     ]);
   });
@@ -125,5 +126,33 @@ describe("planMovieImport", () => {
     );
     expect(plan.movies.map((movie) => movie.path)).toEqual(["film.webm"]);
     expect(planMovieImport({ name: "book", files: [{ path: "1.mp3" }] }).movies).toEqual([]);
+  });
+
+  it("warns about files Android is likely to refuse: AVI and WMV files, DTS and TrueHD audio", () => {
+    const warnings = Object.fromEntries(
+      planMovieImport({
+        name: "Films",
+        files: [
+          { path: "Old.avi", videoCodec: "mpeg4", audioCodec: "mp3" },
+          { path: "Concert.mkv", videoCodec: "h264", audioCodec: "dts" },
+          { path: "Blu-ray.mkv", videoCodec: "hevc", audioCodec: "truehd" },
+          { path: "Home.wmv", videoCodec: "wmv3", audioCodec: "wmav2" },
+          { path: "Fine.mp4", videoCodec: "h264", audioCodec: "aac" },
+          { path: "Unprobed.mkv" },
+        ],
+      }).movies.map((movie) => [movie.path, movie.codecWarnings])
+    );
+    expect(warnings).toEqual({
+      "Old.avi": [{ part: "container", name: "AVI" }],
+      "Concert.mkv": [{ part: "audio", name: "DTS" }],
+      "Blu-ray.mkv": [{ part: "audio", name: "Dolby TrueHD" }],
+      "Home.wmv": [
+        { part: "container", name: "WMV" },
+        { part: "video", name: "WMV" },
+        { part: "audio", name: "WMA" },
+      ],
+      "Fine.mp4": [],
+      "Unprobed.mkv": [],
+    });
   });
 });

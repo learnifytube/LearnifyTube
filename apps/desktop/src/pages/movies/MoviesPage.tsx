@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Film, FolderInput, Loader2 } from "lucide-react";
@@ -10,6 +10,9 @@ import { WatchStateBadge } from "@/components/WatchStateBadge";
 import { formatListeningTime } from "@/pages/audiobooks/format";
 import { MoviePoster } from "./components/MoviePoster";
 import { MovieImportDialog } from "./components/MovieImportDialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+type Filter = "all" | "movies" | "series";
 
 export default function MoviesPage(): React.JSX.Element {
   const moviesQuery = useQuery({
@@ -27,7 +30,16 @@ export default function MoviesPage(): React.JSX.Element {
     onError: () => toast.error("Couldn't read that folder"),
   });
 
-  const movies = moviesQuery.data ?? [];
+  const seriesQuery = useQuery({
+    queryKey: ["movies", "series", "list"],
+    queryFn: () => trpcClient.movies.series.list.query(),
+  });
+  const [filter, setFilter] = useState<Filter>("all");
+
+  const movies = filter === "series" ? [] : (moviesQuery.data ?? []);
+  const seriesList = filter === "movies" ? [] : (seriesQuery.data ?? []);
+  const isLoading = moviesQuery.isLoading || seriesQuery.isLoading;
+  const isEmpty = (moviesQuery.data ?? []).length === 0 && (seriesQuery.data ?? []).length === 0;
 
   return (
     <PageContainer>
@@ -35,7 +47,9 @@ export default function MoviesPage(): React.JSX.Element {
         <div>
           <h1 className="text-2xl font-bold sm:text-3xl">Movies</h1>
           <p className="text-sm text-muted-foreground">
-            {moviesQuery.isLoading ? "Loading..." : `${movies.length} Movies`}
+            {isLoading
+              ? "Loading..."
+              : `${moviesQuery.data?.length ?? 0} Movies · ${seriesQuery.data?.length ?? 0} Series`}
           </p>
         </div>
         <Button
@@ -52,7 +66,17 @@ export default function MoviesPage(): React.JSX.Element {
         </Button>
       </div>
 
-      {!moviesQuery.isLoading && movies.length === 0 ? (
+      {!isEmpty && (
+        <Tabs value={filter} onValueChange={(value) => setFilter(value as Filter)} className="mt-4">
+          <TabsList>
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="movies">Movies</TabsTrigger>
+            <TabsTrigger value="series">Series</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+
+      {!isLoading && isEmpty ? (
         <div className="flex flex-col items-center gap-3 py-16 text-center text-muted-foreground">
           <Film className="h-10 w-10" />
           <p className="max-w-sm text-sm">
@@ -61,6 +85,28 @@ export default function MoviesPage(): React.JSX.Element {
         </div>
       ) : (
         <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+          {seriesList.map((series) => (
+            <Link
+              key={series.id}
+              to="/series"
+              search={{ id: series.id }}
+              className="group relative block"
+            >
+              <MoviePoster
+                posterPath={series.posterPath}
+                title={series.title}
+                className="transition-transform group-hover:scale-105"
+              />
+              <WatchStateBadge watchState={series.watchState} className="absolute left-2 top-2" />
+              <h3 className="mt-2 line-clamp-2 text-sm font-medium leading-tight group-hover:text-primary">
+                {series.title}
+              </h3>
+              <p className="truncate text-xs text-muted-foreground">
+                Series · {series.seasonCount === 1 ? "1 Season" : `${series.seasonCount} Seasons`} ·{" "}
+                {series.episodeCount === 1 ? "1 Episode" : `${series.episodeCount} Episodes`}
+              </p>
+            </Link>
+          ))}
           {movies.map((movie) => (
             <Link
               key={movie.id}

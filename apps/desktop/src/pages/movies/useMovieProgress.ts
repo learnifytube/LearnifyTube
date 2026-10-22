@@ -6,15 +6,26 @@ import { isPlayedEnough } from "@/lib/watch-state";
 
 const SAVE_EVERY_MS = 10_000;
 
+type Playback = { id: string; positionSeconds: number; durationSeconds: number | null };
+
+const recorders = {
+  movie: ({ id, ...playback }: Playback) =>
+    trpcClient.movies.recordPlayback.mutate({ movieId: id, ...playback }),
+  episode: ({ id, ...playback }: Playback) =>
+    trpcClient.movies.series.recordPlayback.mutate({ episodeId: id, ...playback }),
+} satisfies Record<string, (playback: Playback) => Promise<void>>;
+
 /**
- * Resumes a Movie where it stopped (from the start once it was played to the
- * end) and saves where it is now and then, on pause, at the end and on leaving.
- * The desktop's Watch progress turns watched at about 90% (Video rule).
+ * Resumes a Movie or Episode where it stopped (from the start once it was
+ * played to the end) and saves where it is now and then, on pause, at the end
+ * and on leaving. The desktop's Watch progress turns watched at about 90%
+ * (Video rule). Mount it once per Movie or Episode (a `key`).
  */
 export function useMovieProgress(
   videoRef: React.RefObject<HTMLVideoElement>,
   movie: { id: string; positionSeconds: number | null; durationSeconds: number | null } | null,
-  videoSrc: string | null
+  videoSrc: string | null,
+  kind: keyof typeof recorders = "movie"
 ): void {
   const queryClient = useQueryClient();
   // The saved position at the time the page opened, read once per Movie.
@@ -33,8 +44,7 @@ export function useMovieProgress(
       if (!Number.isFinite(video.currentTime) || video.currentTime <= 0) return;
       const durationSeconds =
         Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
-      trpcClient.movies.recordPlayback
-        .mutate({ movieId, positionSeconds: video.currentTime, durationSeconds })
+      recorders[kind]({ id: movieId, positionSeconds: video.currentTime, durationSeconds })
         .then(() => queryClient.invalidateQueries({ queryKey: ["movies"] }))
         .catch((error: unknown) => logger.warn("[movies] Saving Watch progress failed", { error }));
     };
@@ -59,5 +69,5 @@ export function useMovieProgress(
       video.removeEventListener("ended", save);
       save();
     };
-  }, [videoRef, movieId, videoSrc, queryClient]);
+  }, [videoRef, movieId, videoSrc, queryClient, kind]);
 }

@@ -3,8 +3,6 @@ import { app, dialog } from "electron";
 import { z } from "zod";
 import { publicProcedure, t } from "@/api/trpc";
 import defaultDb from "@/api/db";
-import type { FolderListing } from "@/api/audiobooks/import-plan";
-import { scanFolder } from "@/api/audiobooks/scan-folder";
 import { removeAppCover } from "@/api/audiobooks/covers";
 import {
   MOVIE_LAYOUTS,
@@ -26,6 +24,9 @@ import {
 import { previewPoster, savePoster } from "@/api/movies/posters";
 import { moviePostersDir } from "@/api/movies/posters-dir";
 import { movieFiles } from "@/main/security/movie-files";
+import { planSeriesImport, suggestVideoLayout } from "@/api/movies/series-plan";
+import { previewedListings } from "./previewed-listings";
+import { seriesRouter } from "./series";
 
 // The Movies section (ADR-0005): Import, list, play and mark Movies. The user's
 // video files are only ever read where they are.
@@ -37,17 +38,6 @@ const posterSourceSchema: z.ZodType<PosterSource> = z.discriminatedUnion("kind",
   z.object({ kind: z.literal("embedded"), videoPath: z.string(), stream: z.number().int() }),
   z.object({ kind: z.literal("frame"), videoPath: z.string() }),
 ]);
-
-// The last folder listing previewed per picked folder, so confirming saves what was previewed.
-const previewedListingsByFolder = new Map<string, FolderListing>();
-
-const listingFor = async (folderPath: string): Promise<FolderListing> => {
-  const cached = previewedListingsByFolder.get(folderPath);
-  if (cached) return cached;
-  const listing = await scanFolder(folderPath);
-  previewedListingsByFolder.set(folderPath, listing);
-  return listing;
-};
 
 const posterFile = (poster: PosterSource): string =>
   poster.kind === "file" ? poster.path : poster.videoPath;
@@ -66,16 +56,16 @@ export const moviesRouter = t.router({
   previewImport: publicProcedure
     .input(z.object({ folderPath: z.string().min(1) }))
     .mutation(async ({ input }) => {
-      previewedListingsByFolder.delete(input.folderPath);
-      const listing = await listingFor(input.folderPath);
+      const listing = await previewedListings.rescan(input.folderPath);
       const layouts = Object.fromEntries(
         MOVIE_LAYOUTS.map((layout) => [layout, planMovieImport(listing, layout).movies])
       ) as Record<MovieLayout, ReturnType<typeof planMovieImport>["movies"]>;
       return {
         folderPath: input.folderPath,
         folder: classifyFolder(listing),
-        suggestedLayout: planMovieImport(listing).suggestedLayout,
+        suggestedLayout: suggestVideoLayout(listing),
         plans: layouts,
+        seriesPlan: planSeriesImport(listing),
       };
     }),
 
@@ -89,7 +79,7 @@ export const moviesRouter = t.router({
       })
     )
     .query(async ({ input }) => {
-      const listing = previewedListingsByFolder.get(input.folderPath);
+      const listing = previewedListings.previewed(input.folderPath);
       const known = listing?.files.some((file) => file.path === posterFile(input.poster));
       if (!known) return null;
       return previewPoster(input.folderPath, input.poster, input.durationSeconds);
@@ -107,7 +97,7 @@ export const moviesRouter = t.router({
     )
     .mutation(async ({ input, ctx }) => {
       const db = ctx.db ?? defaultDb;
-      const listing = await listingFor(input.folderPath);
+      const listing = await previewedListings.listingFor(input.folderPath);
       const postersDir = moviePostersDir(app.getPath("userData"));
       const imported: ImportedMovie[] = [];
       for (const { poster, ...movie } of planMovieImport(listing, input.layout).movies) {
@@ -122,10 +112,12 @@ export const moviesRouter = t.router({
         imported.push({ ...movie, title, posterPath });
       }
       const ids = await saveImportedMovies(db, input.folderPath, imported);
-      previewedListingsByFolder.delete(input.folderPath);
+      previewedListings.done(input.folderPath);
       movieFiles.tracksChanged();
       return { ids };
     }),
+
+  series: seriesRouter,
 
   list: publicProcedure.query(({ ctx }) => listMovies(ctx.db ?? defaultDb)),
 

@@ -1,6 +1,4 @@
 import React from "react";
-import { ArrowDown, ArrowUp } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   moveEpisode,
@@ -10,44 +8,13 @@ import {
   type SeriesOrder,
 } from "@/api/movies/series-plan";
 import { formatListeningTime } from "@/pages/audiobooks/format";
-import { CodecWarnings, PreviewPoster } from "./ImportPreviewParts";
+import { CodecWarnings, MoveButtons, PreviewPoster } from "./ImportPreviewParts";
 
 export const orderOfPlan = (plan: SeriesImportPlan): SeriesOrder =>
   plan.seasons.map((season) => ({
     key: season.key,
     episodes: season.episodes.map((episode) => episode.path),
   }));
-
-function MoveButtons({
-  label,
-  onMove,
-}: {
-  label: string;
-  onMove: (by: -1 | 1) => void;
-}): React.JSX.Element {
-  return (
-    <div className="flex shrink-0">
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7"
-        aria-label={`Move ${label} up`}
-        onClick={() => onMove(-1)}
-      >
-        <ArrowUp className="h-3.5 w-3.5" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7"
-        aria-label={`Move ${label} down`}
-        onClick={() => onMove(1)}
-      >
-        <ArrowDown className="h-3.5 w-3.5" />
-      </Button>
-    </div>
-  );
-}
 
 // The Seasons and Episodes a Series Import would create, in an order the user can correct.
 export function SeriesImportPreview({

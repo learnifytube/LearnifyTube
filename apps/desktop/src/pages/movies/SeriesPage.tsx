@@ -15,6 +15,7 @@ import { episodeAfter } from "../../../../shared/series/nextUp";
 import { MoviePoster } from "./components/MoviePoster";
 import { SeriesSeasons } from "./components/SeriesSeasons";
 import { ShownOnDevicesSwitch } from "./components/ShownOnDevicesSwitch";
+import { ChoosePosterButton } from "./components/ChoosePosterButton";
 import { useMovieProgress } from "./useMovieProgress";
 import { useCaptionTracks } from "./useCaptionTracks";
 
@@ -76,6 +77,21 @@ function SeriesView({ series }: { series: SeriesDetail }): React.JSX.Element {
       await refresh();
     },
     onError: () => toast.error("Couldn't rename the Series"),
+  });
+
+  const move = useMutation({
+    mutationFn: ({
+      target,
+      by,
+    }: {
+      target: { seasonId: string } | { episodeId: string };
+      by: -1 | 1;
+    }) =>
+      "seasonId" in target
+        ? trpcClient.movies.series.moveSeason.mutate({ id: target.seasonId, by })
+        : trpcClient.movies.series.moveEpisode.mutate({ id: target.episodeId, by }),
+    onSuccess: refresh,
+    onError: () => toast.error("Couldn't change the order"),
   });
 
   const rescan = useMutation({
@@ -189,6 +205,7 @@ function SeriesView({ series }: { series: SeriesDetail }): React.JSX.Element {
               <RefreshCw className={rescan.isPending ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
               Rescan
             </Button>
+            <ChoosePosterButton kind="series" id={series.id} />
             <Button
               variant="outline"
               className="gap-2"
@@ -206,8 +223,10 @@ function SeriesView({ series }: { series: SeriesDetail }): React.JSX.Element {
         seasons={series.seasons}
         playingId={playingId}
         marking={setWatched.isPending}
+        moving={move.isPending}
         onPlay={setPlayingId}
         onMark={(target, watched) => setWatched.mutate({ target, watched })}
+        onMove={(target, by) => move.mutate({ target, by })}
       />
     </div>
   );

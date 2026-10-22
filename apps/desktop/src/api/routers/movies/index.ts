@@ -4,7 +4,13 @@ import { app, dialog } from "electron";
 import { z } from "zod";
 import { publicProcedure, t } from "@/api/trpc";
 import defaultDb, { type Database } from "@/api/db";
-import { removeAppCover } from "@/api/audiobooks/covers";
+import {
+  COVER_IMAGE_EXTENSIONS,
+  removeAppCover,
+  saveCoverFromImage,
+} from "@/api/audiobooks/covers";
+import { getSeries } from "@/api/movies/series-catalog";
+import { setTitlePoster } from "@/api/movies/title-poster";
 import {
   MOVIE_LAYOUTS,
   classifyFolder,
@@ -199,6 +205,35 @@ export const moviesRouter = t.router({
     await notifyDevicesOfMovies();
     await removeAppCover(forgotten.posterPath, moviePostersDir(app.getPath("userData")));
   }),
+
+  // Lets the user pick an image as a Movie's or Series' poster. The image is
+  // copied into the posters folder, never moved; the old copy goes.
+  choosePoster: publicProcedure
+    .input(z.object({ kind: z.enum(["movie", "series"]), id: z.string() }))
+    .mutation(async ({ input, ctx }): Promise<{ changed: boolean }> => {
+      const db = ctx.db ?? defaultDb;
+      const title =
+        input.kind === "movie" ? await findMovie(db, input.id) : await getSeries(db, input.id);
+      if (!title) return { changed: false };
+      const selection = await dialog.showOpenDialog({
+        title: "Choose a poster",
+        defaultPath: title.sourceFolder,
+        properties: ["openFile"],
+        filters: [{ name: "Images", extensions: COVER_IMAGE_EXTENSIONS }],
+      });
+      const [imagePath] = selection.filePaths;
+      if (selection.canceled || !imagePath) return { changed: false };
+      const postersDir = moviePostersDir(app.getPath("userData"));
+      const posterPath = await saveCoverFromImage(imagePath, postersDir, input.id);
+      const replaced = await setTitlePoster(db, input, posterPath);
+      if (!replaced) {
+        await removeAppCover(posterPath, postersDir);
+        return { changed: false };
+      }
+      await removeAppCover(replaced.previous, postersDir);
+      await notifyDevicesOfMovies();
+      return { changed: true };
+    }),
 
   // Shown on Devices, for a Movie or a whole Series. Switched off, Devices no
   // longer list it or get its files, and their Mirror removes it.

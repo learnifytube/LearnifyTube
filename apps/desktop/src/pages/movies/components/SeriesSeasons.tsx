@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import type { EpisodesTarget, SeriesSeason } from "@/api/movies/series-catalog";
 import { formatListeningTime } from "@/pages/audiobooks/format";
 import { SeasonOnDevices } from "./SeasonOnDevices";
+import { MoveButtons } from "./ImportPreviewParts";
 
 function MarkButton({
   watched,
@@ -33,19 +34,24 @@ function MarkButton({
   );
 }
 
-// A Series' Seasons and Episodes with their Watch state; any Episode can be played or marked.
+// A Series' Seasons and Episodes with their Watch state; any Episode can be played or
+// marked, and a Season or an Episode (within its Season) moved up or down.
 export function SeriesSeasons({
   seasons,
   playingId,
   marking,
+  moving,
   onPlay,
   onMark,
+  onMove,
 }: {
   seasons: SeriesSeason[];
   playingId: string | null;
   marking: boolean;
+  moving: boolean;
   onPlay: (episodeId: string) => void;
   onMark: (target: EpisodesTarget, watched: boolean) => void;
+  onMove: (target: { seasonId: string } | { episodeId: string }, by: -1 | 1) => void;
 }): React.JSX.Element {
   return (
     <div className="space-y-4">
@@ -53,6 +59,11 @@ export function SeriesSeasons({
         <section key={season.id} className="rounded-lg border">
           <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
             <div className="flex items-center gap-2">
+              <MoveButtons
+                label={season.title}
+                disabled={moving}
+                onMove={(by) => onMove({ seasonId: season.id }, by)}
+              />
               <h2 className="font-semibold">{season.title}</h2>
               <WatchStateBadge watchState={season.watchState} />
             </div>
@@ -93,6 +104,11 @@ export function SeriesSeasons({
                   </p>
                 </div>
                 <WatchStateBadge watchState={episode.watchState} />
+                <MoveButtons
+                  label={episode.title}
+                  disabled={moving}
+                  onMove={(by) => onMove({ episodeId: episode.id }, by)}
+                />
                 <MarkButton
                   watched={episode.watchState === "watched"}
                   label={episode.title}

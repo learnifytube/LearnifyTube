@@ -9,6 +9,7 @@ import type { FolderListing } from "@/api/audiobooks/import-plan";
 import { scanFolder } from "@/api/audiobooks/scan-folder";
 import { devicesHoldingSeason, setSeasonSentToDevices } from "@/api/movies/send-to-devices";
 import { rescanSeries } from "@/api/movies/series-rescan";
+import { moveSeriesEpisode, moveSeriesSeason } from "@/api/movies/series-order";
 import { planSeriesImport, reorderSeries } from "@/api/movies/series-plan";
 import {
   forgetSeries,
@@ -33,6 +34,8 @@ const targetSchema = z.union([
   z.object({ seasonId: z.string() }),
   z.object({ seriesId: z.string() }),
 ]);
+
+const moveSchema = z.union([z.literal(-1), z.literal(1)]);
 
 export const seriesRouter = t.router({
   // Saves the previewed Series in the order the user corrected it to.
@@ -79,6 +82,24 @@ export const seriesRouter = t.router({
     .mutation(async ({ input, ctx }) => {
       await renameSeries(ctx.db ?? defaultDb, input.id, input.title);
       await notifyDevicesOfMovies();
+    }),
+
+  // Corrects the saved order with the preview's moves: a Season among the
+  // Series' Seasons, or an Episode within its Season. Only positions change.
+  moveSeason: publicProcedure
+    .input(z.object({ id: z.string(), by: moveSchema }))
+    .mutation(async ({ input, ctx }) => {
+      if (await moveSeriesSeason(ctx.db ?? defaultDb, input.id, input.by)) {
+        await notifyDevicesOfMovies();
+      }
+    }),
+
+  moveEpisode: publicProcedure
+    .input(z.object({ id: z.string(), by: moveSchema }))
+    .mutation(async ({ input, ctx }) => {
+      if (await moveSeriesEpisode(ctx.db ?? defaultDb, input.id, input.by)) {
+        await notifyDevicesOfMovies();
+      }
     }),
 
   // The desktop player's progress on an Episode.

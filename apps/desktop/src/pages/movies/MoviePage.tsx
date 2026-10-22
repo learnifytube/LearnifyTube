@@ -16,6 +16,7 @@ import { ShownOnDevicesSwitch } from "./components/ShownOnDevicesSwitch";
 import { useMovieProgress } from "./useMovieProgress";
 import { useCaptionTracks } from "./useCaptionTracks";
 import { MovieOnDevices } from "./components/MovieOnDevices";
+import { ChoosePosterButton } from "./components/ChoosePosterButton";
 
 type Movie = NonNullable<Awaited<ReturnType<typeof trpcClient.movies.get.query>>>;
 
@@ -135,6 +136,7 @@ function MovieView({ movie }: { movie: Movie }): React.JSX.Element {
             )}
             {watchState === "watched" ? "Mark unwatched" : "Mark watched"}
           </Button>
+          <ChoosePosterButton kind="movie" id={movie.id} />
           <Button
             variant="outline"
             className="gap-2"

@@ -1,6 +1,7 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { trpcClient } from "@/utils/trpc";
 import type { CodecWarning } from "@/api/movies/codec-warnings";
 import type { PosterSource } from "@/api/movies/import-plan";
@@ -45,5 +46,41 @@ export function CodecWarnings({
       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       May not play on Android phones and TVs: {parts.join(", ")}.
     </p>
+  );
+}
+
+// Moves a Season or an Episode one place up or down, in the preview and after saving.
+export function MoveButtons({
+  label,
+  onMove,
+  disabled = false,
+}: {
+  label: string;
+  onMove: (by: -1 | 1) => void;
+  disabled?: boolean;
+}): React.JSX.Element {
+  return (
+    <div className="flex shrink-0">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7"
+        aria-label={`Move ${label} up`}
+        disabled={disabled}
+        onClick={() => onMove(-1)}
+      >
+        <ArrowUp className="h-3.5 w-3.5" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7"
+        aria-label={`Move ${label} down`}
+        disabled={disabled}
+        onClick={() => onMove(1)}
+      >
+        <ArrowDown className="h-3.5 w-3.5" />
+      </Button>
+    </div>
   );
 }

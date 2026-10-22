@@ -1,6 +1,7 @@
 import { desc, eq, isNotNull } from "drizzle-orm";
 import { getDb, videos, watchStats } from "../index";
 import type { WatchStat } from "../schema";
+import { resumeAt } from "../../../shared/resume-at";
 
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -32,7 +33,11 @@ export type WatchHistoryLookup = Record<string, WatchHistoryItem>;
 
 function ensureVideo(input: UpsertWatchProgressInput) {
   const now = Date.now();
-  const existing = getDb().select().from(videos).where(eq(videos.id, input.videoId)).get();
+  const existing = getDb()
+    .select()
+    .from(videos)
+    .where(eq(videos.id, input.videoId))
+    .get();
 
   if (existing) {
     getDb()
@@ -63,12 +68,17 @@ function ensureVideo(input: UpsertWatchProgressInput) {
     .run();
 }
 
-export function upsertWatchProgress(input: UpsertWatchProgressInput): WatchStat {
+export function upsertWatchProgress(
+  input: UpsertWatchProgressInput,
+): WatchStat {
   const now = Date.now();
-  const lastPositionSeconds = Math.max(0, Math.floor(input.lastPositionSeconds));
+  const lastPositionSeconds = Math.max(
+    0,
+    Math.floor(input.lastPositionSeconds),
+  );
   const additionalWatchSeconds = Math.max(
     0,
-    Math.floor(input.additionalWatchSeconds ?? 0)
+    Math.floor(input.additionalWatchSeconds ?? 0),
   );
   const lastWatchedAt = input.lastWatchedAt ?? now;
 
@@ -86,7 +96,7 @@ export function upsertWatchProgress(input: UpsertWatchProgressInput): WatchStat 
       .set({
         totalWatchSeconds: Math.max(
           0,
-          (existing.totalWatchSeconds ?? 0) + additionalWatchSeconds
+          (existing.totalWatchSeconds ?? 0) + additionalWatchSeconds,
         ),
         lastPositionSeconds,
         lastWatchedAt,
@@ -162,7 +172,7 @@ export function getWatchHistoryLookup(limit = 1000): WatchHistoryLookup {
 
 export function getMostRecentWatchForVideoIds(
   videoIds: string[],
-  lookup?: WatchHistoryLookup
+  lookup?: WatchHistoryLookup,
 ): WatchHistoryItem | null {
   if (videoIds.length === 0) return null;
 
@@ -188,4 +198,24 @@ export function getMostRecentWatchForVideoIds(
   }
 
   return mostRecent;
+}
+
+/**
+ * Where a Video starts on this Device, by the shared "resume at" rule over its
+ * Watch progress here: from the beginning once about 90% was played.
+ */
+export function videoStartPosition(videoId: string, durationSeconds?: number) {
+  const row = getDb()
+    .select({
+      lastPositionSeconds: watchStats.lastPositionSeconds,
+      duration: videos.duration,
+    })
+    .from(watchStats)
+    .leftJoin(videos, eq(watchStats.videoId, videos.id))
+    .where(eq(watchStats.videoId, videoId))
+    .get();
+  return resumeAt({
+    positionSeconds: row?.lastPositionSeconds ?? null,
+    durationSeconds: durationSeconds || row?.duration || null,
+  });
 }

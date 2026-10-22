@@ -19,6 +19,7 @@ import {
   type PlaybackFailure,
 } from "../../../services/playback-source";
 import { useWatchProgressRecorder } from "../../../hooks/useWatchProgressRecorder";
+import { videoStartPosition } from "../../../db/repositories/watchHistory";
 import {
   TVFocusPressable,
   type TVFocusPressableHandle,
@@ -183,7 +184,11 @@ export default function TVPlayerScreen() {
   const player = useVideoPlayer(source, (instance) => {
     instance.loop = false;
     instance.timeUpdateEventInterval = 1;
-    if (resumeAt !== null) instance.currentTime = resumeAt;
+    // Where a Stream left off, else where this TV left the Video (from the
+    // beginning once watched).
+    const start =
+      resumeAt ?? (source && id ? videoStartPosition(id, video?.duration) : 0);
+    if (start > 0) instance.currentTime = start;
     instance.play();
   });
   playerRef.current = player;

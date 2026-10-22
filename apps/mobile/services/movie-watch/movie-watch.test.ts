@@ -54,6 +54,16 @@ describe("Movie watch", () => {
     ).toBe(0);
   });
 
+  it("starts from the beginning once marked watched on the desktop, wherever it stopped", () => {
+    expect(
+      resumeAt({
+        watch: desktop(1200, 70, true),
+        kept: kept(800, 60),
+        durationSeconds: 6000,
+      }),
+    ).toBe(0);
+  });
+
   it("starts again from the beginning once the end was reached", () => {
     expect(
       resumeAt({ watch: null, kept: kept(5900, 60), durationSeconds: 6000 }),

@@ -223,8 +223,10 @@ export default function PlayerScreen() {
         currentCaption(transcript?.segments, event.currentTime, captionMaxChars),
       );
     });
+    // While a Video prepares the player has no source, and Android reports that
+    // empty player as played to its end; only a Video that played can end.
     const endSub = player.addListener("playToEnd", () => {
-      if (!hasNextVideo) return;
+      if (!playerSource || !hasNextVideo) return;
       const next = playNext();
       if (next) router.replace(`/player/${next.id}`);
     });
@@ -232,7 +234,14 @@ export default function PlayerScreen() {
       timeSub.remove();
       endSub.remove();
     };
-  }, [player, transcript, captionMaxChars, hasNextVideo, playNext]);
+  }, [
+    player,
+    playerSource,
+    transcript,
+    captionMaxChars,
+    hasNextVideo,
+    playNext,
+  ]);
 
   useEffect(() => {
     setTranscript(null);

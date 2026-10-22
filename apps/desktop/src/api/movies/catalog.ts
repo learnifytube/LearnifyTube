@@ -129,6 +129,25 @@ export const forgetMovie = async (
   return { posterPath: movie.posterPath };
 };
 
+/**
+ * Checks every Movie's file: one that is gone is missing and keeps its Watch
+ * state; one that is back plays again. Resolves how many changed.
+ */
+export const markMissingMovies = async (
+  db: Database,
+  exists: (filePath: string) => Promise<boolean>
+): Promise<number> => {
+  const rows = await db.select().from(movies);
+  let changed = 0;
+  for (const movie of rows) {
+    const missing = !(await exists(movie.filePath));
+    if (missing === movie.missing) continue;
+    await db.update(movies).set({ missing }).where(eq(movies.id, movie.id));
+    changed += 1;
+  }
+  return changed;
+};
+
 /** The video file of every Movie and Episode, as recorded. */
 export const listMovieFilePaths = async (db: Database): Promise<string[]> => {
   const [movieFiles, episodeFiles] = await Promise.all([

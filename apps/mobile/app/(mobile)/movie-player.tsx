@@ -15,12 +15,17 @@ import { useConnectionStore } from "../../stores/connection";
 import { useMovieCatalogStore } from "../../stores/movieCatalog";
 import { movieWatchKey, useMovieWatchStore } from "../../stores/movieWatch";
 import {
+  phoneEpisodePlaybackSource,
   phoneMoviePlaybackSource,
   type PlaybackFailure,
 } from "../../services/playback-source";
 import { bookPlayer } from "../../services/book-player";
 import { deviceMirror } from "../../services/device-mirror";
 import { resumeAt } from "../../services/movie-watch/movieWatch";
+import {
+  seriesEpisodeAfter,
+  seriesEpisodes,
+} from "../../services/movie-watch/seriesWatch";
 import { resolveRemoteAssetUrl } from "../../services/remoteAssetUrl";
 import { PlayerProgressBar } from "../../components/phone/PlayerProgressBar";
 import {
@@ -29,6 +34,11 @@ import {
   toggleFullScreen,
 } from "../../components/phone/playerOrientation";
 import { colors, fontSize, fontWeight, spacing } from "../../theme";
+import type {
+  Movie,
+  MovieWatch,
+  Series,
+} from "../../../shared/mobile-sync-contract";
 import {
   ArrowLeft,
   Maximize,
@@ -43,21 +53,52 @@ const CONTROLS_HIDE_MS = 3000;
 const SAVE_INTERVAL_MS = 5000;
 const SEEK_SECONDS = 10;
 
-function failureText(failure: PlaybackFailure) {
+type TitleKind = MovieWatch["kind"];
+
+function failureText(failure: PlaybackFailure, kind: TitleKind) {
+  const what = kind === "episode" ? "episode" : "movie";
   if (failure.kind === "notOnThisTV") {
-    return "This movie needs the desktop.";
+    return `This ${what} needs the desktop.`;
   }
-  return "Couldn't play this movie. Try again when the desktop is around.";
+  return `Couldn't play this ${what}. Try again when the desktop is around.`;
+}
+
+// The Movie or Episode `id` names, from the last catalog the desktop served.
+function findTitle(
+  catalog: { movies: Movie[]; series: Series[] },
+  kind: TitleKind,
+  id: string,
+) {
+  if (kind === "movie") {
+    const movie = catalog.movies.find((item) => item.id === id);
+    return movie ? { ...movie, series: null } : null;
+  }
+  for (const series of catalog.series) {
+    const episode = seriesEpisodes(series).find((item) => item.id === id);
+    if (episode) {
+      return {
+        ...episode,
+        title: `${series.title} · ${episode.title}`,
+        posterUrl: series.posterUrl,
+        series,
+      };
+    }
+  }
+  return null;
 }
 
 // Keeps where playback is on this phone; the Device report takes it to the desktop.
-function useMovieProgressRecorder(player: VideoPlayer, movieId: string) {
+function useMovieProgressRecorder(
+  player: VideoPlayer,
+  kind: TitleKind,
+  movieId: string,
+) {
   useEffect(() => {
     if (!movieId) return;
     const save = (positionSeconds: number) => {
       if (positionSeconds <= 0) return;
       useMovieWatchStore.getState().keep({
-        kind: "movie",
+        kind,
         id: movieId,
         lastPositionSeconds: positionSeconds,
         lastWatchedAt: Date.now(),
@@ -80,19 +121,23 @@ function useMovieProgressRecorder(player: VideoPlayer, movieId: string) {
       // Tell the desktop now rather than at the next sync.
       void deviceMirror.syncNow();
     };
-  }, [player, movieId]);
+  }, [player, kind, movieId]);
 }
 
-/** Plays a Movie: Streamed from the desktop, never Downloaded (ADR-0005). */
+/**
+ * Plays a Movie, or an Episode (`kind=episode`) and then the Episodes after it:
+ * Streamed from the desktop, never Downloaded (ADR-0005).
+ */
 export default function MoviePlayerScreen() {
-  const { id = "" } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string; kind?: string }>();
+  const id = params.id ?? "";
+  const kind: TitleKind = params.kind === "episode" ? "episode" : "movie";
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
   const serverUrl = useConnectionStore((state) => state.serverUrl);
-  const movie = useMovieCatalogStore((state) =>
-    state.movies.find((item) => item.id === id),
-  );
+  const catalog = useMovieCatalogStore();
+  const movie = findTitle(catalog, kind, id);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(movie?.durationSeconds ?? 0);
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -106,7 +151,10 @@ export default function MoviePlayerScreen() {
     setFullScreenBars(isLandscape);
   }, [isLandscape]);
 
-  const playback = phoneMoviePlaybackSource.useSource({
+  // The kind never changes while the screen is up, so the hook order holds.
+  const source =
+    kind === "episode" ? phoneEpisodePlaybackSource : phoneMoviePlaybackSource;
+  const playback = source.useSource({
     videoId: id,
     queue: [],
     index: -1,
@@ -155,7 +203,7 @@ export default function MoviePlayerScreen() {
     if (!sourceUri) return;
     const start = resumeAt({
       watch,
-      kept: useMovieWatchStore.getState().progress[movieWatchKey("movie", id)],
+      kept: useMovieWatchStore.getState().progress[movieWatchKey(kind, id)],
       durationSeconds: knownDuration,
     });
     if (start <= 0) return;
@@ -164,9 +212,24 @@ export default function MoviePlayerScreen() {
     }, 250);
     return () => clearTimeout(timeout);
     // Only when a source starts: a later catalog refresh mustn't seek.
-  }, [player, sourceUri, id]);
+  }, [player, sourceUri, kind, id]);
 
-  useMovieProgressRecorder(player, id);
+  useMovieProgressRecorder(player, kind, id);
+
+  // Episodes autoplay: the next one in Series order that can play.
+  const series = movie?.series ?? null;
+  useEffect(() => {
+    if (!series) return;
+    const subscription = player.addListener("playToEnd", () => {
+      const next = seriesEpisodeAfter(series, id);
+      if (!next) return;
+      router.replace({
+        pathname: "/movie-player",
+        params: { kind: "episode", id: next.id },
+      });
+    });
+    return () => subscription.remove();
+  }, [player, series, id]);
 
   useEffect(() => {
     const timeSubscription = player.addListener("timeUpdate", (event) => {
@@ -237,7 +300,7 @@ export default function MoviePlayerScreen() {
       {playback.source.kind === "failed" ? (
         <View style={styles.center} pointerEvents="box-none">
           <Text style={styles.status}>
-            {failureText(playback.source.failure)}
+            {failureText(playback.source.failure, kind)}
           </Text>
           <Pressable
             style={styles.button}

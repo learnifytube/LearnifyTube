@@ -1,4 +1,8 @@
-import type { MovieWatch, Series } from "../../../shared/mobile-sync-contract";
+import type {
+  LastEpisode,
+  MovieWatch,
+  Series,
+} from "../../../shared/mobile-sync-contract";
 import { seriesNextUp } from "../../services/movie-watch/seriesWatch";
 import { describeTitleWatch } from "./tvCatalog";
 
@@ -20,11 +24,15 @@ export type TVSeriesView = {
 export function buildTVSeriesView({
   series,
   keptEpisodeWatch,
+  keptLastEpisode,
 }: {
   series: Series;
   keptEpisodeWatch: (episodeId: string) => MovieWatch | undefined;
+  /** The Episode this Series last played on this TV. */
+  keptLastEpisode?: LastEpisode;
 }): TVSeriesView {
-  const nextUpId = seriesNextUp(series, keptEpisodeWatch)?.episode.id ?? null;
+  const nextUpId =
+    seriesNextUp(series, keptEpisodeWatch, keptLastEpisode)?.episode.id ?? null;
 
   const seasons = series.seasons.map((season) => ({
     id: season.id,

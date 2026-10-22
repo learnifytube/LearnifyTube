@@ -2,7 +2,8 @@ import * as http from "http";
 import * as path from "path";
 import { logger } from "../helpers/logger";
 import type { Database } from "../api/db";
-import type { MovieKind } from "../../../shared/mobile-sync-contract";
+import { seriesLastEpisodeSchema, type MovieKind } from "../../../shared/mobile-sync-contract";
+import { recordDeviceLastEpisodes } from "../api/movies/device-watch";
 import {
   findMovieFileForDevices,
   findPosterForDevices,
@@ -24,18 +25,24 @@ type MovieSyncRoutesDeps = {
   assetUrl: (pathname: string) => string;
   sendJson: (res: http.ServerResponse, data: unknown, statusCode?: number) => void;
   sendError: (res: http.ServerResponse, message: string, statusCode?: number) => void;
+  readBody: (req: http.IncomingMessage) => Promise<string>;
+  /** Tells Devices to refetch the Movie catalog. */
+  announceMoviesChanged: () => void;
 };
 
 /**
  * The sync routes for Movies and Series (ADR-0005): the catalog, each Movie's
  * and Episode's file (by id, with Range support for seeking), Captions and posters. A
- * title that isn't Shown on Devices is neither listed nor served.
+ * title that isn't Shown on Devices is neither listed nor served. A Device posts
+ * a Series' last Episode live as it starts an Episode (ADR-0006).
  */
 export const createMovieSyncRoutes = ({
   db,
   assetUrl,
   sendJson,
   sendError,
+  readBody,
+  announceMoviesChanged,
 }: MovieSyncRoutesDeps): {
   /** Serves a Movie route; false when the URL isn't one. */
   route: (req: http.IncomingMessage, res: http.ServerResponse, url: string) => Promise<boolean>;
@@ -88,14 +95,43 @@ export const createMovieSyncRoutes = ({
     );
   };
 
+  // A Device started an Episode: the newest last Episode is kept, and the other
+  // Devices refetch the catalog so they resume it too.
+  const handleLastEpisode = async (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    seriesId: string
+  ): Promise<void> => {
+    const body: unknown = JSON.parse(await readBody(req));
+    const parsed = seriesLastEpisodeSchema.safeParse(body);
+    if (!parsed.success || parsed.data.seriesId !== seriesId) {
+      sendError(res, "Invalid last Episode", 400);
+      return;
+    }
+    if (await recordDeviceLastEpisodes(db, [parsed.data])) announceMoviesChanged();
+    sendJson(res, { success: true });
+  };
+
+  const postRoute = async (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    pathname: string
+  ): Promise<boolean> => {
+    const lastEpisodeMatch = pathname.match(/^\/api\/series\/([^/]+)\/last-episode$/);
+    if (!lastEpisodeMatch) return false;
+    await handleLastEpisode(req, res, decodeURIComponent(lastEpisodeMatch[1]));
+    return true;
+  };
+
   const route = async (
     req: http.IncomingMessage,
     res: http.ServerResponse,
     url: string
   ): Promise<boolean> => {
-    if (req.method !== "GET") return false;
+    if (req.method !== "GET" && req.method !== "POST") return false;
     const pathname = url.split("?")[0];
     try {
+      if (req.method === "POST") return await postRoute(req, res, pathname);
       if (pathname === "/api/movies") {
         sendJson(res, await loadMovieCatalog(db, assetUrl));
         return true;

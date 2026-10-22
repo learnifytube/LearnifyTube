@@ -3,10 +3,7 @@ import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import * as schema from "@/api/db/schema";
-import type {
-  DeviceReport,
-  SeriesLastEpisode,
-} from "../../../../shared/mobile-sync-contract";
+import type { DeviceReport, SeriesLastEpisode } from "../../../../shared/mobile-sync-contract";
 import { recordDeviceReport } from "@/api/on-device/store";
 import {
   getSeries,
@@ -15,6 +12,7 @@ import {
   setEpisodesWatched,
 } from "./series-catalog";
 import { loadMovieCatalog } from "./device-catalog";
+import { recordDeviceLastEpisodes } from "./device-watch";
 
 // A Series remembers the Episode last played (ADR-0006), on the desktop and
 // from Device reports, newest wins.
@@ -201,5 +199,23 @@ describe("a Series' last Episode from Device reports", () => {
     await recordDeviceReport(db, report(), 9000);
 
     expect(await lastEpisodeOnDevices(db)).toEqual({ episodeId: "s1e3", updatedAt: 3000 });
+  });
+});
+
+describe("a Series' last Episode sent live by a Device", () => {
+  let db: Db;
+  beforeEach(async () => {
+    db = await createDb();
+    await importOffice(db);
+  });
+
+  it("says when it was kept, so the desktop tells the other Devices", async () => {
+    const live = (episodeId: string, updatedAt: number) =>
+      recordDeviceLastEpisodes(db, [{ seriesId: "office", episodeId, updatedAt }]);
+
+    expect(await live("s1e4", 5000)).toBe(true);
+    expect(await live("s1e2", 4000)).toBe(false);
+    expect(await live("elsewhere", 6000)).toBe(false);
+    expect(await lastEpisodeOnDevices(db)).toEqual({ episodeId: "s1e4", updatedAt: 5000 });
   });
 });

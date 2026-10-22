@@ -197,6 +197,29 @@ describe("Continue watching", () => {
     });
   });
 
+  it("shows the Episode this phone went back to, not the later one in progress", () => {
+    const [item] = mergeContinueWatching(
+      base({
+        series: [
+          {
+            ...series("office", [
+              episode("o1", onDesktop(300, 20)),
+              episode("o2"),
+              episode("o3", onDesktop(300, 30)),
+            ]),
+            lastEpisode: { episodeId: "o3", updatedAt: 30 },
+          },
+        ],
+        kept: keptOnPhone({ "episode:o1": [400, 60] }),
+        keptLastEpisode: (seriesId) =>
+          seriesId === "office"
+            ? { seriesId, episodeId: "o1", updatedAt: 60 }
+            : undefined,
+      }),
+    );
+    expect(item).toMatchObject({ kind: "episode", episode: { id: "o1" } });
+  });
+
   it("drops a Series once no unwatched Episode remains", () => {
     expect(
       ids(

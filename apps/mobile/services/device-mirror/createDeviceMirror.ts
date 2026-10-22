@@ -1,4 +1,6 @@
 import {
+  ON_DEVICE_SET_SYNC_PROTOCOL_VERSION,
+  RESUME_SYNC_PROTOCOL_VERSION,
   SYNC_SSE_EVENT_AUDIOBOOKS,
   SYNC_SSE_EVENT_MOVIES,
   SYNC_SSE_EVENT_ON_DEVICE_SET,
@@ -17,8 +19,10 @@ export type DeviceMirrorPlatform = {
   /** Called when the desktop connection or the app's foreground state changes. */
   onConditionsChange: (listener: () => void) => () => void;
   desktop: {
-    /** The On-device set, or null when the desktop is too old to serve one. */
-    getOnDeviceSet: (serverUrl: string) => Promise<SetVideo[] | null>;
+    /** The desktop's sync protocol version; what the Device sends depends on it. */
+    getProtocolVersion: (serverUrl: string) => Promise<number>;
+    /** The On-device set (desktops from ON_DEVICE_SET_SYNC_PROTOCOL_VERSION on). */
+    getOnDeviceSet: (serverUrl: string) => Promise<SetVideo[]>;
     report: (serverUrl: string, report: DeviceReport) => Promise<void>;
     /**
      * Listens to the desktop's pushed sync events, and says when the stream
@@ -49,6 +53,13 @@ export type DeviceMirrorPlatform = {
   getListening: () => NonNullable<DeviceReport["listening"]>;
   /** Where this Device stopped in each Movie and Episode it played. */
   getMovieWatch: () => NonNullable<DeviceReport["movieWatch"]>;
+  /**
+   * Where this Device's collections and files resume (ADR-0006), kept also in
+   * Offline mode; reported only to a desktop that shares them.
+   */
+  resume: {
+    seriesLastEpisodes: () => NonNullable<DeviceReport["seriesLastEpisodes"]>;
+  };
   loadMirroredIds: () => Promise<string[]>;
   saveMirroredIds: (videoIds: string[]) => Promise<void>;
   /** Keeps the latest On-device set, which the TV shows as "Sent to this TV" in Offline mode too. */
@@ -106,6 +117,18 @@ export function planMirror(input: {
   };
 }
 
+/**
+ * The Device report's resume fields (ADR-0006): none for a desktop older than
+ * resume, which would only drop them.
+ */
+function resumeReport(
+  platform: DeviceMirrorPlatform,
+  desktopVersion: number,
+): Partial<DeviceReport> {
+  if (desktopVersion < RESUME_SYNC_PROTOCOL_VERSION) return {};
+  return { seriesLastEpisodes: platform.resume.seriesLastEpisodes() };
+}
+
 export function createDeviceMirror(platform: DeviceMirrorPlatform) {
   let syncing: Promise<void> | null = null;
   // The one sync queued to run after the sync in flight.
@@ -114,8 +137,10 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
   const sync = async () => {
     const serverUrl = platform.getServerUrl();
     if (!serverUrl || !platform.isLibraryLoaded()) return;
+    const desktopVersion = await platform.desktop.getProtocolVersion(serverUrl);
+    // Too old to serve the set: the Device is left alone.
+    if (desktopVersion < ON_DEVICE_SET_SYNC_PROTOCOL_VERSION) return;
     const setVideos = await platform.desktop.getOnDeviceSet(serverUrl);
-    if (!setVideos) return;
     platform.saveOnDeviceSet(setVideos);
 
     const libraryIds = platform.getLibraryVideoIds();
@@ -167,6 +192,7 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
       movieWatch: platform.getMovieWatch(),
       heldMovieIds: heldMovies.movieIds,
       heldEpisodeIds: heldMovies.episodeIds,
+      ...resumeReport(platform, desktopVersion),
     });
 
     // Videos held from before thumbnails were stored with Offline copies;

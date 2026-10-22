@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useConnectionStore } from "../../stores/connection";
 import { useMovieCatalogStore } from "../../stores/movieCatalog";
 import { movieWatchKey, useMovieWatchStore } from "../../stores/movieWatch";
+import { useSeriesLastEpisodesStore } from "../../stores/seriesLastEpisodes";
 import { watchStateOf } from "../../services/movie-watch/movieWatch";
 import {
   seriesEpisodes,
@@ -28,7 +29,9 @@ function playEpisode(episode: Episode) {
 }
 
 const episodeLabel = (episode: Episode) =>
-  episode.number !== null ? `${episode.number}. ${episode.title}` : episode.title;
+  episode.number !== null
+    ? `${episode.number}. ${episode.title}`
+    : episode.title;
 
 /**
  * A Series screen: its Seasons and Episodes in order. Play Streams the
@@ -43,6 +46,9 @@ export default function SeriesScreen() {
     state.series.find((item) => item.id === id),
   );
   const progress = useMovieWatchStore((state) => state.progress);
+  const keptLastEpisode = useSeriesLastEpisodesStore((state) =>
+    id ? state.lastEpisodes[id] : undefined,
+  );
   const getOfflineUri = movieOfflineCopy.useLookup();
   const holds = heldMovies.useHolds();
 
@@ -61,7 +67,7 @@ export default function SeriesScreen() {
 
   const kept = (episodeId: string) =>
     progress[movieWatchKey("episode", episodeId)];
-  const nextUp = seriesNextUp(series, kept);
+  const nextUp = seriesNextUp(series, kept, keptLastEpisode);
   const toPlay =
     nextUp?.episode ??
     seriesEpisodes(series).find((episode) => !episode.missing) ??

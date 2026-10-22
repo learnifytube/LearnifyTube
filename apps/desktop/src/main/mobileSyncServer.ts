@@ -546,10 +546,18 @@ const createMobileSyncServer = (): MobileSyncServer => {
     readBody,
   });
 
-  const movieRoutes = createMovieSyncRoutes({ db: defaultDb, assetUrl, sendJson, sendError });
+  const movieRoutes = createMovieSyncRoutes({
+    db: defaultDb,
+    assetUrl,
+    sendJson,
+    sendError,
+    readBody,
+    announceMoviesChanged: broadcastMoviesChanged,
+  });
 
   // GET /api/audiobooks, /api/audiobook-track/:id/file, /api/audiobook/:id/cover;
-  // GET /api/movies, /api/(movie|episode)/:id/file, /api/(movie|series)/:id/poster.
+  // GET /api/movies, /api/(movie|episode)/:id/file, /api/(movie|series)/:id/poster;
+  // POST /api/series/:id/last-episode.
   const routeAudiobooksAndMovies = async (
     req: http.IncomingMessage,
     res: http.ServerResponse,

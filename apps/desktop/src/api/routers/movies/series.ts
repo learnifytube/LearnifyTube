@@ -16,6 +16,7 @@ import {
   getSeries,
   listSeries,
   recordEpisodePlayback,
+  recordEpisodeStarted,
   renameSeries,
   saveImportedSeries,
   setEpisodesWatched,
@@ -113,12 +114,22 @@ export const seriesRouter = t.router({
     )
     .mutation(({ input, ctx }) => recordEpisodePlayback(ctx.db ?? defaultDb, input)),
 
-  // Marks one Episode, a Season or the whole Series.
+  // The desktop player started an Episode: it becomes the Series' last Episode.
+  recordStarted: publicProcedure
+    .input(z.object({ episodeId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      await recordEpisodeStarted(ctx.db ?? defaultDb, input.episodeId);
+      await notifyDevicesOfMovies();
+    }),
+
+  // Marks one Episode, a Season or the whole Series; marking unwatched can
+  // forget the Series' last Episode, which Devices then learn.
   setWatched: publicProcedure
     .input(z.object({ target: targetSchema, watched: z.boolean() }))
-    .mutation(({ input, ctx }) =>
-      setEpisodesWatched(ctx.db ?? defaultDb, input.target, input.watched)
-    ),
+    .mutation(async ({ input, ctx }) => {
+      await setEpisodesWatched(ctx.db ?? defaultDb, input.target, input.watched);
+      await notifyDevicesOfMovies();
+    }),
 
   // Looks at the Series folder again: new Episodes join their Season, files
   // that are gone show as missing. Existing order is never changed.

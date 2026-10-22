@@ -1,6 +1,6 @@
 import path from "path";
 import { randomUUID } from "crypto";
-import { asc, eq, inArray, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, type SQL } from "drizzle-orm";
 import type { Database } from "@/api/db";
 import { captions, episodes, seasons, series, type Episode } from "@/api/db/schema";
 import type { WatchState } from "@/lib/watch-state";
@@ -122,7 +122,8 @@ export type SeriesDetail = {
   shownOnDevices: boolean;
   watchState: WatchState;
   seasons: SeriesSeason[];
-  // The Episode playing the Series starts: in progress, else the first unwatched.
+  // The Episode playing the Series starts: the last one played unless watched,
+  // else the next unwatched after it, else the first unwatched (ADR-0006).
   nextUpEpisodeId: string | null;
 };
 
@@ -167,7 +168,7 @@ export const getSeries = async (db: Database, id: string): Promise<SeriesDetail 
     shownOnDevices: row.shownOnDevices,
     watchState: watchStateOfAll(inOrder),
     seasons: seasonList,
-    nextUpEpisodeId: nextUpEpisode(inOrder)?.id ?? null,
+    nextUpEpisodeId: nextUpEpisode(inOrder, row.lastEpisodeId)?.id ?? null,
   };
 };
 
@@ -241,6 +242,20 @@ export const recordEpisodePlayback = async (
     .where(eq(episodes.id, episode.id));
 };
 
+/** The desktop player started an Episode: it becomes its Series' last Episode. */
+export const recordEpisodeStarted = async (
+  db: Database,
+  episodeId: string,
+  now: number = Date.now()
+): Promise<void> => {
+  const episode = await findEpisode(db, episodeId);
+  if (!episode) return;
+  await db
+    .update(series)
+    .set({ lastEpisodeId: episode.id, lastEpisodeUpdatedAt: now })
+    .where(eq(series.id, episode.seriesId));
+};
+
 export type EpisodesTarget = { episodeId: string } | { seasonId: string } | { seriesId: string };
 
 const whereTarget = (target: EpisodesTarget): SQL =>
@@ -258,15 +273,34 @@ export const setEpisodesWatched = async (
   now: number = Date.now()
 ): Promise<void> => {
   const rows = await db.select().from(episodes).where(whereTarget(target));
-  await applyWrites(
-    db,
-    rows.map((episode) =>
+  // Marking a Series, or the Season holding its last Episode, unwatched forgets
+  // that Episode, stamped so older Device reports lose to it.
+  const forget =
+    !watched && !("episodeId" in target)
+      ? [
+          db
+            .update(series)
+            .set({ lastEpisodeId: null, lastEpisodeUpdatedAt: now })
+            .where(
+              and(
+                inArray(series.id, [...new Set(rows.map((episode) => episode.seriesId))]),
+                inArray(
+                  series.lastEpisodeId,
+                  rows.map((episode) => episode.id)
+                )
+              )
+            ),
+        ]
+      : [];
+  await applyWrites(db, [
+    ...rows.map((episode) =>
       db
         .update(episodes)
         .set(markedWatched(episode, watched, now))
         .where(eq(episodes.id, episode.id))
-    )
-  );
+    ),
+    ...forget,
+  ]);
 };
 
 /** Removes the Series from the app only; resolves its poster copy for cleanup. */

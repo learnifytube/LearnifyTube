@@ -33,7 +33,7 @@ const importUp = async (db: Db): Promise<string> => {
 };
 
 const importOffice = (db: Db): Promise<string> =>
-  saveImportedSeries(db, "/shows/The Office", {
+  saveImportedSeries(db, "/series/The Office", {
     title: "The Office",
     posterPath: "/userData/movie-posters/office.jpg",
     seasons: [
@@ -66,10 +66,10 @@ describe("Shown on Devices", () => {
 
     expect((await findMovie(db, upId))?.shownOnDevices).toBe(true);
     expect((await getSeries(db, officeId))?.shownOnDevices).toBe(true);
-    expect((await listSeries(db)).map((show) => show.shownOnDevices)).toEqual([true]);
+    expect((await listSeries(db)).map((series) => series.shownOnDevices)).toEqual([true]);
     const catalog = await loadMovieCatalog(db, assetUrl);
     expect(catalog.movies.map((movie) => movie.id)).toEqual([upId]);
-    expect(catalog.series.map((show) => show.id)).toEqual([officeId]);
+    expect(catalog.series.map((series) => series.id)).toEqual([officeId]);
   });
 
   it("switched off, leaves the title out of the Devices' catalog and refuses its files", async () => {

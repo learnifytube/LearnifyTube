@@ -1,7 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import type { Database } from "@/api/db";
 import { episodes, movies, seasons, series } from "@/api/db/schema";
-import type { MovieCatalog, TitleWatch } from "../../../../shared/mobile-sync-contract";
+import type { MovieCatalog, MovieKind, TitleWatch } from "../../../../shared/mobile-sync-contract";
 import type { WatchProgress } from "./watch-progress";
 import { captionsByOwner } from "./captions";
 
@@ -48,12 +48,12 @@ export const loadMovieCatalog = async (
       sentToDevices: movie.sentToDevices,
       watch: titleWatch(movie),
     })),
-    series: seriesRows.map((show) => ({
-      id: show.id,
-      title: show.title,
-      posterUrl: posterUrl("series", show),
+    series: seriesRows.map((series) => ({
+      id: series.id,
+      title: series.title,
+      posterUrl: posterUrl("series", series),
       seasons: seasonRows
-        .filter((season) => season.seriesId === show.id)
+        .filter((season) => season.seriesId === series.id)
         .map((season) => ({
           id: season.id,
           title: season.title,
@@ -74,8 +74,6 @@ export const loadMovieCatalog = async (
     })),
   };
 };
-
-export type MovieKind = "movie" | "episode";
 
 /**
  * The recorded video file of a Movie or Episode Shown on Devices, found by id

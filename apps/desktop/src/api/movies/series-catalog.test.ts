@@ -35,7 +35,7 @@ const episode = (file: string, number: number, durationSeconds: number | null = 
 const importOffice = (db: Db) =>
   saveImportedSeries(
     db,
-    "/shows/Office",
+    "/series/Office",
     {
       title: " The Office ",
       posterPath: "/userData/movie-posters/office.jpg",
@@ -89,13 +89,13 @@ describe("Series catalog", () => {
       ["Season 2", "unwatched", [["S02E01", "unwatched"]]],
     ]);
     expect(series?.seasons[0].episodes[0]).toMatchObject({
-      filePath: path.join("/shows/Office", "S1/S01E01.mkv"),
+      filePath: path.join("/series/Office", "S1/S01E01.mkv"),
       number: 1,
       durationSeconds: 1200,
       missing: false,
     });
     expect((await listMovieFilePaths(db)).sort()).toEqual(
-      ["S1/S01E01.mkv", "S1/S01E02.mkv", "S2/S02E01.mkv"].map((f) => path.join("/shows/Office", f))
+      ["S1/S01E01.mkv", "S1/S01E02.mkv", "S2/S02E01.mkv"].map((f) => path.join("/series/Office", f))
     );
   });
 
@@ -103,7 +103,7 @@ describe("Series catalog", () => {
     const office = await importOffice(db);
     const cosmos = await saveImportedSeries(
       db,
-      "/shows/Cosmos",
+      "/series/Cosmos",
       {
         title: "Cosmos",
         posterPath: null,

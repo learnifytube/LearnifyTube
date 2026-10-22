@@ -6,6 +6,7 @@ import {
   type PhoneHomeInput,
 } from "./phoneCatalog";
 import type { StreamingVideo } from "../../stores/playback";
+import type { MovieKind } from "../../../shared/mobile-sync-contract";
 
 const video = (id: string): StreamingVideo => ({
   id,
@@ -50,11 +51,7 @@ describe("buildPhoneHome", () => {
   });
 
   it("adds the Movies and Episodes with an Offline copy to On this phone, newest first", () => {
-    const hold = (
-      id: string,
-      heldAt: number,
-      kind: "movie" | "episode" = "movie",
-    ) => ({
+    const hold = (id: string, heldAt: number, kind: MovieKind = "movie") => ({
       kind,
       id,
       title: id,

@@ -1,5 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import type { Database } from "@/api/db";
+import type { MovieKind } from "../../../../shared/mobile-sync-contract";
 import { episodes, movies, seasons, syncDevices } from "@/api/db/schema";
 
 // Sending to Devices (ADR-0005): a Movie goes whole, a Series one Season at a
@@ -42,7 +43,7 @@ const heldIdsOf = (json: string): string[] => {
  */
 export const devicesHoldingTitles = async (
   db: Database,
-  kind: "movie" | "episode",
+  kind: MovieKind,
   ids: string[]
 ): Promise<TitleDevice[]> => {
   if (ids.length === 0) return [];

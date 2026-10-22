@@ -2,6 +2,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Database } from "@/api/db";
+import type { MovieKind } from "../../../../shared/mobile-sync-contract";
 import { captions, episodes, movies, series, type Caption } from "@/api/db/schema";
 import { applyWrites, type Write } from "./batch-writes";
 import { pairCaptions, type ProposedCaption } from "./caption-pairing";
@@ -9,7 +10,7 @@ import { pairCaptions, type ProposedCaption } from "./caption-pairing";
 // Sidecar Captions of Movies and Episodes (ADR-0005). The subtitle files are
 // only ever read where they are.
 
-export type CaptionOwner = { kind: "movie" | "episode"; id: string };
+export type CaptionOwner = { kind: MovieKind; id: string };
 
 export type StoredCaption = {
   id: string;

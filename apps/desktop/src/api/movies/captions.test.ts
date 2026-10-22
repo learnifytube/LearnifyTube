@@ -45,7 +45,7 @@ const importUp = async (db: Db): Promise<string> => {
   return id;
 };
 
-const SHOW = "/shows/Office";
+const SERIES = "/series/Office";
 const episode = (file: string, number: number, captions: string[] = []) => ({
   path: file,
   title: path.basename(file, ".mkv"),
@@ -57,7 +57,7 @@ const episode = (file: string, number: number, captions: string[] = []) => ({
 });
 
 const importOffice = (db: Db): Promise<string> =>
-  saveImportedSeries(db, SHOW, {
+  saveImportedSeries(db, SERIES, {
     title: "The Office",
     posterPath: null,
     seasons: [
@@ -97,16 +97,16 @@ describe("Sidecar Captions", () => {
   it("lists each Episode's Captions, and finds them inside the Series folder", async () => {
     const seriesId = await importOffice(db);
 
-    const [show] = (await loadMovieCatalog(db, assetUrl)).series;
-    const [first, second] = show.seasons[0].episodes;
+    const [series] = (await loadMovieCatalog(db, assetUrl)).series;
+    const [first, second] = series.seasons[0].episodes;
 
     expect(first.captions.map(({ language, label }) => [language, label])).toEqual([
       ["en", "English"],
     ]);
     expect(second.captions).toEqual([]);
     expect(await findCaptionForDevices(db, first.captions[0].id)).toEqual({
-      filePath: path.join(SHOW, "S01E01.en.srt"),
-      folder: SHOW,
+      filePath: path.join(SERIES, "S01E01.en.srt"),
+      folder: SERIES,
     });
     const detail = await getSeries(db, seriesId);
     expect(
@@ -145,9 +145,9 @@ describe("Sidecar Captions", () => {
 
     await rescanSeries(db, seriesId, listing);
 
-    const [show] = (await loadMovieCatalog(db, assetUrl)).series;
+    const [series] = (await loadMovieCatalog(db, assetUrl)).series;
     expect(
-      show.seasons[0].episodes.map((e) => [e.title, e.captions.map((caption) => caption.label)])
+      series.seasons[0].episodes.map((e) => [e.title, e.captions.map((caption) => caption.label)])
     ).toEqual([
       ["S01E01", []],
       ["S01E02", ["German"]],

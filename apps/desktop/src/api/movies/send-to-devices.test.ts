@@ -115,7 +115,7 @@ describe("Send a Movie to Devices", () => {
   });
 });
 
-const FOLDER = "/shows/Office";
+const FOLDER = "/series/Office";
 
 const episode = (file: string, number: number) => ({
   path: file,
@@ -151,8 +151,8 @@ const listing = (...paths: string[]): FolderListing => ({
 
 // What a Device sees: the sent Seasons' Episodes, by Season title.
 const sentEpisodes = async (db: Db) =>
-  (await loadMovieCatalog(db, (p) => p)).series.flatMap((show) =>
-    show.seasons
+  (await loadMovieCatalog(db, (p) => p)).series.flatMap((series) =>
+    series.seasons
       .filter((season) => season.sentToDevices)
       .map((season) => [season.title, season.episodes.map((e) => e.title)])
   );

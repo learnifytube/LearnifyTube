@@ -2,11 +2,11 @@ import * as http from "http";
 import * as path from "path";
 import { logger } from "../helpers/logger";
 import type { Database } from "../api/db";
+import type { MovieKind } from "../../../shared/mobile-sync-contract";
 import {
   findMovieFileForDevices,
   findPosterForDevices,
   loadMovieCatalog,
-  type MovieKind,
 } from "../api/movies/device-catalog";
 import { findCaptionForDevices } from "../api/movies/captions";
 import { readCaptionAsWebVtt } from "../api/movies/caption-file";

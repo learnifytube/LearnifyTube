@@ -18,7 +18,7 @@ const createDb = async () => {
 
 type Db = Awaited<ReturnType<typeof createDb>>;
 
-const FOLDER = "/shows/Office";
+const FOLDER = "/series/Office";
 const S01E01 = "Season 1/S01E01.mkv";
 const S01E02 = "Season 1/S01E02.mkv";
 

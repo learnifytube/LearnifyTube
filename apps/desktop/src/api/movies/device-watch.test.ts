@@ -39,7 +39,7 @@ const addEpisode = async (db: Db): Promise<void> => {
   await db.insert(schema.series).values({
     id: "office",
     title: "The Office",
-    sourceFolder: "/shows",
+    sourceFolder: "/series",
     createdAt: 1000,
   });
   await db
@@ -50,7 +50,7 @@ const addEpisode = async (db: Db): Promise<void> => {
     seriesId: "office",
     seasonId: "s1",
     title: "Pilot",
-    filePath: "/shows/S01E01.mkv",
+    filePath: "/series/S01E01.mkv",
     position: 0,
     durationSeconds: 1000,
     createdAt: 1000,

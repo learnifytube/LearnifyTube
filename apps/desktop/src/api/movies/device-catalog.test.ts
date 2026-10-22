@@ -48,7 +48,7 @@ const addSeries = async (db: Db, shownOnDevices = true): Promise<void> => {
   await db.insert(schema.series).values({
     id: "office",
     title: "The Office",
-    sourceFolder: "/shows/The Office",
+    sourceFolder: "/series/The Office",
     posterPath: "/userData/movie-posters/office.jpg",
     shownOnDevices,
     createdAt: 1000,
@@ -73,7 +73,7 @@ const addSeries = async (db: Db, shownOnDevices = true): Promise<void> => {
       title: "Diversity Day",
       number: 2,
       position: 1,
-      filePath: "/shows/The Office/S01E02.mkv",
+      filePath: "/series/The Office/S01E02.mkv",
     },
     {
       ...episode,
@@ -82,7 +82,7 @@ const addSeries = async (db: Db, shownOnDevices = true): Promise<void> => {
       title: "Pilot",
       number: 1,
       position: 0,
-      filePath: "/shows/The Office/S01E01.mkv",
+      filePath: "/series/The Office/S01E01.mkv",
       positionSeconds: 400,
       watchUpdatedAt: 1500,
     },
@@ -93,7 +93,7 @@ const addSeries = async (db: Db, shownOnDevices = true): Promise<void> => {
       title: "The Dundies",
       number: 1,
       position: 0,
-      filePath: "/shows/The Office/S02E01.mkv",
+      filePath: "/series/The Office/S02E01.mkv",
       missing: true,
     },
   ]);
@@ -234,8 +234,8 @@ describe("Movie catalog for Devices", () => {
       folder: "/films",
     });
     expect(await findMovieFileForDevices(db, "episode", "e2")).toEqual({
-      filePath: "/shows/The Office/S01E02.mkv",
-      folder: "/shows/The Office",
+      filePath: "/series/The Office/S01E02.mkv",
+      folder: "/series/The Office",
     });
     expect(await findMovieFileForDevices(db, "movie", "nope")).toBeNull();
     expect(await findMovieFileForDevices(db, "episode", upId)).toBeNull();

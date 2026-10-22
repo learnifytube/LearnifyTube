@@ -5,6 +5,7 @@ import {
 } from "../../services/desktop-fetch/createDesktopFetch";
 import type { PlaybackFailure } from "../../services/playback-source/createPlaybackSource";
 import { pairingRequiredText } from "./connectionText";
+import type { MovieKind } from "../../../shared/mobile-sync-contract";
 
 /** A message on the TV: a title and a short text, readable from the couch. */
 export type TVMessageContent = {
@@ -140,7 +141,7 @@ export type MovieProblem = PlaybackFailure | { kind: "playerRejected" };
  */
 export function describeMovieProblem(
   problem: MovieProblem,
-  kind: "movie" | "episode" = "movie",
+  kind: MovieKind = "movie",
 ): TVMessageContent {
   const what = kind === "episode" ? "Episode" : "Movie";
   if (problem.kind === "playerRejected") {

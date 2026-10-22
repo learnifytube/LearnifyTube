@@ -115,6 +115,25 @@ export const collectionVideosCurrentVideoSchema = z.object({
   currentVideo: currentVideoSchema.nullable().optional(),
 });
 
+/**
+ * The Episode a Series last played (ADR-0006), and when that changed. Null
+ * `episodeId` means forgotten (the Series, or that Episode's Season, was marked
+ * unwatched on the desktop). The newest updatedAt wins.
+ */
+export const lastEpisodeSchema = z.object({
+  episodeId: z.string().nullable(),
+  updatedAt: z.number(),
+});
+
+export type LastEpisode = z.infer<typeof lastEpisodeSchema>;
+
+/** A Series' last Episode as a Device keeps it, sent in the Device report. */
+export const seriesLastEpisodeSchema = lastEpisodeSchema.extend({
+  seriesId: z.string(),
+});
+
+export type SeriesLastEpisode = z.infer<typeof seriesLastEpisodeSchema>;
+
 /** POST /api/devices/report: what a Device holds and what was watched on it. */
 export const deviceReportSchema = z.object({
   deviceId: z.string().min(1),
@@ -141,6 +160,8 @@ export const deviceReportSchema = z.object({
   heldEpisodeIds: z.array(z.string()).optional(),
   /** Current Videos of Lists and YouTube playlists played on the Device; absent from Devices older than resume. */
   currentVideos: z.array(currentVideoSchema).optional(),
+  /** Each Series' last Episode as the Device has it; absent from Devices older than resume. */
+  seriesLastEpisodes: z.array(seriesLastEpisodeSchema).optional(),
 });
 
 export type DeviceReport = z.infer<typeof deviceReportSchema>;
@@ -266,6 +287,8 @@ export const seriesSchema = z.object({
   posterUrl: z.string().nullable(),
   /** Every Season in order. */
   seasons: z.array(seasonSchema),
+  /** The Episode last played; null before any was, absent from desktops older than resume. */
+  lastEpisode: lastEpisodeSchema.nullable().optional(),
 });
 
 export type Series = z.infer<typeof seriesSchema>;

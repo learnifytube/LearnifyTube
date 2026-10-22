@@ -273,8 +273,8 @@ export default function PlayerPage(): React.JSX.Element {
     if (playerState.videoId === videoId && playerState.currentTime > 0) {
       return playerState.currentTime;
     }
-    return playback?.lastPositionSeconds ?? 0;
-  }, [videoId, playerState.videoId, playback?.lastPositionSeconds]);
+    return playback?.resumeAtSeconds ?? 0;
+  }, [videoId, playerState.videoId, playback?.resumeAtSeconds]);
 
   const { currentTime, handleTimeUpdate } = useWatchProgress(videoId, videoRef, initialStartTime, {
     onCurrentTimeChange: (time) => updateCurrentTime(time),

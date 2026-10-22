@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "31fd4135-c5eb-4cc3-a87d-0ef137368d2c",
+  "id": "486db538-fcdd-49b8-bf39-69038a8e819c",
   "prevId": "fc3bf227-d0b9-4191-88ea-7baf8e046950",
   "tables": {
     "audiobook_tracks": {
@@ -365,6 +365,14 @@
           "notNull": false,
           "autoincrement": false
         },
+        "current_video_index": {
+          "name": "current_video_index",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": 0
+        },
         "total_watch_time_seconds": {
           "name": "total_watch_time_seconds",
           "type": "integer",
@@ -609,52 +617,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "collection_current_videos": {
-      "name": "collection_current_videos",
-      "columns": {
-        "collection_kind": {
-          "name": "collection_kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "collection_id": {
-          "name": "collection_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "video_id": {
-          "name": "video_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "collection_current_videos_collection_kind_collection_id_pk": {
-          "columns": [
-            "collection_kind",
-            "collection_id"
-          ],
-          "name": "collection_current_videos_collection_kind_collection_id_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "custom_playlist_items": {
       "name": "custom_playlist_items",
       "columns": {
@@ -818,6 +780,14 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "current_video_index": {
+          "name": "current_video_index",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": 0
         },
         "total_watch_time_seconds": {
           "name": "total_watch_time_seconds",
@@ -1884,6 +1854,20 @@
           "notNull": true,
           "autoincrement": false,
           "default": true
+        },
+        "last_episode_id": {
+          "name": "last_episode_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_episode_updated_at": {
+          "name": "last_episode_updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",

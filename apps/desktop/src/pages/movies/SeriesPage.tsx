@@ -31,7 +31,12 @@ function EpisodePlayer({
   const [unplayable, setUnplayable] = useState(false);
   const videoSrc = toLocalFileUrl(episode.filePath);
   // Playing it pauses the Book player, as any Video does.
-  useMovieProgress(videoRef, episode, videoSrc, "episode");
+  useMovieProgress(
+    videoRef,
+    { ...episode, watched: episode.watchState === "watched" },
+    videoSrc,
+    "episode"
+  );
   const captions = useCaptionTracks("episode", episode.id);
   if (unplayable) {
     return (
@@ -63,6 +68,18 @@ function SeriesView({ series }: { series: SeriesDetail }): React.JSX.Element {
   const upNext = inOrder.find((episode) => episode.id === series.nextUpEpisodeId) ?? null;
 
   const refresh = (): Promise<void> => queryClient.invalidateQueries({ queryKey: ["movies"] });
+
+  // Starting an Episode makes it the Series' last Episode (ADR-0006).
+  const recordStarted = useMutation({
+    mutationFn: (episodeId: string) =>
+      trpcClient.movies.series.recordStarted.mutate({ episodeId }),
+    onSuccess: refresh,
+  });
+
+  const play = (episodeId: string | null): void => {
+    setPlayingId(episodeId);
+    if (episodeId) recordStarted.mutate(episodeId);
+  };
 
   const setWatched = useMutation({
     mutationFn: ({ target, watched }: { target: EpisodesTarget; watched: boolean }) =>
@@ -125,7 +142,7 @@ function SeriesView({ series }: { series: SeriesDetail }): React.JSX.Element {
           key={playing.id}
           episode={playing}
           // The next Episode plays by itself.
-          onEnded={() => setPlayingId(episodeAfter(inOrder, playing.id)?.id ?? null)}
+          onEnded={() => play(episodeAfter(inOrder, playing.id)?.id ?? null)}
         />
       )}
 
@@ -176,7 +193,7 @@ function SeriesView({ series }: { series: SeriesDetail }): React.JSX.Element {
           <ShownOnDevicesSwitch kind="series" id={series.id} shown={series.shownOnDevices} />
           <div className="flex flex-wrap gap-2">
             {upNext && upNext.id !== playingId && (
-              <Button className="gap-2" onClick={() => setPlayingId(upNext.id)}>
+              <Button className="gap-2" onClick={() => play(upNext.id)}>
                 <Play className="h-4 w-4" />
                 {upNext.watchState === "in-progress" ? "Resume" : "Play"} {upNext.title}
               </Button>
@@ -224,7 +241,7 @@ function SeriesView({ series }: { series: SeriesDetail }): React.JSX.Element {
         playingId={playingId}
         marking={setWatched.isPending}
         moving={move.isPending}
-        onPlay={setPlayingId}
+        onPlay={play}
         onMark={(target, watched) => setWatched.mutate({ target, watched })}
         onMove={(target, by) => move.mutate({ target, by })}
       />

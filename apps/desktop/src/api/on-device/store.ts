@@ -13,7 +13,7 @@ import {
 import { computeOnDeviceSet } from "./on-device-set";
 import { mergeDeviceWatch } from "./device-watch";
 import { recordListening } from "../audiobooks/listening";
-import { recordDeviceMovieWatch } from "../movies/device-watch";
+import { recordDeviceLastEpisodes, recordDeviceMovieWatch } from "../movies/device-watch";
 import { recordCurrentVideo } from "../collections/current-video";
 
 import { FAVORITES_LIST_ID } from "@/lib/lists";
@@ -133,6 +133,8 @@ export const recordDeviceReport = async (
   await recordDeviceMovieWatch(db, report.movieWatch ?? [], now);
   // Devices older than resume don't send Current Videos.
   for (const entry of report.currentVideos ?? []) await recordCurrentVideo(db, entry);
+  // Devices older than resume don't say.
+  await recordDeviceLastEpisodes(db, report.seriesLastEpisodes ?? []);
 
   const videoIds = report.watch.map((entry) => entry.videoId);
   if (videoIds.length === 0) return;

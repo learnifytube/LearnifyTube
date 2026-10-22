@@ -1,7 +1,8 @@
 import { eq, inArray } from "drizzle-orm";
 import type { Database } from "@/api/db";
-import { episodes, movies } from "@/api/db/schema";
-import type { MovieWatch } from "../../../../shared/mobile-sync-contract";
+import { episodes, movies, series } from "@/api/db/schema";
+import type { MovieWatch, SeriesLastEpisode } from "../../../../shared/mobile-sync-contract";
+import { newestWins } from "../../../../shared/newest-wins";
 import { playedOnDevice } from "./watch-progress";
 import { applyWrites, type Write } from "./batch-writes";
 
@@ -35,6 +36,46 @@ export const recordDeviceMovieWatch = async (
       writes.push(db.update(table).set(progress).where(eq(table.id, entry.id)));
       byId.set(entry.id, { ...row, ...progress });
     }
+  }
+  await applyWrites(db, writes);
+};
+
+/**
+ * Takes each Series' last Episode from a Device report when it is newer than the
+ * desktop's (ADR-0006), so a desktop mark made after it wins. Unknown Series, and
+ * Episodes not of that Series, are ignored.
+ */
+export const recordDeviceLastEpisodes = async (
+  db: Database,
+  entries: SeriesLastEpisode[]
+): Promise<void> => {
+  if (entries.length === 0) return;
+  const seriesIds = entries.map((entry) => entry.seriesId);
+  const [seriesRows, episodeRows] = await Promise.all([
+    db.select().from(series).where(inArray(series.id, seriesIds)),
+    db
+      .select({ id: episodes.id, seriesId: episodes.seriesId })
+      .from(episodes)
+      .where(inArray(episodes.seriesId, seriesIds)),
+  ]);
+  const byId = new Map(seriesRows.map((row) => [row.id, row]));
+  const writes: Write[] = [];
+  for (const entry of entries) {
+    const row = byId.get(entry.seriesId);
+    if (!row) continue;
+    const ofSeries = episodeRows.some(
+      (episode) => episode.id === entry.episodeId && episode.seriesId === row.id
+    );
+    if (entry.episodeId !== null && !ofSeries) continue;
+    const existing =
+      row.lastEpisodeUpdatedAt === null
+        ? null
+        : { episodeId: row.lastEpisodeId, updatedAt: row.lastEpisodeUpdatedAt };
+    const reported = { episodeId: entry.episodeId, updatedAt: entry.updatedAt };
+    if (newestWins(existing, reported) !== reported) continue;
+    const kept = { lastEpisodeId: entry.episodeId, lastEpisodeUpdatedAt: entry.updatedAt };
+    writes.push(db.update(series).set(kept).where(eq(series.id, row.id)));
+    byId.set(row.id, { ...row, ...kept });
   }
   await applyWrites(db, writes);
 };

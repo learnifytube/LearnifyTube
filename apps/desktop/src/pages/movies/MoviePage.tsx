@@ -28,7 +28,7 @@ function MovieView({ movie }: { movie: Movie }): React.JSX.Element {
   const [unplayable, setUnplayable] = useState(false);
   const videoSrc = movie.missing ? null : toLocalFileUrl(movie.filePath);
   // Playing it pauses the Book player, as any Video does.
-  useMovieProgress(videoRef, movie, videoSrc);
+  useMovieProgress(videoRef, { ...movie, watched: movie.watchedAt !== null }, videoSrc);
   const captions = useCaptionTracks("movie", movie.id);
 
   const refresh = (): Promise<void> => queryClient.invalidateQueries({ queryKey: ["movies"] });

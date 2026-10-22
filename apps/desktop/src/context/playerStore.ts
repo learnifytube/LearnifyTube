@@ -9,6 +9,8 @@ export interface PlaybackData {
   status?: string | null;
   progress?: number | null;
   lastPositionSeconds?: number;
+  /** Where the player starts: the shared "resume at" rule over the Watch progress. */
+  resumeAtSeconds?: number;
   thumbnailPath?: string | null;
   thumbnailUrl?: string | null;
   availableLanguages?: Array<{

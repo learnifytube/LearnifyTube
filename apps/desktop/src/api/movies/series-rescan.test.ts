@@ -7,7 +7,12 @@ import * as schema from "@/api/db/schema";
 import type { FolderListing } from "@/api/audiobooks/import-plan";
 import { listMovieFilePaths } from "./catalog";
 import { loadMovieCatalog } from "./device-catalog";
-import { getSeries, recordEpisodePlayback, saveImportedSeries } from "./series-catalog";
+import {
+  getSeries,
+  recordEpisodePlayback,
+  recordEpisodeStarted,
+  saveImportedSeries,
+} from "./series-catalog";
 import { rescanSeries } from "./series-rescan";
 
 const createDb = async () => {
@@ -89,6 +94,7 @@ describe("Series Rescan", () => {
   it("keeps a missing Episode's Watch state, skips it for next-up, and restores it when the file is back", async () => {
     const id = await importOffice(db);
     const [e1, e2] = (await getSeries(db, id))?.seasons[0].episodes.map((e) => e.id) ?? [];
+    await recordEpisodeStarted(db, e2, 1500);
     await recordEpisodePlayback(db, { episodeId: e2, positionSeconds: 600 }, 1500);
     expect((await getSeries(db, id))?.nextUpEpisodeId).toBe(e2);
 

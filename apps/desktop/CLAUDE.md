@@ -39,10 +39,8 @@ npm run db:generate      # Generate database migrations
 
 ## Code Style
 
-- **Max 300 lines** per component file
-- **Prefer functions** over classes
-- **tRPC hooks** directly in components (no thin wrappers)
 - **Path alias:** `@/*` maps to `src/*`
+- Review rules: `CODING_STANDARDS.md` at the repo root.
 
 ## Media Streaming (macOS)
 

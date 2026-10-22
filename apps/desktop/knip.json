@@ -22,7 +22,6 @@
     "@storybook/*",
     "@testing-library/react",
     "cross-env",
-    "lefthook",
     "png-to-ico",
     "sharp",
     "ts-node"

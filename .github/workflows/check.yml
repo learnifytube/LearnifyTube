@@ -33,6 +33,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm ci --prefix apps/desktop --ignore-scripts
       - run: npm run desktop:check
+      - run: npm run desktop:test
 
   mobile:
     runs-on: ubuntu-latest
@@ -49,3 +50,4 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm ci --prefix apps/mobile --ignore-scripts
       - run: npm run mobile:check
+      - run: npm run mobile:test

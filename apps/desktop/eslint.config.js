@@ -292,4 +292,35 @@ export default [
       // Renderer-specific rules can go here
     },
   },
+  // Components stay under 300 lines of code.
+  {
+    files: ['**/*.tsx'],
+    rules: {
+      'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
+    },
+  },
+  // Files that were already over the limit. Shrink this list; never add to it.
+  {
+    files: [
+      'src/components/AISummarySidebar.tsx',
+      'src/components/AnnotationsSidebar.tsx',
+      'src/components/QuickAddDialog.tsx',
+      'src/components/QuizSidebar.tsx',
+      'src/components/data-table/data-table-advanced-filter.tsx',
+      'src/pages/app-debug-logs/index.tsx',
+      'src/pages/dashboard/DashboardPage.tsx',
+      'src/pages/my-playlists/components/FavoritesSection.tsx',
+      'src/pages/my-words/components/FlashcardsTab.tsx',
+      'src/pages/player/PlayerPage.tsx',
+      'src/pages/player/components/TranscriptPanel.tsx',
+      'src/pages/player/components/VideoPlayer.tsx',
+      'src/pages/playlist/PlaylistPage.tsx',
+      'src/pages/settings-page/components/LogViewerModal.tsx',
+      'src/pages/settings-page/components/tabs/SystemTab.tsx',
+      'src/pages/storage/StorageManagerPage.tsx',
+      'src/pages/storage/storage-columns.tsx',
+      'src/renderer/notification/NotificationApp.tsx',
+    ],
+    rules: { 'max-lines': 'off' },
+  },
 ];

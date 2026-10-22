@@ -59,6 +59,7 @@ if [[ "$run_mobile" == true ]]; then
   if [[ "$mobile_needs_type_check" == true ]]; then
     echo "Running mobile type-check..."
     npm run mobile:type-check
+    npm run mobile:ui-boundaries
   fi
 fi
 

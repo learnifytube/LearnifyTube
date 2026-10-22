@@ -6,6 +6,8 @@ Two apps, one sync protocol:
 - `apps/mobile` — Expo app for phone and Android TV; guidance in `apps/mobile/CLAUDE.md`.
 - `apps/shared/mobile-sync-contract.ts` — the desktop↔mobile sync contract. Desktop serves it from `apps/desktop/src/main/mobileSyncServer.ts`; mobile consumes it in `apps/mobile/services/api.ts`. A change on one side needs the matching change on the other.
 
+In a git worktree, run `scripts/worktree-deps.sh` first: it links the main checkout's `node_modules` (gitignored) so tests, lint and the pre-commit hook run.
+
 ## Agent skills
 
 - **Issues** — GitHub Issues on `learnifytube/LearnifyTube` via `gh`. Commands: `docs/agents/issue-tracker.md`.

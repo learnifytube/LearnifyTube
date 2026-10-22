@@ -29,4 +29,32 @@ module.exports = [
       ],
     },
   },
+  // Components stay under 300 lines of code.
+  {
+    files: ["**/*.tsx"],
+    rules: {
+      "max-lines": [
+        "error",
+        { max: 300, skipBlankLines: true, skipComments: true },
+      ],
+    },
+  },
+  // Files that were already over the limit. Shrink this list; never add to it.
+  {
+    files: [
+      "app/(mobile)/(tabs)/discover.tsx",
+      "app/(mobile)/(tabs)/index.tsx",
+      "app/(mobile)/(tabs)/settings.tsx",
+      "app/(mobile)/book-player.tsx",
+      "app/(mobile)/connect.tsx",
+      "app/(mobile)/player/\\[id\\].tsx",
+      "app/(mobile)/share.tsx",
+      "app/(tv)/channel/\\[id\\].tsx",
+      "app/(tv)/index.tsx",
+      "app/(tv)/player/\\[id\\].tsx",
+      "app/(tv)/settings.tsx",
+      "components/sharing/PeerVideoList.tsx",
+    ],
+    rules: { "max-lines": "off" },
+  },
 ];

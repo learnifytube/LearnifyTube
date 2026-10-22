@@ -4,13 +4,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-if ! command -v rg >/dev/null 2>&1; then
-  echo "[ui-boundary] ripgrep (rg) is required but not installed" >&2
-  exit 1
-fi
-
-mobile_to_tv="$(rg -n "from ['\"](\.\./)*\(tv\)|from ['\"]/\(tv\)|router\.(push|replace)\(['\"]/\(tv\)|<Link href=['\"]/\(tv\)" app/'(mobile)' -S || true)"
-tv_to_mobile="$(rg -n "from ['\"](\.\./)*\(mobile\)|from ['\"]/\(mobile\)|router\.(push|replace)\(['\"]/\(mobile\)|<Link href=['\"]/\(mobile\)" app/'(tv)' -S || true)"
+mobile_to_tv="$(grep -rEn --include='*.ts' --include='*.tsx' "from ['\"](\.\./)*\(tv\)|from ['\"]/\(tv\)|router\.(push|replace)\(['\"]/\(tv\)|<Link href=['\"]/\(tv\)" app/'(mobile)' || true)"
+tv_to_mobile="$(grep -rEn --include='*.ts' --include='*.tsx' "from ['\"](\.\./)*\(mobile\)|from ['\"]/\(mobile\)|router\.(push|replace)\(['\"]/\(mobile\)|<Link href=['\"]/\(mobile\)" app/'(tv)' || true)"
 
 if [[ -n "$mobile_to_tv" ]]; then
   echo "[ui-boundary] mobile surface must not import or navigate directly into tv surface:" >&2

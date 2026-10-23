@@ -18,7 +18,12 @@ import {
   type NowPlaying,
 } from "../../../shared/book-player/createBookPlayer";
 import { createExpoAudioStatusReader } from "./expoAudioStatus";
-import { keepListeningPositionOnPhone } from "./keepListeningPosition";
+import {
+  keepListeningPositionOnPhone,
+  keepTrackPositionsOnPhone,
+} from "./keepListeningPosition";
+import { useTrackPositionsStore } from "../../stores/trackPositions";
+import { withKeptTrackPositions } from "../listening-position/trackPositions";
 import { localFirstTrackUri } from "../../../shared/book-player/localFirstTrackUri";
 
 // One expo-audio player for every book, made on first use so importing this
@@ -154,6 +159,10 @@ const expoAudioPlatform: BookAudioPlatform = {
   onPlayingChange: subscribe(playingListeners),
 };
 
+// Each Track at the newest of the desktop's and this phone's Track position.
+const withKeptPositions = (book: Audiobook) =>
+  withKeptTrackPositions(book, useTrackPositionsStore.getState().positions);
+
 const player = createBookPlayer(expoAudioPlatform, {
   // Persisted, and read at every Track, so it applies once storage has loaded.
   speed: {
@@ -208,17 +217,29 @@ export const bookPlayer = {
   },
   play: (book: Audiobook, from?: ListeningPoint | null) => {
     heldAudiobooks.pull(book);
-    return player.play(book, from);
+    return player.play(withKeptPositions(book), from);
   },
+  /** Plays a Track from its Track position; from 0 once played to its end. */
   jumpTo: (book: Audiobook, trackIndex: number) => {
     heldAudiobooks.pull(book);
-    return player.jumpTo(book, trackIndex);
+    return player.jumpTo(withKeptPositions(book), trackIndex);
   },
+  /** Clears every Track position of the book and plays it from Track 1 at 0:00. */
   startOver: (book: Audiobook) => {
     heldAudiobooks.pull(book);
+    const at = Date.now();
+    keepTrackPositionsOnPhone(
+      book.tracks.map((track) => ({
+        audiobookId: book.id,
+        trackId: track.id,
+        seconds: 0,
+        playedToEnd: false,
+        updatedAt: at,
+      })),
+    );
     return player.startOver(book);
   },
-  /** Plays a Track of the book in the player from its start (already pulled). */
+  /** Plays a Track of the book in the player from its Track position (already pulled). */
   playTrack: (trackIndex: number) => {
     const state = player.getState();
     if (state.status === "idle") return Promise.resolve();
@@ -226,6 +247,7 @@ export const bookPlayer = {
   },
 };
 keepListeningPositionOnPhone(player);
+player.onTrackPosition((position) => keepTrackPositionsOnPhone([position]));
 
 /** The book speed, for screens. */
 export function useBookSpeed() {

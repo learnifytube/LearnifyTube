@@ -1,3 +1,4 @@
+import { useTrackPositionsStore } from "../../stores/trackPositions";
 import { AppState, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ON_DEVICE_SET_SYNC_PROTOCOL_VERSION } from "../../../shared/mobile-sync-contract";
@@ -108,6 +109,8 @@ const platform: DeviceMirrorPlatform = {
       return (await api.getOnDeviceSet(serverUrl)).videos;
     },
     report: (serverUrl, report) => api.reportDevice(serverUrl, report),
+    getSyncProtocolVersion: async (serverUrl) =>
+      (await api.getInfo(serverUrl)).syncProtocolVersion,
     listen: (serverUrl, handlers) =>
       listenToSyncEvents(api.getEventsUrl(serverUrl), handlers),
   },
@@ -142,6 +145,10 @@ const platform: DeviceMirrorPlatform = {
       (listening) => (listening ? [listening] : []),
     ),
   getMovieWatch: () => Object.values(useMovieWatchStore.getState().progress),
+  getTrackPositions: () =>
+    Object.values(useTrackPositionsStore.getState().positions).flatMap(
+      (position) => (position ? [position] : []),
+    ),
   loadMirroredIds: async () => {
     const raw = await AsyncStorage.getItem(MIRRORED_IDS_KEY);
     return raw ? (JSON.parse(raw) as string[]) : [];

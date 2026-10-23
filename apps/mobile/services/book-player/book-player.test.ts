@@ -397,3 +397,135 @@ describe("Book player, local first", () => {
     ]);
   });
 });
+
+describe("Book player Track positions", () => {
+  const withPositions = (
+    positions: Record<string, { seconds: number; playedToEnd: boolean }>,
+  ): Book => ({
+    ...frankl,
+    tracks: frankl.tracks.map((t) => ({
+      ...t,
+      trackPosition: positions[t.id]
+        ? { ...positions[t.id], updatedAt: 1_000 }
+        : null,
+    })),
+  });
+
+  it("resumes a picked Track from its Track position", async () => {
+    const book = withPositions({
+      "cd1-02": { seconds: 120, playedToEnd: false },
+    });
+    const { audio, player } = createHarness();
+
+    await player.jumpTo(book, 1);
+
+    expect(audio.current()).toMatchObject({
+      uri: "stream://cd1-02",
+      startAt: 120,
+    });
+  });
+
+  it("starts a picked Track played to its end from 0", async () => {
+    const book = withPositions({
+      "cd1-02": { seconds: 300, playedToEnd: true },
+    });
+    const { audio, player } = createHarness();
+
+    await player.jumpTo(book, 1);
+
+    expect(audio.current()).toMatchObject({
+      uri: "stream://cd1-02",
+      startAt: 0,
+    });
+  });
+
+  it("goes back to where a Track was left when it is picked again", async () => {
+    const { audio, player } = createHarness();
+    await player.play(frankl);
+    audio.setTime(95);
+
+    await player.jumpTo(frankl, 2);
+    await player.jumpTo(frankl, 0);
+
+    expect(audio.current()).toMatchObject({
+      uri: "stream://cd1-01",
+      startAt: 95,
+    });
+  });
+
+  it("starts a Track it played to its end from 0 when picked again", async () => {
+    const { audio, player } = createHarness();
+    await player.play(frankl, { trackId: "cd1-01", seconds: 200 });
+    audio.setTime(300);
+    audio.finishTrack();
+    await player.settled();
+
+    await player.jumpTo(frankl, 0);
+
+    expect(audio.current()).toMatchObject({
+      uri: "stream://cd1-01",
+      startAt: 0,
+    });
+  });
+
+  it("tells each Track position as playback leaves the Track", async () => {
+    jest.useFakeTimers({ now: 5_000 });
+    const { audio, player } = createHarness();
+    const positions: unknown[] = [];
+    player.onTrackPosition((position) => positions.push(position));
+    await player.play(frankl);
+    audio.setTime(40);
+    await player.jumpTo(frankl, 2);
+    audio.setTime(300);
+    audio.finishTrack();
+    await player.settled();
+    jest.useRealTimers();
+
+    expect(positions).toEqual([
+      {
+        audiobookId: "frankl",
+        trackId: "cd1-01",
+        seconds: 40,
+        playedToEnd: false,
+        updatedAt: 5_000,
+      },
+      {
+        audiobookId: "frankl",
+        trackId: "cd3-01",
+        seconds: 300,
+        playedToEnd: true,
+        updatedAt: 5_000,
+      },
+    ]);
+  });
+
+  it("starts every Track from 0 after Start over", async () => {
+    const book = withPositions({
+      "cd1-01": { seconds: 50, playedToEnd: false },
+      "cd1-02": { seconds: 120, playedToEnd: false },
+    });
+    const { audio, player } = createHarness();
+    await player.startOver(book);
+
+    await player.jumpTo(book, 1);
+
+    expect(audio.current()).toMatchObject({
+      uri: "stream://cd1-02",
+      startAt: 0,
+    });
+  });
+
+  it("resumes the book's Track from that Track's own position", async () => {
+    const book = withPositions({
+      "cd1-02": { seconds: 120, playedToEnd: false },
+    });
+    const { audio, player } = createHarness();
+
+    await player.play(book, { trackId: "cd1-02", seconds: 60 });
+
+    expect(audio.current()).toMatchObject({
+      uri: "stream://cd1-02",
+      startAt: 120,
+    });
+  });
+});

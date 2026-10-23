@@ -1,4 +1,5 @@
 import {
+  RESUME_SYNC_PROTOCOL_VERSION,
   SYNC_SSE_EVENT_AUDIOBOOKS,
   SYNC_SSE_EVENT_MOVIES,
   SYNC_SSE_EVENT_ON_DEVICE_SET,
@@ -20,6 +21,8 @@ export type DeviceMirrorPlatform = {
     /** The On-device set, or null when the desktop is too old to serve one. */
     getOnDeviceSet: (serverUrl: string) => Promise<SetVideo[] | null>;
     report: (serverUrl: string, report: DeviceReport) => Promise<void>;
+    /** The desktop's sync protocol version; nothing newer than it is sent. */
+    getSyncProtocolVersion: (serverUrl: string) => Promise<number>;
     /**
      * Listens to the desktop's pushed sync events, and says when the stream
      * comes back after dropping; returns a function that stops.
@@ -49,6 +52,8 @@ export type DeviceMirrorPlatform = {
   getListening: () => NonNullable<DeviceReport["listening"]>;
   /** Where this Device stopped in each Movie and Episode it played. */
   getMovieWatch: () => NonNullable<DeviceReport["movieWatch"]>;
+  /** Track positions kept on this Device (ADR-0006). */
+  getTrackPositions: () => NonNullable<DeviceReport["trackPositions"]>;
   loadMirroredIds: () => Promise<string[]>;
   saveMirroredIds: (videoIds: string[]) => Promise<void>;
   /** Keeps the latest On-device set, which the TV shows as "Sent to this TV" in Offline mode too. */
@@ -155,6 +160,10 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
       });
     }
     const heldMovies = platform.movies.heldIds();
+    // An older desktop gets only what it knows: nothing of resume (v5).
+    const resume =
+      (await platform.desktop.getSyncProtocolVersion(serverUrl)) >=
+      RESUME_SYNC_PROTOCOL_VERSION;
 
     await platform.desktop.report(serverUrl, {
       deviceId: await platform.device.getId(),
@@ -164,6 +173,7 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
       watch: platform.getWatchProgress(),
       listening: platform.getListening(),
       heldAudiobookIds: await platform.audiobooks.heldIds(),
+      ...(resume ? { trackPositions: platform.getTrackPositions() } : {}),
       movieWatch: platform.getMovieWatch(),
       heldMovieIds: heldMovies.movieIds,
       heldEpisodeIds: heldMovies.episodeIds,

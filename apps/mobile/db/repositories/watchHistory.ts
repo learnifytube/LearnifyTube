@@ -1,7 +1,7 @@
 import { desc, eq, isNotNull } from "drizzle-orm";
 import { getDb, videos, watchStats } from "../index";
 import type { WatchStat } from "../schema";
-import { resumeAt } from "../../../shared/resume-at";
+import { isPlayedEnough, resumeAt } from "../../../shared/resume-at";
 
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -218,4 +218,21 @@ export function videoStartPosition(videoId: string, durationSeconds?: number) {
     positionSeconds: row?.lastPositionSeconds ?? null,
     durationSeconds: durationSeconds || row?.duration || null,
   });
+}
+
+/** Whether about 90% of the Video was played on this Device. */
+export function isVideoWatched(videoId: string, durationSeconds?: number) {
+  const row = getDb()
+    .select({
+      lastPositionSeconds: watchStats.lastPositionSeconds,
+      duration: videos.duration,
+    })
+    .from(watchStats)
+    .leftJoin(videos, eq(watchStats.videoId, videos.id))
+    .where(eq(watchStats.videoId, videoId))
+    .get();
+  return isPlayedEnough(
+    row?.lastPositionSeconds ?? 0,
+    durationSeconds || row?.duration || null,
+  );
 }

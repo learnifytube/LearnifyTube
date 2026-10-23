@@ -1,4 +1,5 @@
 import type {
+  LastEpisode,
   Movie,
   MovieWatch,
   OnDeviceSet,
@@ -77,6 +78,8 @@ export type TVCatalogInput = {
   series: Series[];
   /** Where this TV last stopped in an Episode. */
   keptEpisodeWatch: (episodeId: string) => MovieWatch | undefined;
+  /** The Episode a Series last played on this TV. */
+  keptLastEpisode?: (seriesId: string) => LastEpisode | undefined;
   /** The Movies and Episodes whose Offline copy is on this TV. */
   heldTitles: HeldTitle[];
 };
@@ -231,10 +234,15 @@ const countEpisodes = (count: number) =>
 /** How a Series card says where it picks up, and the Episode that plays then (null once watched). */
 function seriesPickUp(
   series: Series,
-  keptEpisode: TVCatalogInput["keptEpisodeWatch"],
+  input: Pick<TVCatalogInput, "keptEpisodeWatch" | "keptLastEpisode">,
 ) {
+  const keptEpisode = input.keptEpisodeWatch;
   const playable = seriesEpisodes(series).filter((item) => !item.missing);
-  const next = seriesNextUp(series, keptEpisode);
+  const next = seriesNextUp(
+    series,
+    keptEpisode,
+    input.keptLastEpisode?.(series.id),
+  );
   if (!next) return { subtitle: "Watched", episode: null };
   const { episode } = next;
   const progress = {
@@ -352,7 +360,7 @@ export function buildTVCatalog(input: TVCatalogInput) {
   const seriesCard = (series: Series): TVCatalogCard => ({
     id: `series:${series.id}`,
     title: series.title,
-    subtitle: seriesPickUp(series, input.keptEpisodeWatch).subtitle,
+    subtitle: seriesPickUp(series, input).subtitle,
     thumbnailUrl: desktop?.resolveAssetUrl(series.posterUrl) ?? null,
     action: { kind: "series", seriesId: series.id, title: series.title },
   });
@@ -361,7 +369,7 @@ export function buildTVCatalog(input: TVCatalogInput) {
   const seriesHistoryCard = (entry: TVRecentSeries): TVCatalogCard[] => {
     const series = playableSeries.find((item) => item.id === entry.seriesId);
     if (!series) return [];
-    const { subtitle, episode } = seriesPickUp(series, input.keptEpisodeWatch);
+    const { subtitle, episode } = seriesPickUp(series, input);
     const card = seriesCard(series);
     return [
       {

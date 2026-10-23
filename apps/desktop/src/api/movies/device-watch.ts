@@ -43,13 +43,13 @@ export const recordDeviceMovieWatch = async (
 /**
  * Takes each Series' last Episode from a Device report when it is newer than the
  * desktop's (ADR-0006), so a desktop mark made after it wins. Unknown Series, and
- * Episodes not of that Series, are ignored.
+ * Episodes not of that Series, are ignored. True when any was kept.
  */
 export const recordDeviceLastEpisodes = async (
   db: Database,
   entries: SeriesLastEpisode[]
-): Promise<void> => {
-  if (entries.length === 0) return;
+): Promise<boolean> => {
+  if (entries.length === 0) return false;
   const seriesIds = entries.map((entry) => entry.seriesId);
   const [seriesRows, episodeRows] = await Promise.all([
     db.select().from(series).where(inArray(series.id, seriesIds)),
@@ -78,4 +78,5 @@ export const recordDeviceLastEpisodes = async (
     byId.set(row.id, { ...row, ...kept });
   }
   await applyWrites(db, writes);
+  return writes.length > 0;
 };

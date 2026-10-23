@@ -2,12 +2,14 @@ import {
   SYNC_SSE_EVENT_AUDIOBOOKS,
   SYNC_SSE_EVENT_MOVIES,
   SYNC_SSE_EVENT_ON_DEVICE_SET,
-  MOBILE_SYNC_PROTOCOL_VERSION,
+  ON_DEVICE_SET_SYNC_PROTOCOL_VERSION,
   RESUME_SYNC_PROTOCOL_VERSION,
   type AudiobookTrackPosition,
+  type CurrentVideo,
   type MovieCatalog,
   type MovieWatch,
   type OnDeviceSet,
+  type SeriesLastEpisode,
 } from "../../../shared/mobile-sync-contract";
 import {
   createDeviceMirror,
@@ -82,12 +84,14 @@ describe("planMirror", () => {
 });
 
 function createHarness({
-  set = [] as string[] | null,
+  set = [] as string[],
   library = [] as string[],
 } = {}) {
   const state = {
     serverUrl: SERVER as string | null,
     libraryLoaded: true,
+    // The desktop's sync protocol version (GET /api/info).
+    protocolVersion: RESUME_SYNC_PROTOCOL_VERSION,
     set,
     library: new Set(library),
     queued: new Set<string>(),
@@ -102,6 +106,8 @@ function createHarness({
     audiobookMirrorFails: false,
     heldAudiobookIds: [] as string[],
     movieWatch: [] as MovieWatch[],
+    seriesLastEpisodes: [] as SeriesLastEpisode[],
+    currentVideos: [] as CurrentVideo[],
     movieCatalogRefreshes: [] as string[],
     movieCatalogFails: false,
     // What the desktop serves as its Movie catalog; null for a desktop too old.
@@ -109,8 +115,6 @@ function createHarness({
     movieMirrors: [] as MovieCatalog[],
     movieMirrorFails: false,
     heldMovies: { movieIds: [] as string[], episodeIds: [] as string[] },
-    // The desktop's sync protocol version.
-    desktopVersion: MOBILE_SYNC_PROTOCOL_VERSION,
     trackPositions: [] as AudiobookTrackPosition[],
     // The desktops listened to for pushed sync events, and how to push one.
     listening: [] as string[],
@@ -131,8 +135,8 @@ function createHarness({
       return () => {};
     },
     desktop: {
-      getOnDeviceSet: async () => (state.set ? state.set.map(setVideo) : null),
-      getSyncProtocolVersion: async () => state.desktopVersion,
+      getProtocolVersion: async () => state.protocolVersion,
+      getOnDeviceSet: async () => state.set.map(setVideo),
       report: async (_serverUrl, report) => {
         state.reports.push(report);
       },
@@ -179,7 +183,11 @@ function createHarness({
       { videoId: "a", lastPositionSeconds: 60, lastWatchedAt: 10 },
     ],
     getMovieWatch: () => state.movieWatch,
-    getTrackPositions: () => state.trackPositions,
+    resume: {
+      seriesLastEpisodes: () => state.seriesLastEpisodes,
+      currentVideos: () => state.currentVideos,
+      trackPositions: () => state.trackPositions,
+    },
     loadMirroredIds: async () => state.mirrored,
     saveMirroredIds: async (ids) => {
       state.mirrored = ids;
@@ -293,12 +301,88 @@ describe("device mirror", () => {
         movieWatch: [],
         heldMovieIds: [],
         heldEpisodeIds: [],
+        seriesLastEpisodes: [],
+        currentVideos: [],
       },
     ]);
   });
 
+  it("sends each Series' last Episode kept in Offline mode in the next report", async () => {
+    const { state, mirror } = createHarness({ set: [] });
+    // Kept while no desktop was there: nothing went out.
+    state.serverUrl = null;
+    state.seriesLastEpisodes = [
+      { seriesId: "office", episodeId: "s1e2", updatedAt: 40 },
+    ];
+    await mirror.syncNow();
+    expect(state.reports).toEqual([]);
+
+    state.serverUrl = SERVER;
+    await mirror.syncNow();
+    expect(state.reports).toEqual([
+      expect.objectContaining({
+        seriesLastEpisodes: [
+          { seriesId: "office", episodeId: "s1e2", updatedAt: 40 },
+        ],
+      }),
+    ]);
+  });
+
+  it("sends each Current Video kept in Offline mode in the next report", async () => {
+    const { state, mirror } = createHarness({ set: [] });
+    // Kept while no desktop was there: nothing went out.
+    state.serverUrl = null;
+    state.currentVideos = [
+      {
+        collectionKind: "list",
+        collectionId: "course",
+        videoId: "b",
+        updatedAt: 50,
+      },
+    ];
+    await mirror.syncNow();
+    expect(state.reports).toEqual([]);
+
+    state.serverUrl = SERVER;
+    await mirror.syncNow();
+    expect(state.reports).toEqual([
+      expect.objectContaining({ currentVideos: state.currentVideos }),
+    ]);
+  });
+
+  it("sends nothing new to a desktop older than resume", async () => {
+    const { state, mirror } = createHarness({ set: [] });
+    state.protocolVersion = RESUME_SYNC_PROTOCOL_VERSION - 1;
+    state.seriesLastEpisodes = [
+      { seriesId: "office", episodeId: "s1e2", updatedAt: 40 },
+    ];
+    state.currentVideos = [
+      {
+        collectionKind: "list",
+        collectionId: "course",
+        videoId: "b",
+        updatedAt: 50,
+      },
+    ];
+    state.trackPositions = [
+      {
+        audiobookId: "frankl",
+        trackId: "cd2",
+        seconds: 410,
+        playedToEnd: false,
+        updatedAt: 30,
+      },
+    ];
+    await mirror.syncNow();
+    expect(state.reports).toHaveLength(1);
+    expect(state.reports[0]).not.toHaveProperty("seriesLastEpisodes");
+    expect(state.reports[0]).not.toHaveProperty("currentVideos");
+    expect(state.reports[0]).not.toHaveProperty("trackPositions");
+  });
+
   it("sends Track positions kept in Offline mode in the next Device report", async () => {
     const { state, mirror } = createHarness({ set: [] });
+    // Kept while no desktop was there: nothing went out.
     state.serverUrl = null;
     const kept: AudiobookTrackPosition = {
       audiobookId: "frankl",
@@ -313,29 +397,9 @@ describe("device mirror", () => {
 
     state.serverUrl = SERVER;
     await mirror.syncNow();
-
     expect(state.reports).toEqual([
       expect.objectContaining({ trackPositions: [kept] }),
     ]);
-  });
-
-  it("sends no Track positions to a desktop older than resume", async () => {
-    const { state, mirror } = createHarness({ set: [] });
-    state.desktopVersion = RESUME_SYNC_PROTOCOL_VERSION - 1;
-    state.trackPositions = [
-      {
-        audiobookId: "frankl",
-        trackId: "cd2",
-        seconds: 410,
-        playedToEnd: false,
-        updatedAt: 30,
-      },
-    ];
-
-    await mirror.syncNow();
-
-    expect(state.reports).toHaveLength(1);
-    expect(state.reports[0]).not.toHaveProperty("trackPositions");
   });
 
   it("Mirrors the sent Audiobooks on every sync", async () => {
@@ -431,7 +495,8 @@ describe("device mirror", () => {
   });
 
   it("leaves the Device alone when the desktop is too old to serve the set", async () => {
-    const { state, mirror } = createHarness({ set: null, library: ["x"] });
+    const { state, mirror } = createHarness({ set: [], library: ["x"] });
+    state.protocolVersion = ON_DEVICE_SET_SYNC_PROTOCOL_VERSION - 1;
     state.mirrored = ["x"];
     await mirror.syncNow();
     expect([...state.library]).toEqual(["x"]);

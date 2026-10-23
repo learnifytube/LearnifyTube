@@ -118,6 +118,14 @@ export const collectionKindSchema = z.enum([
 
 export type CollectionKind = z.infer<typeof collectionKindSchema>;
 
+/** A List (Favorites included) or YouTube playlist: the collections with a Current Video. */
+export const collectionRefSchema = z.object({
+  kind: collectionKindSchema,
+  id: z.string(),
+});
+
+export type CollectionRef = z.infer<typeof collectionRefSchema>;
+
 /**
  * The Video a List (Favorites included) or YouTube playlist was last playing.
  * Sent in the Device report; the newest updatedAt wins. Favorites' id is "favorites".
@@ -133,12 +141,20 @@ export type CurrentVideo = z.infer<typeof currentVideoSchema>;
 
 /**
  * GET /api/playlist/:id/videos and GET /api/mylist/:id/videos ("favorites" for
- * Favorites) carry `currentVideo` beside `videos`: the collection's Current Video,
- * or null when none is set. Absent from desktops older than RESUME_SYNC_PROTOCOL_VERSION.
+ * Favorites) carry, beside `videos`, `collection` (which List or YouTube playlist
+ * the id named) and `currentVideo`: the collection's Current Video, or null when
+ * none is set. Both absent from desktops older than RESUME_SYNC_PROTOCOL_VERSION.
  */
 export const collectionVideosCurrentVideoSchema = z.object({
+  collection: collectionRefSchema.optional(),
   currentVideo: currentVideoSchema.nullable().optional(),
 });
+
+/**
+ * POST /api/collection/current-video: a Device started a Video in a List or
+ * YouTube playlist (the body is a CurrentVideo); the newest one is kept.
+ */
+export const COLLECTION_CURRENT_VIDEO_PATH = "/api/collection/current-video";
 
 /**
  * The Episode a Series last played (ADR-0006), and when that changed. Null

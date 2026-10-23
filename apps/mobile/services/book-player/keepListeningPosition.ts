@@ -1,4 +1,5 @@
 import { api } from "../api";
+import { desktopProtocol, supportsProtocol } from "../desktop-protocol";
 import { useConnectionStore } from "../../stores/connection";
 import { useListeningPositionsStore } from "../../stores/listeningPositions";
 import { useTrackPositionsStore } from "../../stores/trackPositions";
@@ -49,9 +50,10 @@ export function keepTrackPositionsOnPhone(positions: AudiobookTrackPosition[]) {
   useTrackPositionsStore.getState().keep(positions);
   const serverUrl = useConnectionStore.getState().serverUrl;
   if (!serverUrl) return;
+  // Unknown until the Device mirror learns it: the next report carries them.
+  const version = desktopProtocol.known(serverUrl);
+  if (!supportsProtocol(version, RESUME_SYNC_PROTOCOL_VERSION)) return;
   void (async () => {
-    const info = await api.getInfo(serverUrl);
-    if (info.syncProtocolVersion < RESUME_SYNC_PROTOCOL_VERSION) return;
     for (const position of positions) {
       await api.reportTrackPosition(serverUrl, position);
     }

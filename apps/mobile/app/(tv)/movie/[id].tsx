@@ -13,6 +13,7 @@ import {
 } from "../../../services/playback-source";
 import { findTitle } from "../../../services/movie-watch/seriesWatch";
 import { useMovieProgressRecorder } from "../../../hooks/useMovieProgressRecorder";
+import { useLastEpisodeWhenStarted } from "../../../hooks/useLastEpisodeWhenStarted";
 import { useMovieCaptions } from "../../../hooks/useMovieCaptions";
 import { useHeldTitles } from "../../../hooks/useHeldTitles";
 import { movieStartPosition } from "../../../hooks/useMovieResume";
@@ -112,6 +113,7 @@ export default function TVMoviePlayerScreen() {
   const series = movie?.series ?? null;
   const seriesId = series?.id;
   const historyTitle = series ? series.title : movie?.title;
+  useLastEpisodeWhenStarted(seriesId ?? null, id, !!uri);
   useEffect(() => {
     if (!historyTitle) return;
     useTVHistoryStore

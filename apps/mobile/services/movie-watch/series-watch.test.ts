@@ -1,5 +1,6 @@
 import type {
   Episode,
+  LastEpisode,
   Movie,
   MovieWatch,
   Series,
@@ -30,7 +31,11 @@ const series = (...seasons: Episode[][]): Series => ({
   })),
 });
 
-const onDesktop = (positionSeconds: number, updatedAt: number, watched = false) => ({
+const onDesktop = (
+  positionSeconds: number,
+  updatedAt: number,
+  watched = false,
+) => ({
   watch: { positionSeconds, watched, updatedAt },
 });
 
@@ -58,9 +63,10 @@ describe("Series next up", () => {
 
   it("carries on with the Episode in progress", () => {
     const next = seriesNextUp(
-      series([episode("e1", onDesktop(1000, 10, true)), episode("e2")], [
-        episode("e3"),
-      ]),
+      series(
+        [episode("e1", onDesktop(1000, 10, true)), episode("e2")],
+        [episode("e3")],
+      ),
       keptOnPhone({ e2: [300, 20] }),
     );
     expect(next?.episode.id).toBe("e2");
@@ -115,6 +121,45 @@ describe("Series next up", () => {
     expect(
       seriesNextUp(series([episode("e1")]), keptOnPhone({ e1: [950, 20] })),
     ).toBeNull();
+  });
+});
+
+describe("where a Series picks up on a Device", () => {
+  // e1 and e3 are both half-watched; e2 is not started.
+  const office = (lastEpisode?: LastEpisode | null): Series => ({
+    ...series([
+      episode("e1", onDesktop(400, 10)),
+      episode("e2"),
+      episode("e3", onDesktop(400, 20)),
+    ]),
+    ...(lastEpisode === undefined ? {} : { lastEpisode }),
+  });
+  const kept = (episodeId: string | null, updatedAt: number): LastEpisode => ({
+    episodeId,
+    updatedAt,
+  });
+
+  it("resumes the Episode this Device went back to, over the desktop's older one", () => {
+    expect(
+      seriesNextUp(office(kept("e3", 30)), none, kept("e1", 40))?.episode.id,
+    ).toBe("e1");
+  });
+
+  it("resumes the desktop's last Episode when it is newer than this Device's", () => {
+    expect(
+      seriesNextUp(office(kept("e1", 50)), none, kept("e3", 40))?.episode.id,
+    ).toBe("e1");
+  });
+
+  it("starts over when the desktop forgot the last Episode after this Device played", () => {
+    expect(
+      seriesNextUp(office(kept(null, 50)), none, kept("e3", 40))?.episode.id,
+    ).toBe("e1");
+  });
+
+  it("uses today's rule against a desktop older than resume", () => {
+    // No lastEpisode in the catalog: the Episode in progress that changed last.
+    expect(seriesNextUp(office(), none, kept("e1", 40))?.episode.id).toBe("e3");
   });
 });
 

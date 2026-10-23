@@ -1,5 +1,6 @@
 import type {
   Episode,
+  LastEpisode,
   Movie,
   MovieWatch,
   Series,
@@ -41,6 +42,8 @@ export type ContinueWatchingInput = {
   series: Series[];
   /** This phone's own progress in a Movie or Episode. */
   kept: (kind: MovieWatch["kind"], id: string) => MovieWatch | undefined;
+  /** The Episode a Series last played on this phone. */
+  keptLastEpisode?: (seriesId: string) => LastEpisode | undefined;
   /** Whether this phone holds the Movie's or Episode's Offline copy. */
   onThisPhone?: (id: string) => boolean;
 };
@@ -82,7 +85,11 @@ export function mergeContinueWatching(
     ];
   });
   const episodes = input.series.flatMap((series): ContinueWatchingItem[] => {
-    const next = seriesNextUp(series, (id) => input.kept("episode", id));
+    const next = seriesNextUp(
+      series,
+      (id) => input.kept("episode", id),
+      input.keptLastEpisode?.(series.id),
+    );
     // Not started yet, or nothing left to watch.
     if (!next || next.lastWatchedAt === null) return [];
     return [

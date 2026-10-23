@@ -20,6 +20,7 @@ import {
   type CurrentVideo,
   type DeviceReport,
   type OnDeviceSet,
+  type SeriesLastEpisode,
 } from "../../shared/mobile-sync-contract";
 import { parseWithSchema } from "../../shared/schema-utils";
 import { logger } from "./logger";
@@ -311,6 +312,22 @@ export const api = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(currentVideo),
+      },
+    );
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  },
+
+  /** Tells the desktop the Episode a Series last played here; the desktop keeps the newest. */
+  async reportSeriesLastEpisode(
+    serverUrl: string,
+    entry: SeriesLastEpisode,
+  ): Promise<void> {
+    const response = await fetchWithTimeout(
+      `${serverUrl}/api/series/${encodeURIComponent(entry.seriesId)}/last-episode`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(entry),
       },
     );
     if (!response.ok) throw new Error(`HTTP ${response.status}`);

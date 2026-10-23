@@ -12,6 +12,7 @@ import {
 } from "../../../theme";
 import { useMovieCatalogStore } from "../../../stores/movieCatalog";
 import { movieWatchKey, useMovieWatchStore } from "../../../stores/movieWatch";
+import { useSeriesLastEpisodesStore } from "../../../stores/seriesLastEpisodes";
 import { desktopConnection } from "../../../services/desktop-connection";
 import { resolveRemoteAssetUrl } from "../../../services/browseCache";
 import { TVFocusPressable } from "../../../components/tv/TVFocusPressable";
@@ -53,12 +54,16 @@ export default function TVSeriesScreen() {
         ) ?? undefined)
       : listed;
   const progress = useMovieWatchStore((state) => state.progress);
+  const keptLastEpisode = useSeriesLastEpisodesStore(
+    (state) => state.lastEpisodes[id],
+  );
 
   const view = series
     ? buildTVSeriesView({
         series,
         keptEpisodeWatch: (episodeId) =>
           progress[movieWatchKey("episode", episodeId)],
+        keptLastEpisode,
       })
     : null;
 

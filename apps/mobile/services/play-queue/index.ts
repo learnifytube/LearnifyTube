@@ -9,7 +9,7 @@ import {
 import { usePlaybackStore } from "../../stores/playback";
 import { useTVHistoryStore } from "../../stores/tvHistory";
 import { api } from "../api";
-import { desktopSpeaks } from "../desktop-protocol";
+import { desktopProtocol, supportsProtocol } from "../desktop-protocol";
 import { createPlayQueue } from "./createPlayQueue";
 
 export const playQueue = createPlayQueue({
@@ -29,18 +29,17 @@ export const playQueue = createPlayQueue({
         collection,
       ),
     // Kept on the Device (the next Device report carries it), and sent live to
-    // a connected desktop that knows Current Videos.
+    // a connected desktop that knows Current Videos (the shared protocol gate).
     keep: (currentVideo) => {
       useCurrentVideosStore.getState().keep(currentVideo);
       const serverUrl = useConnectionStore.getState().serverUrl;
       if (!serverUrl) return;
-      desktopSpeaks(serverUrl, RESUME_SYNC_PROTOCOL_VERSION)
-        .then((speaks) =>
-          speaks ? api.reportCurrentVideo(serverUrl, currentVideo) : undefined,
-        )
-        .catch((error) => {
-          console.warn("[PlayQueue] Reporting the Current Video failed", error);
-        });
+      // Unknown until the Device mirror learns it: the next report carries it.
+      const version = desktopProtocol.known(serverUrl);
+      if (!supportsProtocol(version, RESUME_SYNC_PROTOCOL_VERSION)) return;
+      api.reportCurrentVideo(serverUrl, currentVideo).catch((error) => {
+        console.warn("[PlayQueue] Reporting the Current Video failed", error);
+      });
     },
   },
   isWatched: (video) => isVideoWatched(video.id, video.duration),

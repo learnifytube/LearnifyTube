@@ -1,9 +1,11 @@
 import type {
   Episode,
+  LastEpisode,
   Movie,
   MovieWatch,
   Series,
 } from "../../../shared/mobile-sync-contract";
+import { newestWins } from "../../../shared/newest-wins";
 import { episodeAfter, nextUpEpisode } from "../../../shared/series/nextUp";
 import { watchStateOf } from "./movieWatch";
 
@@ -32,19 +34,52 @@ function episodesWithWatchState(
   });
 }
 
+type EpisodeWithWatchState = ReturnType<typeof episodesWithWatchState>[number];
+
+/**
+ * The Episode a Series picks up from: the newer of the desktop's last Episode
+ * and this Device's (ADR-0006). A desktop older than resume serves none, so
+ * today's rule stands in: the Episode in progress that changed last.
+ */
+function lastEpisodeId(
+  series: Series,
+  episodes: EpisodeWithWatchState[],
+  keptLastEpisode: LastEpisode | undefined,
+): string | null {
+  if (series.lastEpisode === undefined) {
+    return (
+      episodes
+        .filter((e) => !e.episode.missing && e.watchState === "in-progress")
+        .reduce<EpisodeWithWatchState | null>(
+          (latest, e) =>
+            !latest || (e.watchUpdatedAt ?? 0) > (latest.watchUpdatedAt ?? 0)
+              ? e
+              : latest,
+          null,
+        )?.id ?? null
+    );
+  }
+  return (
+    newestWins(series.lastEpisode, keptLastEpisode ?? null)?.episodeId ?? null
+  );
+}
+
 /**
  * Where a Series picks up (the shared next-up rule, by the newer of the
- * desktop's and this phone's Watch progress of each Episode), and when any of
- * its Episodes was last watched (null before any was). Null once no unwatched
- * Episode is left.
+ * desktop's and this Device's Watch progress of each Episode and last
+ * Episode), and when any of its Episodes was last watched (null before any
+ * was). Null once no unwatched Episode is left.
  */
 export function seriesNextUp(
   series: Series,
   keptEpisode: (episodeId: string) => MovieWatch | undefined,
+  keptLastEpisode?: LastEpisode,
 ): { episode: Episode; lastWatchedAt: number | null } | null {
   const episodes = episodesWithWatchState(series, keptEpisode);
-  // The desktop's last Episode; the Device's own comes with #67.
-  const next = nextUpEpisode(episodes, series.lastEpisode?.episodeId ?? null);
+  const next = nextUpEpisode(
+    episodes,
+    lastEpisodeId(series, episodes, keptLastEpisode),
+  );
   if (!next) return null;
   const lastWatchedAt = episodes.reduce<number | null>(
     (latest, { watchUpdatedAt }) =>

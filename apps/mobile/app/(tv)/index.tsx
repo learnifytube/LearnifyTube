@@ -26,6 +26,7 @@ import { useTVHistoryStore } from "../../stores/tvHistory";
 import { useOnDeviceSetStore } from "../../stores/onDeviceSet";
 import { useMovieCatalogStore } from "../../stores/movieCatalog";
 import { movieWatchKey, useMovieWatchStore } from "../../stores/movieWatch";
+import { useSeriesLastEpisodesStore } from "../../stores/seriesLastEpisodes";
 import { movieCatalog } from "../../services/movie-catalog";
 import { api } from "../../services/api";
 import { playQueue } from "../../services/play-queue";
@@ -179,6 +180,9 @@ export default function TVHomeScreen() {
   const history = useTVHistoryStore((state) => state.entries);
   const movieCatalogState = useMovieCatalogStore();
   const movieProgress = useMovieWatchStore((state) => state.progress);
+  const lastEpisodes = useSeriesLastEpisodesStore(
+    (state) => state.lastEpisodes,
+  );
   const heldTitles = useHeldTitles();
 
   // The tab picked; the one shown falls back to Playlists when it has gone (an empty Movies tab).
@@ -413,6 +417,7 @@ export default function TVHomeScreen() {
           : [],
       keptEpisodeWatch: (episodeId) =>
         movieProgress[movieWatchKey("episode", episodeId)],
+      keptLastEpisode: (seriesId) => lastEpisodes[seriesId],
       heldTitles,
     }),
     [
@@ -421,6 +426,7 @@ export default function TVHomeScreen() {
       getOfflineUri,
       getStoredThumbnail,
       heldTitles,
+      lastEpisodes,
       myLists,
       history,
       movieCatalogState,

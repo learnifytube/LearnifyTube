@@ -14,6 +14,7 @@ import {
 import { bookPlayer } from "../../services/book-player";
 import { useMovieProgressRecorder } from "../../hooks/useMovieProgressRecorder";
 import { useResumeWhenStarted } from "../../hooks/useMovieResume";
+import { useLastEpisodeWhenStarted } from "../../hooks/useLastEpisodeWhenStarted";
 import { useEpisodeAutoplay } from "../../hooks/useEpisodeAutoplay";
 import { usePlayerOverlay } from "../../hooks/usePlayerOverlay";
 import { usePlayerTime } from "../../hooks/usePlayerTime";
@@ -120,6 +121,7 @@ export default function MoviePlayerScreen() {
 
   useResumeWhenStarted(player, sourceUri, kind, id);
   useMovieProgressRecorder(player, kind, id);
+  useLastEpisodeWhenStarted(movie?.series?.id ?? null, id, !!sourceUri);
   useEpisodeAutoplay(player, {
     series: movie?.series ?? null,
     id,

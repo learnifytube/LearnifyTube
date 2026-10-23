@@ -1,7 +1,8 @@
 import { AppState, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ON_DEVICE_SET_SYNC_PROTOCOL_VERSION } from "../../../shared/mobile-sync-contract";
 import { api } from "../api";
+import { desktopProtocol } from "../desktop-protocol";
+import { useSeriesLastEpisodesStore } from "../../stores/seriesLastEpisodes";
 import { downloadQueue } from "../download-queue";
 import { videoThumbnails } from "../video-thumbnails";
 import { getAppSurface } from "../../core/hooks/useAppSurface";
@@ -11,7 +12,6 @@ import { useOnDeviceSetStore } from "../../stores/onDeviceSet";
 import { useListeningPositionsStore } from "../../stores/listeningPositions";
 import { useMovieWatchStore } from "../../stores/movieWatch";
 import { useCurrentVideosStore } from "../../stores/currentVideos";
-import { desktopSyncProtocolVersion } from "../desktop-protocol";
 import { getWatchHistory } from "../../db/repositories/watchHistory";
 import { audiobookMirror } from "../audiobook-mirror";
 import { heldMovies } from "../held-movies";
@@ -103,13 +103,9 @@ const platform: DeviceMirrorPlatform = {
     };
   },
   desktop: {
-    getOnDeviceSet: async (serverUrl) => {
-      const info = await api.getInfo(serverUrl);
-      if (info.syncProtocolVersion < ON_DEVICE_SET_SYNC_PROTOCOL_VERSION)
-        return null;
-      return (await api.getOnDeviceSet(serverUrl)).videos;
-    },
-    getSyncProtocolVersion: desktopSyncProtocolVersion,
+    getProtocolVersion: desktopProtocol.learn,
+    getOnDeviceSet: async (serverUrl) =>
+      (await api.getOnDeviceSet(serverUrl)).videos,
     report: (serverUrl, report) => api.reportDevice(serverUrl, report),
     listen: (serverUrl, handlers) =>
       listenToSyncEvents(api.getEventsUrl(serverUrl), handlers),
@@ -145,8 +141,12 @@ const platform: DeviceMirrorPlatform = {
       (listening) => (listening ? [listening] : []),
     ),
   getMovieWatch: () => Object.values(useMovieWatchStore.getState().progress),
-  getCurrentVideos: () =>
-    Object.values(useCurrentVideosStore.getState().currentVideos),
+  resume: {
+    seriesLastEpisodes: () =>
+      Object.values(useSeriesLastEpisodesStore.getState().lastEpisodes),
+    currentVideos: () =>
+      Object.values(useCurrentVideosStore.getState().currentVideos),
+  },
   loadMirroredIds: async () => {
     const raw = await AsyncStorage.getItem(MIRRORED_IDS_KEY);
     return raw ? (JSON.parse(raw) as string[]) : [];

@@ -3,6 +3,7 @@ import { resolveRemoteAssetUrl } from "../../services/remoteAssetUrl";
 import { movieOfflineCopy } from "../../services/offline-copy";
 import { useMovieCatalogStore } from "../../stores/movieCatalog";
 import { movieWatchKey, useMovieWatchStore } from "../../stores/movieWatch";
+import { useSeriesLastEpisodesStore } from "../../stores/seriesLastEpisodes";
 import type { StreamingVideo } from "../../stores/playback";
 import type { Episode, Movie } from "../../../shared/mobile-sync-contract";
 import { colors, fontSize, fontWeight, spacing } from "../../theme";
@@ -28,6 +29,9 @@ export function useContinueWatching({
 }) {
   const catalog = useMovieCatalogStore();
   const progress = useMovieWatchStore((state) => state.progress);
+  const lastEpisodes = useSeriesLastEpisodesStore(
+    (state) => state.lastEpisodes,
+  );
   const getMovieOfflineUri = movieOfflineCopy.useLookup();
   const current = !serverUrl || catalog.serverUrl === serverUrl;
   return mergeContinueWatching({
@@ -36,6 +40,7 @@ export function useContinueWatching({
     movies: current ? catalog.movies : [],
     series: current ? catalog.series : [],
     kept: (kind, id) => progress[movieWatchKey(kind, id)],
+    keptLastEpisode: (seriesId) => lastEpisodes[seriesId],
     onThisPhone: (id) => getMovieOfflineUri(id) !== null,
   });
 }

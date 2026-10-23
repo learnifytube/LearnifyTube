@@ -554,7 +554,14 @@ const createMobileSyncServer = (): MobileSyncServer => {
     readBody,
   });
 
-  const movieRoutes = createMovieSyncRoutes({ db: defaultDb, assetUrl, sendJson, sendError });
+  const movieRoutes = createMovieSyncRoutes({
+    db: defaultDb,
+    assetUrl,
+    sendJson,
+    sendError,
+    readBody,
+    announceMoviesChanged: broadcastMoviesChanged,
+  });
 
   // POST /api/collection/current-video - a Device started a Video in a List or
   // YouTube playlist while connected; the newest Current Video is kept (ADR-0006).
@@ -582,7 +589,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
 
   // GET /api/audiobooks, /api/audiobook-track/:id/file, /api/audiobook/:id/cover;
   // GET /api/movies, /api/(movie|episode)/:id/file, /api/(movie|series)/:id/poster;
-  // POST /api/collection/current-video.
+  // POST /api/series/:id/last-episode, /api/collection/current-video.
   const routeAudiobooksAndMovies = async (
     req: http.IncomingMessage,
     res: http.ServerResponse,

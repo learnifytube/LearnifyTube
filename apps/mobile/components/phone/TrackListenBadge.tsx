@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 import type { TrackPosition } from "../../../shared/mobile-sync-contract";
-import { trackListenState } from "../../services/listening-position/trackPositions";
+import { trackListenState } from "../../../shared/track-listen-state";
 import { colors, fontSize, spacing } from "../../theme";
 import { Check } from "../../theme/icons";
 import { formatTrackDuration } from "./formatTrackDuration";

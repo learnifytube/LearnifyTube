@@ -13,6 +13,7 @@ import type {
 import {
   COLLECTION_CURRENT_VIDEO_PATH,
   collectionVideosCurrentVideoSchema,
+  collectionVideoWatchSchema,
   onDeviceSetSchema,
   syncServerInfoSchema,
   type AudiobookListening,
@@ -36,16 +37,32 @@ export type CollectionVideos = {
   videos: RemoteVideoWithStatus[];
   collection: CollectionRef | null;
   currentVideo: CurrentVideo | null;
+  /** The desktop's Watch state of each Video it said it of, by Video id. */
+  watchedOnDesktop: Record<string, boolean>;
+};
+
+const NO_COLLECTION_VIDEOS: CollectionVideos = {
+  videos: [],
+  collection: null,
+  currentVideo: null,
+  watchedOnDesktop: {},
 };
 
 const toCollectionVideos = (json: {
   videos: RemoteVideoWithStatus[];
 }): CollectionVideos => {
   const resume = collectionVideosCurrentVideoSchema.safeParse(json);
+  const watchedOnDesktop: Record<string, boolean> = {};
+  for (const video of json.videos) {
+    const watch = collectionVideoWatchSchema.safeParse(video);
+    if (watch.success && watch.data.watched !== undefined)
+      watchedOnDesktop[watch.data.id] = watch.data.watched;
+  }
   return {
     videos: json.videos,
     collection: resume.success ? (resume.data.collection ?? null) : null,
     currentVideo: resume.success ? (resume.data.currentVideo ?? null) : null,
+    watchedOnDesktop,
   };
 };
 
@@ -202,6 +219,16 @@ async function fetchWithTimeout(
   }
 }
 
+// POSTs `body` as JSON to a desktop path; rejects unless the desktop took it.
+async function postJson(serverUrl: string, path: string, body: unknown) {
+  const response = await fetchWithTimeout(`${serverUrl}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+}
+
 export const api = {
   async getInfo(
     serverUrl: string,
@@ -287,78 +314,36 @@ export const api = {
   },
 
   /** Tells the desktop where this phone is in an Audiobook; the desktop keeps the newest. */
-  async reportListening(
-    serverUrl: string,
-    listening: AudiobookListening,
-  ): Promise<void> {
-    const response = await fetchWithTimeout(
-      `${serverUrl}/api/audiobook/${encodeURIComponent(listening.audiobookId)}/listening`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(listening),
-      },
-    );
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  },
+  reportListening: (serverUrl: string, listening: AudiobookListening) =>
+    postJson(
+      serverUrl,
+      `/api/audiobook/${encodeURIComponent(listening.audiobookId)}/listening`,
+      listening,
+    ),
 
   /** Tells the desktop where this phone left a Track (v5); the desktop keeps the newest. */
-  async reportTrackPosition(
-    serverUrl: string,
-    position: AudiobookTrackPosition,
-  ): Promise<void> {
-    const response = await fetchWithTimeout(
-      `${serverUrl}/api/audiobook/${encodeURIComponent(position.audiobookId)}/track-position`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(position),
-      },
-    );
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  },
+  reportTrackPosition: (serverUrl: string, position: AudiobookTrackPosition) =>
+    postJson(
+      serverUrl,
+      `/api/audiobook/${encodeURIComponent(position.audiobookId)}/track-position`,
+      position,
+    ),
 
   /** Tells the desktop a Video started in a List or YouTube playlist (its Current Video). */
-  async reportCurrentVideo(
-    serverUrl: string,
-    currentVideo: CurrentVideo,
-  ): Promise<void> {
-    const response = await fetchWithTimeout(
-      `${serverUrl}${COLLECTION_CURRENT_VIDEO_PATH}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(currentVideo),
-      },
-    );
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  },
+  reportCurrentVideo: (serverUrl: string, currentVideo: CurrentVideo) =>
+    postJson(serverUrl, COLLECTION_CURRENT_VIDEO_PATH, currentVideo),
 
   /** Tells the desktop the Episode a Series last played here; the desktop keeps the newest. */
-  async reportSeriesLastEpisode(
-    serverUrl: string,
-    entry: SeriesLastEpisode,
-  ): Promise<void> {
-    const response = await fetchWithTimeout(
-      `${serverUrl}/api/series/${encodeURIComponent(entry.seriesId)}/last-episode`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(entry),
-      },
-    );
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  },
+  reportSeriesLastEpisode: (serverUrl: string, entry: SeriesLastEpisode) =>
+    postJson(
+      serverUrl,
+      `/api/series/${encodeURIComponent(entry.seriesId)}/last-episode`,
+      entry,
+    ),
 
   /** Tells the desktop what this Device holds and what was watched on it. */
-  async reportDevice(serverUrl: string, report: DeviceReport): Promise<void> {
-    const response = await fetchWithTimeout(`${serverUrl}/api/devices/report`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(report),
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  },
+  reportDevice: (serverUrl: string, report: DeviceReport) =>
+    postJson(serverUrl, "/api/devices/report", report),
 
   async getVideos(serverUrl: string): Promise<{ videos: RemoteVideo[] }> {
     const response = await fetchWithTimeout(`${serverUrl}/api/videos`);
@@ -655,14 +640,14 @@ export const api = {
       );
       if (!response.ok) {
         if (response.status === 404) {
-          return { videos: [], collection: null, currentVideo: null };
+          return NO_COLLECTION_VIDEOS;
         }
         throw new Error(`HTTP ${response.status}`);
       }
       return toCollectionVideos(await response.json());
     } catch (error) {
       console.log("[API] My list videos endpoint not available");
-      return { videos: [], collection: null, currentVideo: null };
+      return NO_COLLECTION_VIDEOS;
     }
   },
 

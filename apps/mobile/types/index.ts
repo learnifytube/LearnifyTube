@@ -100,6 +100,8 @@ export interface RemoteVideoWithStatus {
   downloadStatus: "completed" | "downloading" | "queued" | "pending" | null;
   downloadProgress: number | null;
   fileSize: number | null;
+  /** The desktop's Watch state, on a List's or YouTube playlist's Videos (resume, v5). */
+  watched?: boolean;
 }
 
 export interface RemoteFavorite {

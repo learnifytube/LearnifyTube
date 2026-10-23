@@ -34,23 +34,20 @@ import {
   MOBILE_SYNC_PROTOCOL_VERSION,
   MIN_SUPPORTED_MOBILE_SYNC_PROTOCOL_VERSION,
   SYNC_SSE_EVENT_AUDIOBOOKS,
+  SYNC_SSE_EVENT_CURRENT_VIDEOS,
   SYNC_SSE_EVENT_MOVIES,
   SYNC_SSE_EVENT_ON_DEVICE_SET,
   SYNC_SSE_HEARTBEAT_MS,
+  type CollectionRef,
   type SyncServerInfo,
   type OnDeviceSet,
   deviceReportSchema,
-  currentVideoSchema,
-  COLLECTION_CURRENT_VIDEO_PATH,
 } from "../../../shared/mobile-sync-contract";
 import { loadOnDeviceSet, recordDeviceReport } from "../api/on-device/store";
-import {
-  loadCollection,
-  recordCurrentVideo,
-  type CollectionRef,
-} from "../api/collections/current-video";
+import { loadCollection } from "../api/collections/current-video";
 import { FAVORITES_LIST_ID } from "../lib/lists";
 import { createAudiobookSyncRoutes } from "./audiobookSyncRoutes";
+import { createCollectionSyncRoutes } from "./collectionSyncRoutes";
 import { createMovieSyncRoutes } from "./movieSyncRoutes";
 import { parseByteRange } from "./byte-range";
 
@@ -222,6 +219,8 @@ interface RemoteVideoWithStatus {
   downloadStatus: "completed" | "downloading" | "queued" | "pending" | null;
   downloadProgress: number | null;
   fileSize: number | null;
+  /** The desktop's Watch state; sent on collection Videos (the contract's collectionVideoWatchSchema). */
+  watched?: boolean;
 }
 
 interface RemoteFavorite {
@@ -552,6 +551,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
     sendJson,
     sendError,
     readBody,
+    announceAudiobooksChanged: broadcastAudiobooksChanged,
   });
 
   const movieRoutes = createMovieSyncRoutes({
@@ -563,29 +563,13 @@ const createMobileSyncServer = (): MobileSyncServer => {
     announceMoviesChanged: broadcastMoviesChanged,
   });
 
-  // POST /api/collection/current-video - a Device started a Video in a List or
-  // YouTube playlist while connected; the newest Current Video is kept (ADR-0006).
-  const routeCurrentVideo = async (
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-    url: string
-  ): Promise<boolean> => {
-    if (req.method !== "POST" || url !== COLLECTION_CURRENT_VIDEO_PATH) return false;
-    try {
-      const body = await readBody(req);
-      const parsed = currentVideoSchema.safeParse(parseJsonUnknown(body));
-      if (!parsed.success) {
-        sendError(res, "Invalid Current Video", 400);
-        return true;
-      }
-      const kept = await recordCurrentVideo(defaultDb, parsed.data);
-      sendJson(res, { success: true, kept });
-    } catch (error) {
-      logger.error("[MobileSyncServer] Error recording Current Video", error);
-      sendError(res, "Failed to record Current Video");
-    }
-    return true;
-  };
+  const collectionRoutes = createCollectionSyncRoutes({
+    db: defaultDb,
+    sendJson,
+    sendError,
+    readBody,
+    announceCurrentVideosChanged: () => broadcast(SYNC_SSE_EVENT_CURRENT_VIDEOS),
+  });
 
   // GET /api/audiobooks, /api/audiobook-track/:id/file, /api/audiobook/:id/cover;
   // GET /api/movies, /api/(movie|episode)/:id/file, /api/(movie|series)/:id/poster;
@@ -597,7 +581,7 @@ const createMobileSyncServer = (): MobileSyncServer => {
   ): Promise<boolean> =>
     (await audiobookRoutes.route(req, res, url)) ||
     (await movieRoutes.route(req, res, url)) ||
-    (await routeCurrentVideo(req, res, url));
+    (await collectionRoutes.route(req, res, url));
 
   const handleApiInfo = async (res: http.ServerResponse): Promise<void> => {
     try {
@@ -1524,7 +1508,10 @@ const createMobileSyncServer = (): MobileSyncServer => {
   ): Promise<boolean> => {
     const collection = await loadCollection(defaultDb, ref);
     if (!collection) return false;
-    const videos: RemoteVideoWithStatus[] = collection.videos.map(videoToRemoteVideoWithStatus);
+    const videos: RemoteVideoWithStatus[] = collection.videos.map((video) => ({
+      ...videoToRemoteVideoWithStatus(video),
+      watched: collection.watchedVideoIds.has(video.videoId),
+    }));
     sendJson(res, { videos, collection: ref, currentVideo: collection.currentVideo });
     return true;
   };

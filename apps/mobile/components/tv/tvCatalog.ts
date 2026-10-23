@@ -14,6 +14,10 @@ import {
 } from "../../services/movie-watch/seriesWatch";
 import type { HeldTitle } from "../../services/held-movies/types";
 import type { StreamingVideo } from "../../stores/playback";
+import {
+  remoteCollectionOfQueueId,
+  type RemoteCollectionKind,
+} from "../../services/remote-collection/queueId";
 import type {
   TVHistoryEntry,
   TVRecentMovie,
@@ -24,7 +28,12 @@ import { formatPlaybackTime } from "../playerSeek";
 import type { RemoteChannel, RemoteMyList, RemotePlaylist } from "../../types";
 
 export type TVBrowseMode =
-  "playlists" | "mylists" | "channels" | "movies" | "series" | "history";
+  | "playlists"
+  | "mylists"
+  | "channels"
+  | "movies"
+  | "series"
+  | "history";
 
 /** The tabs in the order the TV home shows them. */
 const TAB_ORDER: TVBrowseMode[] = [
@@ -105,7 +114,8 @@ export type TVCardAction =
     }
   | {
       kind: "remote";
-      collection: "playlist" | "mylist";
+      /** Which desktop endpoint the collection loads from. */
+      endpoint: RemoteCollectionKind;
       id: string;
       title: string;
       /** Starts where the List picks up (its Current Video) instead of the first Video. */
@@ -124,14 +134,6 @@ export type TVCatalogCard = {
   subtitle: string;
   thumbnailUrl: string | null;
   action: TVCardAction;
-};
-
-/** The desktop collection a TV queue id names (`playlist-<id>`, `mylist-<id>`), or null. */
-const remoteCollectionOf = (playlistId: string) => {
-  const match = /^(playlist|mylist)-(.+)$/.exec(playlistId);
-  return match
-    ? { collection: match[1] as "playlist" | "mylist", id: match[2] }
-    : null;
 };
 
 const countVideos = (count: number) =>
@@ -403,18 +405,23 @@ export function buildTVCatalog(input: TVCatalogInput) {
   };
 
   const videoHistoryCard = (entry: TVRecentPlaylist): TVCatalogCard[] => {
-    const videos = desktop
-      ? entry.videos
-      : entry.videos.filter((item) => hasOfflineCopy(item.id));
+    // In Offline mode only the Videos the TV holds can play.
+    const canPlay = (item: StreamingVideo) =>
+      !!desktop || hasOfflineCopy(item.id);
+    const videos = entry.videos.filter(canPlay);
     if (videos.length === 0) return [];
 
-    // A List resumes at its Current Video (the shared List rule); any other
-    // queue where the TV last was.
+    // A List resumes at its Current Video (the shared List rule, over the
+    // whole List); any other queue where the TV last was.
     const collection = input.collectionOf?.(entry.playlistId) ?? null;
     const isWatched = input.isWatched ?? (() => false);
     const resumeVideoId = collection
       ? (whereListPicksUp(
-          videos.map((item) => ({ id: item.id, watched: isWatched(item) })),
+          entry.videos.map((item) => ({
+            id: item.id,
+            watched: isWatched(item),
+            missing: !canPlay(item),
+          })),
           input.currentVideoOf?.(collection) ?? null,
         )?.id ?? null)
       : (entry.lastVideoId ?? entry.videos[entry.lastIndex]?.id ?? null);
@@ -424,7 +431,7 @@ export function buildTVCatalog(input: TVCatalogInput) {
     );
     const current = videos[startIndex];
     const first = videos[0];
-    const remote = desktop ? remoteCollectionOf(entry.playlistId) : null;
+    const remote = desktop ? remoteCollectionOfQueueId(entry.playlistId) : null;
     return [
       {
         id: entry.playlistId,
@@ -441,7 +448,8 @@ export function buildTVCatalog(input: TVCatalogInput) {
         action: remote
           ? {
               kind: "remote" as const,
-              ...remote,
+              endpoint: remote.kind,
+              id: remote.id,
               title: entry.title,
               resume: true,
             }
@@ -490,7 +498,7 @@ export function buildTVCatalog(input: TVCatalogInput) {
             desktop.playlistThumbnailUrl(item.playlistId),
           action: {
             kind: "remote",
-            collection: "playlist",
+            endpoint: "playlist",
             id: item.playlistId,
             title: item.title,
           },
@@ -509,7 +517,7 @@ export function buildTVCatalog(input: TVCatalogInput) {
             thumbnailUrl: desktop.resolveAssetUrl(item.thumbnailUrl),
             action: {
               kind: "remote",
-              collection: "mylist",
+              endpoint: "mylist",
               id: item.id,
               title: item.name,
             },

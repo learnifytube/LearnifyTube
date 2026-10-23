@@ -219,8 +219,7 @@ export default function PlaylistPage(): React.JSX.Element {
       return;
     }
     const pickUp = (await pickUpQuery.refetch()).data;
-    const index = pickUp ? data.videos.findIndex((video) => video.videoId === pickUp.videoId) : -1;
-    handlePlayVideo(index >= 0 ? index : 0);
+    handlePlayVideo(pickUp?.index ?? 0);
   };
 
   const handlePlayFromStart = (): void => {

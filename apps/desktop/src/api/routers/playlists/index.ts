@@ -14,7 +14,12 @@ import {
   type NewYoutubeVideo,
 } from "@/api/db/schema";
 import defaultDb, { type Database } from "@/api/db";
-import { loadCurrentVideo, loadCurrentVideoIndexes } from "@/api/collections/current-video";
+import {
+  currentVideoIndexIn,
+  loadCurrentVideo,
+  loadCurrentVideoIndexes,
+} from "@/api/collections/current-video";
+import { FAVORITES_LIST_ID } from "@/lib/lists";
 import { spawnYtDlpWithLogging } from "../../utils/ytdlp-utils/ytdlp";
 import { downloadImageToCache } from "../../utils/ytdlp-utils/cache";
 import { getBinaryFilePath } from "../binary";
@@ -101,8 +106,7 @@ export async function getPlaylistDetailsForServer(
     kind: "youtube_playlist",
     id: details.playlistId,
   });
-  const index = current ? details.videos.findIndex((v) => v.videoId === current.videoId) : -1;
-  return { ...details, currentVideoIndex: index >= 0 ? index : null };
+  return { ...details, currentVideoIndex: currentVideoIndexIn(details.videos, current) };
 }
 
 async function loadPlaylistDetails(
@@ -116,6 +120,8 @@ async function loadPlaylistDetails(
     });
     return null;
   }
+  // Favorites is a List, not a YouTube playlist: never fetch it from YouTube.
+  if (input.playlistId === FAVORITES_LIST_ID) return null;
 
   const limit = input.limit ?? 200;
 

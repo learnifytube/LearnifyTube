@@ -10,12 +10,10 @@ export type NextUpEpisode = {
   watchState: "unwatched" | "in-progress" | "watched";
 };
 
-const playable = <T extends NextUpEpisode>(episodes: readonly T[]): T[] =>
+const playable = <T extends NextUpEpisode>(episodes: readonly T[]) =>
   episodes.filter((episode) => !episode.missing);
 
-const notWatched = <T extends NextUpEpisode>(
-  episodes: readonly T[],
-): T | null =>
+const notWatched = <T extends NextUpEpisode>(episodes: readonly T[]) =>
   playable(episodes).find((episode) => episode.watchState !== "watched") ??
   null;
 
@@ -28,7 +26,7 @@ const notWatched = <T extends NextUpEpisode>(
 export const nextUpEpisode = <T extends NextUpEpisode>(
   episodes: readonly T[],
   lastEpisodeId: string | null,
-): T | null => {
+) => {
   const index =
     lastEpisodeId === null
       ? -1
@@ -43,7 +41,7 @@ export const nextUpEpisode = <T extends NextUpEpisode>(
 export const episodeAfter = <T extends NextUpEpisode>(
   episodes: readonly T[],
   episodeId: string,
-): T | null => {
+) => {
   const index = episodes.findIndex((episode) => episode.id === episodeId);
   if (index < 0) return null;
   return playable(episodes.slice(index + 1))[0] ?? null;

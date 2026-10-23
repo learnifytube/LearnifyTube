@@ -2,6 +2,7 @@ import { desc, eq, isNotNull } from "drizzle-orm";
 import { getDb, videos, watchStats } from "../index";
 import type { WatchStat } from "../schema";
 import { isPlayedEnough, resumeAt } from "../../../shared/resume-at";
+import { isWatchedOnDesktop } from "../../stores/desktopWatched";
 
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -200,11 +201,8 @@ export function getMostRecentWatchForVideoIds(
   return mostRecent;
 }
 
-/**
- * Where a Video starts on this Device, by the shared "resume at" rule over its
- * Watch progress here: from the beginning once about 90% was played.
- */
-export function videoStartPosition(videoId: string, durationSeconds?: number) {
+// The Video's Watch progress on this Device, and its length.
+function localProgress(videoId: string, durationSeconds?: number) {
   const row = getDb()
     .select({
       lastPositionSeconds: watchStats.lastPositionSeconds,
@@ -214,25 +212,30 @@ export function videoStartPosition(videoId: string, durationSeconds?: number) {
     .leftJoin(videos, eq(watchStats.videoId, videos.id))
     .where(eq(watchStats.videoId, videoId))
     .get();
-  return resumeAt({
+  return {
     positionSeconds: row?.lastPositionSeconds ?? null,
     durationSeconds: durationSeconds || row?.duration || null,
+  };
+}
+
+/**
+ * Where a Video starts on this Device, by the shared "resume at" rule: from
+ * the beginning once watched (the desktop says so, or about 90% was played
+ * here), else from its Watch progress here.
+ */
+export function videoStartPosition(videoId: string, durationSeconds?: number) {
+  return resumeAt({
+    ...localProgress(videoId, durationSeconds),
+    watched: isWatchedOnDesktop(videoId),
   });
 }
 
-/** Whether about 90% of the Video was played on this Device. */
+/** Whether the Video is watched: the desktop says so, or about 90% was played here. */
 export function isVideoWatched(videoId: string, durationSeconds?: number) {
-  const row = getDb()
-    .select({
-      lastPositionSeconds: watchStats.lastPositionSeconds,
-      duration: videos.duration,
-    })
-    .from(watchStats)
-    .leftJoin(videos, eq(watchStats.videoId, videos.id))
-    .where(eq(watchStats.videoId, videoId))
-    .get();
+  if (isWatchedOnDesktop(videoId)) return true;
+  const progress = localProgress(videoId, durationSeconds);
   return isPlayedEnough(
-    row?.lastPositionSeconds ?? 0,
-    durationSeconds || row?.duration || null,
+    progress.positionSeconds ?? 0,
+    progress.durationSeconds,
   );
 }

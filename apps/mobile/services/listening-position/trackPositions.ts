@@ -11,9 +11,7 @@ export type KeptTrackPositions = Record<
   AudiobookTrackPosition | undefined
 >;
 
-const ownPosition = (
-  kept: AudiobookTrackPosition | undefined,
-): TrackPosition | null =>
+const ownPosition = (kept: AudiobookTrackPosition | undefined) =>
   kept
     ? {
         seconds: kept.seconds,
@@ -40,12 +38,4 @@ export function withKeptTrackPositions<T extends Pick<Audiobook, "tracks">>(
       ),
     })),
   };
-}
-
-/** How far a Track has been listened to, from its Track position. */
-export function trackListenState(
-  position: TrackPosition | null | undefined,
-): "not-started" | "in-progress" | "played-to-end" {
-  if (position?.playedToEnd) return "played-to-end";
-  return (position?.seconds ?? 0) > 0 ? "in-progress" : "not-started";
 }

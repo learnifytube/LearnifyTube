@@ -1,5 +1,6 @@
 import { sqliteTable, text, integer, index, unique, primaryKey } from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
+import { COLLECTION_KINDS } from "../../../../shared/collection-kinds";
 
 export const channels = sqliteTable(
   "channels",
@@ -564,9 +565,7 @@ export type NewCustomPlaylistItem = typeof customPlaylistItems.$inferInsert;
 export const collectionCurrentVideos = sqliteTable(
   "collection_current_videos",
   {
-    collectionKind: text("collection_kind", {
-      enum: ["list", "favorites", "youtube_playlist"],
-    }).notNull(),
+    collectionKind: text("collection_kind", { enum: COLLECTION_KINDS }).notNull(),
     collectionId: text("collection_id").notNull(),
     videoId: text("video_id").notNull(),
     updatedAt: integer("updated_at").notNull(),

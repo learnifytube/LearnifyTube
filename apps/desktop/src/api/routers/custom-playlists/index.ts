@@ -12,7 +12,11 @@ import {
 } from "@/api/db/schema";
 import defaultDb from "@/api/db";
 import { setListOnDevices } from "@/api/on-device/store";
-import { loadCurrentVideo, loadCurrentVideoIndexes } from "@/api/collections/current-video";
+import {
+  currentVideoIndexIn,
+  loadCurrentVideo,
+  loadCurrentVideoIndexes,
+} from "@/api/collections/current-video";
 import { deleteVideoLibraryData, findReferencedVideoIds } from "@/api/utils/video-library-cleanup";
 import { getQueueManager } from "@/services/download-queue/queue-manager";
 import { getOptimizationQueueManager } from "@/services/optimization-queue/queue-manager";
@@ -172,9 +176,6 @@ export const customPlaylistsRouter = t.router({
 
         const firstVideo = videos[0];
         const currentVideo = await loadCurrentVideo(db, { kind: "list", id: playlist.id });
-        const currentVideoIndex = currentVideo
-          ? videos.findIndex((video) => video.videoId === currentVideo.videoId)
-          : -1;
 
         return {
           id: playlist.id,
@@ -184,7 +185,7 @@ export const customPlaylistsRouter = t.router({
           viewCount: playlist.viewCount,
           lastViewedAt: playlist.lastViewedAt,
           // The Current Video's place in the List; null when none is set or it left the List.
-          currentVideoIndex: currentVideoIndex >= 0 ? currentVideoIndex : null,
+          currentVideoIndex: currentVideoIndexIn(videos, currentVideo),
           totalWatchTimeSeconds: playlist.totalWatchTimeSeconds,
           createdAt: playlist.createdAt,
           updatedAt: playlist.updatedAt,

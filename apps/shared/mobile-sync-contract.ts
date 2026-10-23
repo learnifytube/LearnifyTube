@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { COLLECTION_KINDS } from "./collection-kinds";
 
 // v2: the On-device set and Device reports (Offline copies held, Watch state).
 // v3: Audiobooks (catalog, Track files, covers).
@@ -87,7 +88,9 @@ export const audiobookTrackPositionSchema = trackPositionSchema.extend({
   trackId: z.string(),
 });
 
-export type AudiobookTrackPosition = z.infer<typeof audiobookTrackPositionSchema>;
+export type AudiobookTrackPosition = z.infer<
+  typeof audiobookTrackPositionSchema
+>;
 
 /** Whether a played file is a Movie or an Episode of a Series (ADR-0005). */
 export const movieKindSchema = z.enum(["movie", "episode"]);
@@ -110,11 +113,7 @@ export const movieWatchSchema = z.object({
 export type MovieWatch = z.infer<typeof movieWatchSchema>;
 
 /** The collections that remember a Current Video (ADR-0006); Channels don't. */
-export const collectionKindSchema = z.enum([
-  "list",
-  "favorites",
-  "youtube_playlist",
-]);
+export const collectionKindSchema = z.enum(COLLECTION_KINDS);
 
 export type CollectionKind = z.infer<typeof collectionKindSchema>;
 
@@ -149,6 +148,19 @@ export const collectionVideosCurrentVideoSchema = z.object({
   collection: collectionRefSchema.optional(),
   currentVideo: currentVideoSchema.nullable().optional(),
 });
+
+/**
+ * Each Video in those endpoints' `videos` carries, beside its other fields,
+ * `watched`: the desktop's Watch state (about 90% played, or marked watched), so
+ * a Device's List rule and start position agree with the desktop. Absent from
+ * desktops older than RESUME_SYNC_PROTOCOL_VERSION.
+ */
+export const collectionVideoWatchSchema = z.object({
+  id: z.string(),
+  watched: z.boolean().optional(),
+});
+
+export type CollectionVideoWatch = z.infer<typeof collectionVideoWatchSchema>;
 
 /**
  * POST /api/collection/current-video: a Device started a Video in a List or
@@ -215,6 +227,11 @@ export const SYNC_SSE_EVENT_ON_DEVICE_SET = "sync:on-device-set";
 export const SYNC_SSE_EVENT_AUDIOBOOKS = "sync:audiobooks";
 /** The Movies and Seasons sent to Devices, or the titles Shown on Devices, changed. */
 export const SYNC_SSE_EVENT_MOVIES = "sync:movies";
+/**
+ * A List's or YouTube playlist's Current Video changed (resume, v5): a Device
+ * showing that collection loads it again. Older Devices ignore it.
+ */
+export const SYNC_SSE_EVENT_CURRENT_VIDEOS = "sync:current-videos";
 /** How often GET /api/events writes a comment, so a Device can tell a dropped stream from a quiet one. */
 export const SYNC_SSE_HEARTBEAT_MS = 25_000;
 

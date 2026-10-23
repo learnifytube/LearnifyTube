@@ -45,7 +45,7 @@ function lastEpisodeId(
   series: Series,
   episodes: EpisodeWithWatchState[],
   keptLastEpisode: LastEpisode | undefined,
-): string | null {
+) {
   if (series.lastEpisode === undefined) {
     return (
       episodes

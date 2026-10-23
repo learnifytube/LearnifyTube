@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import Thumbnail from "@/components/Thumbnail";
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { Heart, Video, FolderHeart, ListVideo } from "lucide-react";
+import { FAVORITES_LIST_ID } from "@/lib/lists";
+import { FavoritesPlayButtons } from "./FavoritesPlayButtons";
 
 function formatDuration(seconds: number | null | undefined): string {
   if (!seconds) return "0:00";
@@ -78,21 +80,26 @@ export function FavoritesSection({
     return <EmptyState />;
   }
 
-  if (viewMode === "grid") {
-    return (
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filteredFavorites.map((fav) => (
-          <FavoriteGridItem key={fav.favoriteId} favorite={fav} />
-        ))}
-      </div>
-    );
-  }
+  // Favorites' Videos newest first, the order Resume and "Play from start" follow.
+  const firstVideoId =
+    favoritesQuery.data?.find((fav) => fav.entityType === "video" && fav.video)?.entityId ?? null;
 
   return (
-    <div className="space-y-2">
-      {filteredFavorites.map((fav) => (
-        <FavoriteListItem key={fav.favoriteId} favorite={fav} />
-      ))}
+    <div className="space-y-4">
+      <FavoritesPlayButtons firstVideoId={firstVideoId} />
+      {viewMode === "grid" ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredFavorites.map((fav) => (
+            <FavoriteGridItem key={fav.favoriteId} favorite={fav} />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filteredFavorites.map((fav) => (
+            <FavoriteListItem key={fav.favoriteId} favorite={fav} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -123,7 +130,8 @@ function FavoriteGridItem({ favorite }: { favorite: FavoriteItem }): React.JSX.E
           to="/player"
           search={{
             videoId: favorite.video.videoId,
-            playlistId: undefined,
+            // Favorites is a List: a Video started here becomes its Current Video.
+            playlistId: FAVORITES_LIST_ID,
             playlistIndex: undefined,
           }}
           className="block"
@@ -255,7 +263,8 @@ function FavoriteListItem({ favorite }: { favorite: FavoriteItem }): React.JSX.E
           to="/player"
           search={{
             videoId: favorite.video.videoId,
-            playlistId: undefined,
+            // Favorites is a List: a Video started here becomes its Current Video.
+            playlistId: FAVORITES_LIST_ID,
             playlistIndex: undefined,
           }}
           className="relative h-16 w-28 shrink-0 overflow-hidden rounded"
@@ -278,7 +287,8 @@ function FavoriteListItem({ favorite }: { favorite: FavoriteItem }): React.JSX.E
           to="/player"
           search={{
             videoId: favorite.video.videoId,
-            playlistId: undefined,
+            // Favorites is a List: a Video started here becomes its Current Video.
+            playlistId: FAVORITES_LIST_ID,
             playlistIndex: undefined,
           }}
           className="min-w-0 flex-1"

@@ -1,16 +1,13 @@
+import type { SeriesLastEpisode } from "../../../shared/mobile-sync-contract";
 import {
-  RESUME_SYNC_PROTOCOL_VERSION,
-  type SeriesLastEpisode,
-} from "../../../shared/mobile-sync-contract";
-import { supportsProtocol } from "../desktop-protocol/supportsProtocol";
+  createSendToResumeDesktop,
+  type ResumeDesktopPlatform,
+} from "../desktop-protocol/sendToResumeDesktop";
 
-export type SeriesLastEpisodesPlatform = {
+export type SeriesLastEpisodesPlatform = ResumeDesktopPlatform & {
   now: () => number;
   /** Keeps it on this Device (newest wins); the Device report carries it. */
   keep: (entry: SeriesLastEpisode) => void;
-  getServerUrl: () => string | null;
-  /** The connected desktop's sync protocol version, null until learnt. */
-  knownDesktopVersion: (serverUrl: string) => number | null;
   post: (serverUrl: string, entry: SeriesLastEpisode) => Promise<void>;
 };
 
@@ -20,19 +17,12 @@ export type SeriesLastEpisodesPlatform = {
  * shares it, tells the desktop at once; otherwise the next Device report does.
  */
 export function createSeriesLastEpisodes(platform: SeriesLastEpisodesPlatform) {
+  const send = createSendToResumeDesktop(platform);
+
   const episodeStarted = (seriesId: string, episodeId: string) => {
     const entry = { seriesId, episodeId, updatedAt: platform.now() };
     platform.keep(entry);
-    const serverUrl = platform.getServerUrl();
-    if (!serverUrl) return;
-    const version = platform.knownDesktopVersion(serverUrl);
-    if (!supportsProtocol(version, RESUME_SYNC_PROTOCOL_VERSION)) return;
-    platform.post(serverUrl, entry).catch((error) => {
-      console.warn(
-        "[SeriesLastEpisode] Sending the last Episode failed",
-        error,
-      );
-    });
+    send((serverUrl) => platform.post(serverUrl, entry), "the last Episode");
   };
 
   return { episodeStarted };

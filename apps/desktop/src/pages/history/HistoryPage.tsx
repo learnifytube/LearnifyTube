@@ -29,29 +29,30 @@ export default function HistoryPage(): React.JSX.Element {
     url: string | null;
   }): Promise<void> => {
     try {
-      const [details, pickUp] = await Promise.all([
-        trpcClient.playlists.getDetails.query({
-          playlistId: playlist.playlistId,
-          playlistUrl: playlist.url ?? undefined,
-        }),
-        trpcClient.collections.pickUp.query({
-          kind: "youtube_playlist",
-          id: playlist.playlistId,
-        }),
-      ]);
-      const videos = details?.videos ?? [];
-      const video = videos.find((v) => v.videoId === pickUp?.videoId) ?? videos[0];
-      if (!video) {
+      const pickUp = await trpcClient.collections.pickUp.query({
+        kind: "youtube_playlist",
+        id: playlist.playlistId,
+      });
+      // With no Videos kept on the desktop yet, load the playlist and start at the top.
+      const start =
+        pickUp ??
+        (await trpcClient.playlists.getDetails
+          .query({ playlistId: playlist.playlistId, playlistUrl: playlist.url ?? undefined })
+          .then((details) => {
+            const first = details?.videos[0];
+            return first ? { videoId: first.videoId, index: 0 } : null;
+          }));
+      if (!start) {
         toast.error("This playlist has no videos to resume.");
         return;
       }
       navigate({
         to: "/player",
         search: {
-          videoId: video.videoId,
+          videoId: start.videoId,
           playlistId: playlist.playlistId,
           playlistUrl: playlist.url ?? undefined,
-          playlistIndex: videos.indexOf(video),
+          playlistIndex: start.index,
         },
       });
     } catch (error) {

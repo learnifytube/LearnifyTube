@@ -1,7 +1,5 @@
-import { RESUME_SYNC_PROTOCOL_VERSION } from "../../../shared/mobile-sync-contract";
 import { getAppSurface } from "../../core/hooks/useAppSurface";
 import { isVideoWatched } from "../../db/repositories/watchHistory";
-import { useConnectionStore } from "../../stores/connection";
 import {
   currentVideoOf,
   useCurrentVideosStore,
@@ -9,7 +7,7 @@ import {
 import { usePlaybackStore } from "../../stores/playback";
 import { useTVHistoryStore } from "../../stores/tvHistory";
 import { api } from "../api";
-import { desktopProtocol, supportsProtocol } from "../desktop-protocol";
+import { sendToResumeDesktop } from "../desktop-protocol";
 import { createPlayQueue } from "./createPlayQueue";
 
 export const playQueue = createPlayQueue({
@@ -32,17 +30,14 @@ export const playQueue = createPlayQueue({
     // a connected desktop that knows Current Videos (the shared protocol gate).
     keep: (currentVideo) => {
       useCurrentVideosStore.getState().keep(currentVideo);
-      const serverUrl = useConnectionStore.getState().serverUrl;
-      if (!serverUrl) return;
-      // Unknown until the Device mirror learns it: the next report carries it.
-      const version = desktopProtocol.known(serverUrl);
-      if (!supportsProtocol(version, RESUME_SYNC_PROTOCOL_VERSION)) return;
-      api.reportCurrentVideo(serverUrl, currentVideo).catch((error) => {
-        console.warn("[PlayQueue] Reporting the Current Video failed", error);
-      });
+      sendToResumeDesktop(
+        (serverUrl) => api.reportCurrentVideo(serverUrl, currentVideo),
+        "the Current Video",
+      );
     },
   },
   isWatched: (video) => isVideoWatched(video.id, video.duration),
   now: () => Date.now(),
 });
-export type { PlayQueue } from "./createPlayQueue";
+export { playableVideos } from "./createPlayQueue";
+export type { ListVideo, PlayQueue } from "./createPlayQueue";

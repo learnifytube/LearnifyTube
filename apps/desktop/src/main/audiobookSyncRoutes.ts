@@ -7,7 +7,7 @@ import {
   findTrackFilePath,
   loadAudiobookCatalog,
 } from "../api/audiobooks/catalog";
-import { recordListening } from "../api/audiobooks/listening";
+import { announceIfSent, recordListening } from "../api/audiobooks/listening";
 import { recordTrackPosition } from "../api/audiobooks/track-positions";
 import {
   audiobookListeningSchema,
@@ -24,6 +24,8 @@ type AudiobookSyncRoutesDeps = {
   sendJson: (res: http.ServerResponse, data: unknown, statusCode?: number) => void;
   sendError: (res: http.ServerResponse, message: string, statusCode?: number) => void;
   readBody: (req: http.IncomingMessage) => Promise<string>;
+  /** Tells connected Devices to refetch the sent Audiobooks (SSE). */
+  announceAudiobooksChanged: () => void;
 };
 
 /**
@@ -36,6 +38,7 @@ export const createAudiobookSyncRoutes = ({
   sendJson,
   sendError,
   readBody,
+  announceAudiobooksChanged,
 }: AudiobookSyncRoutesDeps): {
   /** Serves an Audiobook route; false when the URL isn't one. */
   route: (req: http.IncomingMessage, res: http.ServerResponse, url: string) => Promise<boolean>;
@@ -88,7 +91,8 @@ export const createAudiobookSyncRoutes = ({
     sendJson(res, { success: true });
   };
 
-  // A Device's Track position while it plays (resume, v5); the newest one is kept.
+  // A Device's Track position while it plays (resume, v5): the newest one is kept,
+  // and the other Devices refetch the catalog so they resume the Track there too.
   const handleTrackPosition = async (
     req: http.IncomingMessage,
     res: http.ServerResponse,
@@ -100,7 +104,9 @@ export const createAudiobookSyncRoutes = ({
       sendError(res, "Invalid Track position", 400);
       return;
     }
-    await recordTrackPosition(db, parsed.data);
+    if (await recordTrackPosition(db, parsed.data)) {
+      await announceIfSent(db, audiobookId, announceAudiobooksChanged);
+    }
     sendJson(res, { success: true });
   };
 

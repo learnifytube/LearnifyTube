@@ -36,6 +36,11 @@ import { movieCatalog } from "../../services/movie-catalog";
 import { api } from "../../services/api";
 import { playQueue } from "../../services/play-queue";
 import {
+  collectionQueueId,
+  loadRemoteCollection,
+  type RemoteCollectionKind,
+} from "../../services/remote-collection";
+import {
   desktopConnection,
   type DesktopConnectionState,
 } from "../../services/desktop-connection";
@@ -502,7 +507,7 @@ export default function TVHomeScreen() {
   };
 
   const playRemoteCollection = async (
-    kind: "playlist" | "mylist",
+    kind: RemoteCollectionKind,
     id: string,
     title: string,
     { resume = false } = {},
@@ -510,22 +515,15 @@ export default function TVHomeScreen() {
     if (!serverUrl || openingId === id) return;
     const request = ++openRequest.current;
     setOpeningId(id);
-    const playlistId = `${kind}-${id}`;
+    const playlistId = collectionQueueId(kind, id);
     const knownCollection = () =>
       useCurrentVideosStore.getState().collections[playlistId] ?? undefined;
     const playFromList = (action: Extract<TVCardAction, { kind: "play" }>) =>
       resume ? resumeList(action) : play(action);
 
     try {
-      const response =
-        kind === "playlist"
-          ? await api.getPlaylistVideos(serverUrl, id)
-          : await api.getMyListVideos(serverUrl, id);
-      // The desktop names the List and its Current Video (newest wins with this TV's).
-      const currentVideosStore = useCurrentVideosStore.getState();
-      if (response.collection)
-        currentVideosStore.rememberCollection(playlistId, response.collection);
-      if (response.currentVideo) currentVideosStore.keep(response.currentVideo);
+      // The desktop names the List, its Current Video and its Videos' Watch state.
+      const response = await loadRemoteCollection(serverUrl, kind, id);
       const playlistMeta =
         kind === "playlist"
           ? playlists.find((item) => item.playlistId === id)
@@ -589,7 +587,7 @@ export default function TVHomeScreen() {
       return;
     }
     if (action.kind === "remote") {
-      void playRemoteCollection(action.collection, action.id, action.title, {
+      void playRemoteCollection(action.endpoint, action.id, action.title, {
         resume: action.resume,
       });
       return;

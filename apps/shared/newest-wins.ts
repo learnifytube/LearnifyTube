@@ -5,8 +5,8 @@
  */
 export const newestWins = <T extends { updatedAt: number }>(
   existing: T | null,
-  reported: T | null
-): T | null => {
+  reported: T | null,
+) => {
   if (!existing) return reported;
   if (!reported) return existing;
   return reported.updatedAt > existing.updatedAt ? reported : existing;

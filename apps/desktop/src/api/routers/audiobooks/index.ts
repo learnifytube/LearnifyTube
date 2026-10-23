@@ -25,7 +25,7 @@ import {
   saveCoverFromImage,
 } from "@/api/audiobooks/covers";
 import { planRescan } from "@/api/audiobooks/rescan-plan";
-import { recordDesktopListening, startBookOver } from "@/api/audiobooks/listening";
+import { announceIfSent, recordDesktopListening, startBookOver } from "@/api/audiobooks/listening";
 import { recordTrackPosition } from "@/api/audiobooks/track-positions";
 import { trackFiles } from "@/main/security/track-files";
 import {
@@ -377,13 +377,9 @@ export const audiobooksRouter = t.router({
     )
     .mutation(async ({ input, ctx }) => {
       const db = ctx.db ?? defaultDb;
-      const kept = await recordTrackPosition(db, input);
-      if (!kept) return;
-      const [book] = await db
-        .select({ sentToDevices: audiobooks.sentToDevices })
-        .from(audiobooks)
-        .where(eq(audiobooks.id, input.audiobookId));
-      if (book?.sentToDevices) await notifyDevices();
+      if (await recordTrackPosition(db, input)) {
+        await announceIfSent(db, input.audiobookId, () => void notifyDevices());
+      }
     }),
 
   // Start over: a desktop mark clearing every Track position, so older Device reports lose.
@@ -392,11 +388,7 @@ export const audiobooksRouter = t.router({
     .mutation(async ({ input, ctx }) => {
       const db = ctx.db ?? defaultDb;
       await startBookOver(db, input.id, input.at);
-      const [book] = await db
-        .select({ sentToDevices: audiobooks.sentToDevices })
-        .from(audiobooks)
-        .where(eq(audiobooks.id, input.id));
-      if (book?.sentToDevices) await notifyDevices();
+      await announceIfSent(db, input.id, () => void notifyDevices());
     }),
 
   devicesHolding: publicProcedure

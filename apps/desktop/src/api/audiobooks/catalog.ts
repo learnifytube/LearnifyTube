@@ -2,26 +2,13 @@ import path from "path";
 import { asc, eq } from "drizzle-orm";
 import type { Database } from "@/api/db";
 import { audiobooks, audiobookTracks } from "@/api/db/schema";
-import type {
-  AudiobookCatalog,
-  ListeningPosition,
-  TrackPosition,
-} from "../../../../shared/mobile-sync-contract";
+import { storedTrackPosition } from "@/lib/track-position";
+import type { AudiobookCatalog, ListeningPosition } from "../../../../shared/mobile-sync-contract";
 
 type TrackRow = typeof audiobookTracks.$inferSelect;
 
 // A Track is named after its file, without the extension.
 const trackTitle = (filePath: string): string => path.parse(filePath).name;
-
-/** A Track's Track position as kept; null before the Track was ever played. */
-export const trackPosition = (track: TrackRow): TrackPosition | null =>
-  track.resumeUpdatedAt === null
-    ? null
-    : {
-        seconds: track.resumeSeconds ?? 0,
-        playedToEnd: track.playedToEnd,
-        updatedAt: track.resumeUpdatedAt,
-      };
 
 // The Track last played, at that Track's own Track position when that is the
 // newer record. The book-level seconds stay filled in for Devices older than resume.
@@ -37,7 +24,7 @@ const listeningPosition = (
     return null;
   }
   const listeningTrack = tracks.find((track) => track.id === book.listeningTrackId);
-  const own = listeningTrack ? trackPosition(listeningTrack) : null;
+  const own = listeningTrack ? storedTrackPosition(listeningTrack) : null;
   return own && own.updatedAt > book.listeningUpdatedAt
     ? { trackId: book.listeningTrackId, seconds: own.seconds, updatedAt: own.updatedAt }
     : {
@@ -75,7 +62,7 @@ export const loadAudiobookCatalog = async (
           title: trackTitle(track.filePath),
           durationSeconds: track.durationSeconds,
           missing: track.missing,
-          trackPosition: trackPosition(track),
+          trackPosition: storedTrackPosition(track),
         })),
         listeningPosition: listeningPosition(book, bookTracks),
         finished: book.finished,

@@ -23,15 +23,17 @@ import { AudiobookOnDevices } from "./components/AudiobookOnDevices";
 import { AudiobookPlayButtons, useCurrentTrackId } from "./components/AudiobookPlayButtons";
 import { EditAudiobookDialog } from "./components/EditAudiobookDialog";
 import { SortableTrackList } from "./components/SortableTrackList";
-import { formatListeningTime, trackListenState } from "./format";
+import { formatListeningTime } from "./format";
+import { storedTrackPosition } from "@/lib/track-position";
+import { trackListenState } from "../../../../shared/track-listen-state";
 
 // Not started, in progress (at its Track position) or played to the end.
 function TrackListenBadge({
   track,
 }: {
-  track: { resumeSeconds: number | null; playedToEnd: boolean };
+  track: { resumeSeconds: number | null; playedToEnd: boolean; resumeUpdatedAt: number | null };
 }): React.JSX.Element | null {
-  const state = trackListenState(track);
+  const state = trackListenState(storedTrackPosition(track));
   if (state === "not-started") return null;
   if (state === "played-to-end") {
     return (

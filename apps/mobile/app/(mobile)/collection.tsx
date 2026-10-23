@@ -12,14 +12,26 @@ import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useConnectionStore } from "../../stores/connection";
 import { api } from "../../services/api";
-import { playQueue } from "../../services/play-queue";
+import {
+  playQueue,
+  playableVideos,
+  type ListVideo,
+} from "../../services/play-queue";
+import { deviceMirror } from "../../services/device-mirror";
+import {
+  collectionQueueId,
+  loadRemoteCollection,
+} from "../../services/remote-collection";
 import {
   cacheRemoteCollectionVideos,
   getCachedCollectionVideos,
   resolveRemoteAssetUrl,
 } from "../../services/browseCache";
 import { markBrowseCacheChanged, useSyncStore } from "../../stores/sync";
-import { useCurrentVideosStore } from "../../stores/currentVideos";
+import {
+  currentVideoOf,
+  useCurrentVideosStore,
+} from "../../stores/currentVideos";
 import { videoThumbnails } from "../../services/video-thumbnails";
 import { offlineCopy } from "../../services/offline-copy";
 import { VideoGridCard } from "../../components/VideoGridCard";
@@ -42,14 +54,17 @@ export default function CollectionScreen() {
   const getOfflineUri = offlineCopy.useLookup();
   const getStoredThumbnail = videoThumbnails.useLookup();
 
-  const screenKey = `${kind}-${id}`;
+  const screenKey = collectionQueueId(kind, id);
   // The List or YouTube playlist this screen shows, once a desktop that
   // knows Current Videos said so (null for a Channel or an older desktop).
   const collection = useCurrentVideosStore(
     (state) => state.collections[screenKey] ?? null,
   );
-  // Re-renders Resume when a Current Video changes.
-  useCurrentVideosStore((state) => state.currentVideos);
+  const currentVideoId = useCurrentVideosStore((state) =>
+    collection
+      ? (currentVideoOf(state.currentVideos, collection)?.videoId ?? null)
+      : null,
+  );
 
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -73,15 +88,7 @@ export default function CollectionScreen() {
         const res = await api.getChannelVideos(serverUrl, id);
         remoteVideos = res.videos;
       } else if (kind === "playlist" || kind === "mylist") {
-        const res =
-          kind === "playlist"
-            ? await api.getPlaylistVideos(serverUrl, id)
-            : await api.getMyListVideos(serverUrl, id);
-        remoteVideos = res.videos;
-        const currentVideos = useCurrentVideosStore.getState();
-        if (res.collection)
-          currentVideos.rememberCollection(`${kind}-${id}`, res.collection);
-        if (res.currentVideo) currentVideos.keep(res.currentVideo);
+        remoteVideos = (await loadRemoteCollection(serverUrl, kind, id)).videos;
       }
 
       await cacheRemoteCollectionVideos(serverUrl, {
@@ -110,6 +117,13 @@ export default function CollectionScreen() {
     };
   }, [serverUrl, kind, id, fetchCollection, cachedVideos.length]);
 
+  // Another Device or the desktop moved a Current Video: load the List again,
+  // so Resume follows it.
+  useEffect(() => {
+    if (kind !== "playlist" && kind !== "mylist") return;
+    return deviceMirror.onCurrentVideosChanged(() => void fetchCollection());
+  }, [kind, fetchCollection]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -119,22 +133,21 @@ export default function CollectionScreen() {
     }
   }, [fetchCollection]);
 
-  const streamingVideos: StreamingVideo[] = useMemo(() => {
-    return videos
-      .filter((video) => connected || getOfflineUri(video.id) !== null)
-      .map((video) => ({
-        id: video.id,
-        title: video.title,
-        channelTitle: video.channelTitle,
-        duration: video.duration,
-        thumbnailUrl:
-          getStoredThumbnail(video.id) ??
-          (serverUrl && !video.thumbnailUrl?.startsWith("data:")
-            ? api.getThumbnailUrl(serverUrl, video.id)
-            : (resolveRemoteAssetUrl(serverUrl, video.thumbnailUrl) ??
-              undefined)),
-      }));
-  }, [videos, connected, getOfflineUri, getStoredThumbnail, serverUrl]);
+  // The whole collection in order; in Offline mode a Video with no Offline
+  // copy can't play, so the grid and queues leave it out.
+  const listVideos: ListVideo[] = videos.map((video) => ({
+    id: video.id,
+    title: video.title,
+    channelTitle: video.channelTitle,
+    duration: video.duration,
+    thumbnailUrl:
+      getStoredThumbnail(video.id) ??
+      (serverUrl && !video.thumbnailUrl?.startsWith("data:")
+        ? api.getThumbnailUrl(serverUrl, video.id)
+        : (resolveRemoteAssetUrl(serverUrl, video.thumbnailUrl) ?? undefined)),
+    unavailable: !connected && getOfflineUri(video.id) === null,
+  }));
+  const streamingVideos = playableVideos(listVideos);
 
   const queue = {
     id: screenKey,
@@ -151,7 +164,11 @@ export default function CollectionScreen() {
     open(playQueue.start({ ...queue, startIndex }));
 
   const resumeVideo = collection
-    ? playQueue.whereResumes({ videos: streamingVideos, collection })
+    ? playQueue.whereResumes({
+        videos: listVideos,
+        collection,
+        currentVideoId,
+      })
     : null;
 
   return (
@@ -175,7 +192,11 @@ export default function CollectionScreen() {
           <Pressable
             testID="collection-resume"
             style={[styles.action, styles.resumeAction]}
-            onPress={() => open(playQueue.resume({ ...queue, collection }))}
+            onPress={() =>
+              open(
+                playQueue.resume({ ...queue, videos: listVideos, collection }),
+              )
+            }
           >
             <Text style={styles.resumeText} numberOfLines={1}>
               Resume · {resumeVideo.title}

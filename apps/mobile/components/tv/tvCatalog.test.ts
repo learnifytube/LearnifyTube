@@ -157,7 +157,7 @@ describe("buildTVCatalog", () => {
         subtitle: "10 videos",
         action: {
           kind: "remote",
-          collection: "playlist",
+          endpoint: "playlist",
           id: "pl1",
           title: "Remote playlist",
         },
@@ -843,6 +843,21 @@ describe("Lists in History", () => {
     ]);
   });
 
+  it("offline, moves on past a Current Video the TV doesn't hold", () => {
+    const history = [historyEntry("mylist-42", ["a", "b", "c"])];
+    const catalog = buildTVCatalog(
+      input({
+        history,
+        library: [video("a"), video("c")],
+        ...knowing("b"),
+      }),
+    );
+    expect(catalog.tabs.history[0]).toMatchObject({
+      subtitle: "Resume 2/2 - Video c",
+      action: { kind: "play", startIndex: 1 },
+    });
+  });
+
   it("moves on past a watched Current Video to the next unwatched one", () => {
     const history = [historyEntry("mylist-42", ["a", "b", "c", "d"])];
     const catalog = buildTVCatalog(
@@ -870,14 +885,14 @@ describe("Lists in History", () => {
     expect(catalog.tabs.history.map((card) => card.action)).toEqual([
       {
         kind: "remote",
-        collection: "mylist",
+        endpoint: "mylist",
         id: "42",
         title: "History mylist-42",
         resume: true,
       },
       {
         kind: "remote",
-        collection: "playlist",
+        endpoint: "playlist",
         id: "PL9",
         title: "History playlist-PL9",
         resume: true,

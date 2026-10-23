@@ -9,7 +9,7 @@ export function useLastEpisodeWhenStarted(
   seriesId: string | null,
   episodeId: string,
   started: boolean,
-): void {
+) {
   useEffect(() => {
     if (!seriesId || !episodeId || !started) return;
     seriesLastEpisodes.episodeStarted(seriesId, episodeId);

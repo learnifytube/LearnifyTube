@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
 import { logger } from "@/helpers/logger";
-import { resumeAt as resumePosition } from "../../../../shared/resume-at";
+import { resumeAt } from "../../../../shared/resume-at";
 
 const SAVE_EVERY_MS = 10_000;
 
@@ -35,10 +35,10 @@ export function useMovieProgress(
 ): void {
   const queryClient = useQueryClient();
   // The saved position at the time the page opened, read once per Movie.
-  const resumeAt = useRef<number | null>(null);
+  const startAt = useRef<number | null>(null);
   const movieId = movie?.id ?? null;
-  if (movie && resumeAt.current === null) {
-    resumeAt.current = resumePosition({
+  if (movie && startAt.current === null) {
+    startAt.current = resumeAt({
       positionSeconds: movie.positionSeconds,
       durationSeconds: movie.durationSeconds,
       watched: movie.watched,
@@ -59,7 +59,7 @@ export function useMovieProgress(
     };
 
     const resume = (): void => {
-      const at = resumeAt.current ?? 0;
+      const at = startAt.current ?? 0;
       if (at > 0 && at < video.duration) video.currentTime = at;
     };
 

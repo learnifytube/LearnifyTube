@@ -132,6 +132,23 @@ describe("Play queue", () => {
       );
     });
 
+    it("moves on past a Current Video this Device can't play now, and queues only what it can", () => {
+      const { playQueue, queues } = createHarness({
+        currentVideos: [currentVideo("b")],
+      });
+
+      const first = playQueue.resume({
+        id: "mylist-course",
+        title: "Course",
+        videos: [video("a"), { ...video("b"), unavailable: true }, video("c")],
+        collection: course,
+      });
+
+      expect(first?.id).toBe("c");
+      expect(queues[0].videos.map((v) => v.id)).toEqual(["a", "c"]);
+      expect(queues[0].startIndex).toBe(1);
+    });
+
     it("resumes at the first Video when no Current Video is set", () => {
       const { playQueue } = createHarness();
 

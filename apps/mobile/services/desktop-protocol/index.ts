@@ -1,4 +1,6 @@
 import { api } from "../api";
+import { useConnectionStore } from "../../stores/connection";
+import { createSendToResumeDesktop } from "./sendToResumeDesktop";
 
 export { supportsProtocol } from "./supportsProtocol";
 
@@ -21,3 +23,9 @@ export const desktopProtocol = {
   /** The version last learnt for this desktop; null before it was. */
   known: (serverUrl: string) => known.get(serverUrl) ?? null,
 };
+
+/** Sends a kept resume change to the connected desktop when it speaks resume. */
+export const sendToResumeDesktop = createSendToResumeDesktop({
+  getServerUrl: () => useConnectionStore.getState().serverUrl,
+  knownDesktopVersion: desktopProtocol.known,
+});

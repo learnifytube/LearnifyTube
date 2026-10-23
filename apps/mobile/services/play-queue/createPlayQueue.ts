@@ -27,6 +27,15 @@ export type PlayQueuePlatform = {
   now: () => number;
 };
 
+/** A Video of a List, and whether this Device can't play it now. */
+export type ListVideo = StreamingVideo & { unavailable?: boolean };
+
+/** The Videos of a List this Device can play now, as the queue takes them. */
+export const playableVideos = (videos: ListVideo[]): StreamingVideo[] =>
+  videos
+    .filter((video) => !video.unavailable)
+    .map(({ unavailable: _, ...video }) => video);
+
 type StartOptions = Omit<PlayQueueStart, "startIndex"> & {
   startIndex?: number;
   /** The List or YouTube playlist the queue plays; its Current Video follows the queue. */
@@ -79,36 +88,47 @@ export function createPlayQueue(platform: PlayQueuePlatform) {
     return videos[index];
   };
 
-  /** Where playing the List picks up (the shared List rule), or null when it is empty. */
+  /**
+   * Where playing the List picks up (the shared List rule), or null when
+   * nothing in it can play. `videos` is the whole List in order; a Video this
+   * Device can't play now (no Offline copy in Offline mode) is skipped.
+   */
   const whereResumes = ({
     videos,
     collection,
+    currentVideoId = platform.currentVideos.get(collection)?.videoId ?? null,
   }: {
-    videos: StreamingVideo[];
+    videos: ListVideo[];
     collection: CollectionRef;
+    /** The Current Video as a screen already has it, when it renders from the store. */
+    currentVideoId?: string | null;
   }) =>
     whereListPicksUp(
       videos.map((video) => ({
         ...video,
         watched: platform.isWatched(video),
+        missing: video.unavailable,
       })),
-      platform.currentVideos.get(collection)?.videoId ?? null,
+      currentVideoId,
     );
 
   return {
     start,
     whereResumes,
-    /** Plays the List from where it picks up. */
+    /** Plays the Videos of the List this Device can play, from where it picks up. */
     resume: (
-      options: Omit<StartOptions, "startIndex" | "collection"> & {
+      options: Omit<StartOptions, "startIndex" | "collection" | "videos"> & {
+        videos: ListVideo[];
         collection: CollectionRef;
       },
     ) => {
       const picked = whereResumes(options);
+      const playable = playableVideos(options.videos);
       return start({
         ...options,
+        videos: playable,
         startIndex: picked
-          ? options.videos.findIndex((video) => video.id === picked.id)
+          ? playable.findIndex((video) => video.id === picked.id)
           : 0,
       });
     },

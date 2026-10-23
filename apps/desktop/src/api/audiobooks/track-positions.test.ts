@@ -102,6 +102,25 @@ describe("Track positions", () => {
     });
   });
 
+  it("leaves a Track not played to its end when the book finishes on it", async () => {
+    // The listener skipped past the last Track two minutes in: the book is
+    // finished, but that Track never reached its end.
+    await recordTrackPosition(db, position({ trackId: "t7", seconds: 120, updatedAt: 1_000 }));
+    await recordListening(db, {
+      audiobookId: "frankl",
+      trackId: "t7",
+      seconds: 3000,
+      finished: true,
+      updatedAt: 2_000,
+    });
+
+    expect(await positionOf(db, "t7")).toEqual({
+      seconds: 120,
+      playedToEnd: false,
+      updatedAt: 1_000,
+    });
+  });
+
   it("takes the Track position of an older Device's Listening position", async () => {
     await recordDeviceReport(
       db,

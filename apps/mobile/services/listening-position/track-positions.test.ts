@@ -1,5 +1,6 @@
 import type { Audiobook } from "../../../shared/mobile-sync-contract";
-import { trackListenState, withKeptTrackPositions } from "./trackPositions";
+import { withKeptTrackPositions } from "./trackPositions";
+import { trackListenState } from "../../../shared/track-listen-state";
 
 const book: Audiobook = {
   id: "frankl",

@@ -19,7 +19,7 @@ export type PickUpVideo = {
 export const whereListPicksUp = <T extends PickUpVideo>(
   videos: readonly T[],
   currentVideoId: string | null,
-): T | null => {
+) => {
   const playable = videos.filter((video) => !video.missing);
   const firstUnwatched = (from: readonly T[]) =>
     from.find((video) => !video.watched) ?? null;

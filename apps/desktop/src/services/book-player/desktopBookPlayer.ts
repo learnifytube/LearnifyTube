@@ -10,10 +10,8 @@ import {
   keepListeningPosition,
   type ListeningSave,
 } from "../../../../shared/book-player/keepListeningPosition";
-import type {
-  AudiobookTrackPosition,
-  TrackPosition,
-} from "../../../../shared/mobile-sync-contract";
+import type { AudiobookTrackPosition } from "../../../../shared/mobile-sync-contract";
+import { storedTrackPosition } from "@/lib/track-position";
 import { createAudioElementPlatform, type AudioOutput } from "./audioElementPlatform";
 
 /** An Audiobook as the desktop keeps it: its Tracks are files in the user's folder. */
@@ -36,8 +34,6 @@ export type DesktopAudiobook = {
     resumeUpdatedAt: number | null;
   }[];
 };
-
-type DesktopTrack = DesktopAudiobook["tracks"][number];
 
 /** The window's document: every media element's `play` reaches it while capturing. */
 export type MediaPage = {
@@ -81,15 +77,6 @@ const NO_PROGRESS: TrackProgress = { elapsed: 0, duration: 0 };
 // A Track is named after its file, without the extension (as Devices see it).
 const trackTitle = (filePath: string): string =>
   (filePath.split(/[\\/]/).pop() ?? filePath).replace(/\.[^.]+$/, "");
-
-const storedPosition = (track: DesktopTrack): TrackPosition | null =>
-  track.resumeUpdatedAt === null
-    ? null
-    : {
-        seconds: track.resumeSeconds ?? 0,
-        playedToEnd: track.playedToEnd,
-        updatedAt: track.resumeUpdatedAt,
-      };
 
 /**
  * The shared Book player on the desktop: Tracks play straight from the
@@ -152,7 +139,7 @@ export function createDesktopBookPlayer({
         title: trackTitle(track.filePath),
         durationSeconds: track.durationSeconds,
         missing: track.missing,
-        trackPosition: storedPosition(track),
+        trackPosition: storedTrackPosition(track),
       })),
     };
   };

@@ -5,13 +5,12 @@ import { migrate } from "drizzle-orm/libsql/migrator";
 import { and, eq } from "drizzle-orm";
 import * as schema from "@/api/db/schema";
 import { recordDeviceReport } from "@/api/on-device/store";
-import {
-  loadCollection,
-  recordVideoStarted,
-  whereCollectionPicksUp,
-  type CollectionRef,
-} from "./current-video";
-import type { CurrentVideo, DeviceReport } from "../../../../shared/mobile-sync-contract";
+import { loadCollection, recordVideoStarted, whereCollectionPicksUp } from "./current-video";
+import type {
+  CollectionRef,
+  CurrentVideo,
+  DeviceReport,
+} from "../../../../shared/mobile-sync-contract";
 
 const createDb = async () => {
   const db = drizzle(createClient({ url: ":memory:" }), { schema });
@@ -115,6 +114,11 @@ describe("A collection's Current Video", () => {
     });
   });
 
+  it("serves which of its Videos are watched on the desktop", async () => {
+    await markWatched(db, "b");
+    expect((await loadCollection(db, trip))?.watchedVideoIds).toEqual(new Set(["b"]));
+  });
+
   it("keeps the newest Current Video from Device reports, in either arrival order", async () => {
     await recordDeviceReport(db, report([current("c", 2_000)]), 1);
     await recordDeviceReport(db, report([current("b", 1_000)]), 2);
@@ -171,6 +175,14 @@ describe("A collection's Current Video", () => {
         )
       );
     expect(await resume(db)).toBe("b");
+  });
+
+  it("moves on past a Current Video the desktop can no longer play", async () => {
+    // "x" is still a Favorite, but its Video is gone from the desktop.
+    const favs: CollectionRef = { kind: "favorites", id: "favorites" };
+    await addFavorites(db, ["d", "x", "a"]);
+    await recordVideoStarted(db, { videoId: "x", collectionId: "favorites" }, 1_000);
+    expect(await whereCollectionPicksUp(db, favs)).toEqual({ videoId: "a", index: 1 });
   });
 
   it("moves on past a watched Current Video", async () => {

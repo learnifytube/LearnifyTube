@@ -11,14 +11,27 @@ import {
   youtubeVideos,
 } from "@/api/db/schema";
 import { FAVORITES_LIST_ID } from "@/lib/lists";
-import type { CollectionKind, CurrentVideo } from "../../../../shared/mobile-sync-contract";
+import type { CollectionRef, CurrentVideo } from "../../../../shared/mobile-sync-contract";
 import { newestWins } from "../../../../shared/newest-wins";
 import { whereListPicksUp } from "../../../../shared/list-pickup";
 
-/** A List (Favorites included) or YouTube playlist: the collections with a Current Video (ADR-0006). */
-export type CollectionRef = { kind: CollectionKind; id: string };
-
 type YoutubeVideo = typeof youtubeVideos.$inferSelect;
+
+/** Where each kind of collection keeps itself and its Videos; Favorites lives in its own table. */
+const COLLECTION_TABLES = {
+  list: {
+    collections: customPlaylists,
+    collectionId: customPlaylists.id,
+    items: customPlaylistItems,
+  },
+  youtube_playlist: {
+    collections: channelPlaylists,
+    collectionId: channelPlaylists.playlistId,
+    items: playlistItems,
+  },
+} as const;
+
+type TableKind = keyof typeof COLLECTION_TABLES;
 
 export const loadCurrentVideo = async (
   db: Database,
@@ -39,18 +52,12 @@ export const loadCurrentVideo = async (
 
 const collectionExists = async (db: Database, { kind, id }: CollectionRef): Promise<boolean> => {
   if (kind === "favorites") return id === FAVORITES_LIST_ID;
-  const rows =
-    kind === "list"
-      ? await db
-          .select({ id: customPlaylists.id })
-          .from(customPlaylists)
-          .where(eq(customPlaylists.id, id))
-          .limit(1)
-      : await db
-          .select({ id: channelPlaylists.playlistId })
-          .from(channelPlaylists)
-          .where(eq(channelPlaylists.playlistId, id))
-          .limit(1);
+  const { collections, collectionId } = COLLECTION_TABLES[kind];
+  const rows = await db
+    .select({ id: collectionId })
+    .from(collections)
+    .where(eq(collectionId, id))
+    .limit(1);
   return rows.length > 0;
 };
 
@@ -65,29 +72,27 @@ const loadVideoIds = async (db: Database, { kind, id }: CollectionRef): Promise<
       .orderBy(desc(favorites.createdAt));
     return rows.map((row) => row.videoId);
   }
-  const rows =
-    kind === "list"
-      ? await db
-          .select({ videoId: customPlaylistItems.videoId })
-          .from(customPlaylistItems)
-          .where(eq(customPlaylistItems.playlistId, id))
-          .orderBy(customPlaylistItems.position)
-      : await db
-          .select({ videoId: playlistItems.videoId })
-          .from(playlistItems)
-          .where(eq(playlistItems.playlistId, id))
-          .orderBy(playlistItems.position);
+  const { items } = COLLECTION_TABLES[kind];
+  const rows = await db
+    .select({ videoId: items.videoId })
+    .from(items)
+    .where(eq(items.playlistId, id))
+    .orderBy(items.position);
   return rows.map((row) => row.videoId);
 };
 
-/**
- * A List's or YouTube playlist's Videos in order and its Current Video, as the
- * collection endpoints serve them to Devices. Null for an unknown collection.
- */
-export const loadCollection = async (
+type LoadedCollection = {
+  /** Every Video id in the collection's order, including Videos the desktop no longer has. */
+  videoIds: string[];
+  /** The Videos the desktop has, in the collection's order. */
+  videos: YoutubeVideo[];
+  currentVideo: CurrentVideo | null;
+};
+
+const loadWholeCollection = async (
   db: Database,
   ref: CollectionRef
-): Promise<{ videos: YoutubeVideo[]; currentVideo: CurrentVideo | null } | null> => {
+): Promise<LoadedCollection | null> => {
   if (!(await collectionExists(db, ref))) return null;
   const [videoIds, currentVideo] = await Promise.all([
     loadVideoIds(db, ref),
@@ -100,7 +105,57 @@ export const loadCollection = async (
   const videos = videoIds
     .map((videoId) => byId.get(videoId))
     .filter((video): video is YoutubeVideo => video !== undefined);
-  return { videos, currentVideo };
+  return { videoIds, videos, currentVideo };
+};
+
+/**
+ * A List's or YouTube playlist's Videos in order, which of them are watched on
+ * the desktop, and its Current Video, as the collection endpoints serve them to
+ * Devices. Null for an unknown collection.
+ */
+export const loadCollection = async (
+  db: Database,
+  ref: CollectionRef
+): Promise<{
+  videos: YoutubeVideo[];
+  watchedVideoIds: Set<string>;
+  currentVideo: CurrentVideo | null;
+} | null> => {
+  const collection = await loadWholeCollection(db, ref);
+  if (!collection) return null;
+  return {
+    videos: collection.videos,
+    watchedVideoIds: await loadWatchedVideoIds(
+      db,
+      collection.videos.map((video) => video.videoId)
+    ),
+    currentVideo: collection.currentVideo,
+  };
+};
+
+/** Which of these Videos are watched on the desktop (about 90% played, or marked watched). */
+const loadWatchedVideoIds = async (
+  db: Database,
+  videoIds: readonly string[]
+): Promise<Set<string>> => {
+  if (videoIds.length === 0) return new Set();
+  const rows = await db
+    .select({ videoId: videoWatchStats.videoId })
+    .from(videoWatchStats)
+    .where(
+      and(inArray(videoWatchStats.videoId, [...videoIds]), isNotNull(videoWatchStats.watchedAt))
+    );
+  return new Set(rows.map((row) => row.videoId));
+};
+
+/** The Current Video's place among these Videos; null when none is set or it left them. */
+export const currentVideoIndexIn = (
+  videos: readonly { videoId: string }[],
+  currentVideo: Pick<CurrentVideo, "videoId"> | null
+): number | null => {
+  if (!currentVideo) return null;
+  const index = videos.findIndex((video) => video.videoId === currentVideo.videoId);
+  return index >= 0 ? index : null;
 };
 
 /**
@@ -109,14 +164,14 @@ export const loadCollection = async (
  */
 export const loadCurrentVideoIndexes = async (
   db: Database,
-  kind: Exclude<CollectionKind, "favorites">
+  kind: TableKind
 ): Promise<Map<string, number>> => {
   const currents = await db
     .select()
     .from(collectionCurrentVideos)
     .where(eq(collectionCurrentVideos.collectionKind, kind));
   if (currents.length === 0) return new Map();
-  const items = kind === "list" ? customPlaylistItems : playlistItems;
+  const { items } = COLLECTION_TABLES[kind];
   const rows = await db
     .select({ collectionId: items.playlistId, videoId: items.videoId })
     .from(items)
@@ -127,39 +182,41 @@ export const loadCurrentVideoIndexes = async (
       )
     )
     .orderBy(items.playlistId, items.position);
-  const order = new Map<string, string[]>();
+  const order = new Map<string, { videoId: string }[]>();
   for (const row of rows) {
-    order.set(row.collectionId, [...(order.get(row.collectionId) ?? []), row.videoId]);
+    order.set(row.collectionId, [...(order.get(row.collectionId) ?? []), row]);
   }
   const indexes = new Map<string, number>();
   for (const current of currents) {
-    const index = (order.get(current.collectionId) ?? []).indexOf(current.videoId);
-    if (index >= 0) indexes.set(current.collectionId, index);
+    const index = currentVideoIndexIn(order.get(current.collectionId) ?? [], current);
+    if (index !== null) indexes.set(current.collectionId, index);
   }
   return indexes;
 };
 
 /**
  * Where playing the collection starts (the shared "where a List picks up" rule):
- * the Video and its place in the collection, or null when it has none.
+ * the Video and its place among the Videos the desktop has (as the List and
+ * playlist pages list them), or null when it has none. A Video still in the
+ * collection that the desktop no longer has is missing, so it is skipped.
  */
 export const whereCollectionPicksUp = async (
   db: Database,
   ref: CollectionRef
 ): Promise<{ videoId: string; index: number } | null> => {
-  const collection = await loadCollection(db, ref);
+  const collection = await loadWholeCollection(db, ref);
   if (!collection || collection.videos.length === 0) return null;
-  const ids = collection.videos.map((video) => video.videoId);
-  const watchedRows = await db
-    .select({ videoId: videoWatchStats.videoId })
-    .from(videoWatchStats)
-    .where(and(inArray(videoWatchStats.videoId, ids), isNotNull(videoWatchStats.watchedAt)));
-  const watched = new Set(watchedRows.map((row) => row.videoId));
+  const has = collection.videos.map((video) => video.videoId);
+  const watched = await loadWatchedVideoIds(db, has);
   const picked = whereListPicksUp(
-    ids.map((id) => ({ id, watched: watched.has(id) })),
+    collection.videoIds.map((id) => ({
+      id,
+      watched: watched.has(id),
+      missing: !has.includes(id),
+    })),
     collection.currentVideo?.videoId ?? null
   );
-  return picked ? { videoId: picked.id, index: ids.indexOf(picked.id) } : null;
+  return picked ? { videoId: picked.id, index: has.indexOf(picked.id) } : null;
 };
 
 /**
@@ -194,7 +251,7 @@ export const recordCurrentVideo = async (
 /** Which kind of collection an id the desktop player was started with names. */
 const resolveCollection = async (db: Database, id: string): Promise<CollectionRef | null> => {
   if (id === FAVORITES_LIST_ID) return { kind: "favorites", id };
-  for (const kind of ["list", "youtube_playlist"] as const) {
+  for (const kind of Object.keys(COLLECTION_TABLES) as TableKind[]) {
     if (await collectionExists(db, { kind, id })) return { kind, id };
   }
   return null;

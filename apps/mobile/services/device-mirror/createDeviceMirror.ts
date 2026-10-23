@@ -2,6 +2,7 @@ import {
   ON_DEVICE_SET_SYNC_PROTOCOL_VERSION,
   RESUME_SYNC_PROTOCOL_VERSION,
   SYNC_SSE_EVENT_AUDIOBOOKS,
+  SYNC_SSE_EVENT_CURRENT_VIDEOS,
   SYNC_SSE_EVENT_MOVIES,
   SYNC_SSE_EVENT_ON_DEVICE_SET,
   type DeviceReport,
@@ -125,10 +126,7 @@ export function planMirror(input: {
  * The Device report's resume fields (ADR-0006): none for a desktop older than
  * resume, which would only drop them.
  */
-function resumeReport(
-  platform: DeviceMirrorPlatform,
-  desktopVersion: number,
-): Partial<DeviceReport> {
+function resumeReport(platform: DeviceMirrorPlatform, desktopVersion: number) {
   if (desktopVersion < RESUME_SYNC_PROTOCOL_VERSION) return {};
   return {
     seriesLastEpisodes: platform.resume.seriesLastEpisodes(),
@@ -241,6 +239,9 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
     return followUp;
   };
 
+  // Screens showing a collection, told when its Current Video may have changed.
+  const currentVideoListeners = new Set<() => void>();
+
   const syncIfConnected = () => {
     if (platform.getServerUrl() && platform.isForeground()) void syncNow();
   };
@@ -268,6 +269,9 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
       if (!serverUrl) return;
       stopListening = platform.desktop.listen(serverUrl, {
         onEvent: (event) => {
+          if (event === SYNC_SSE_EVENT_CURRENT_VIDEOS) {
+            for (const listener of currentVideoListeners) listener();
+          }
           if (SYNC_EVENTS.has(event)) void syncNow();
         },
         // Events pushed while the stream was down are lost.
@@ -286,5 +290,17 @@ export function createDeviceMirror(platform: DeviceMirrorPlatform) {
     };
   };
 
-  return { start, syncNow };
+  /**
+   * Calls `listener` each time the desktop says a List's or YouTube playlist's
+   * Current Video changed, so a screen showing one loads it again. Returns a
+   * function that stops it.
+   */
+  const onCurrentVideosChanged = (listener: () => void) => {
+    currentVideoListeners.add(listener);
+    return () => {
+      currentVideoListeners.delete(listener);
+    };
+  };
+
+  return { start, syncNow, onCurrentVideosChanged };
 }

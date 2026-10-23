@@ -1,5 +1,6 @@
 import {
   SYNC_SSE_EVENT_AUDIOBOOKS,
+  SYNC_SSE_EVENT_CURRENT_VIDEOS,
   SYNC_SSE_EVENT_MOVIES,
   SYNC_SSE_EVENT_ON_DEVICE_SET,
   ON_DEVICE_SET_SYNC_PROTOCOL_VERSION,
@@ -516,6 +517,25 @@ describe("device mirror", () => {
     state.serverUrl = null;
     await mirror.syncNow();
     expect(state.requested).toEqual([]);
+  });
+
+  it("tells screens when the desktop pushes a Current Video change, without syncing", async () => {
+    const { state, mirror } = createHarness({ set: ["a"] });
+    const stop = mirror.start();
+    await flush();
+    state.requested = [];
+    const told: string[] = [];
+    const unsubscribe = mirror.onCurrentVideosChanged(() => told.push("now"));
+
+    state.pushEvent(SYNC_SSE_EVENT_CURRENT_VIDEOS);
+    await flush();
+    expect(told).toEqual(["now"]);
+    expect(state.requested).toEqual([]);
+
+    unsubscribe();
+    state.pushEvent(SYNC_SSE_EVENT_CURRENT_VIDEOS);
+    expect(told).toEqual(["now"]);
+    stop();
   });
 
   it("syncs when the desktop pushes an On-device set or Audiobooks change", async () => {

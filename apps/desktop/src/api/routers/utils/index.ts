@@ -229,8 +229,10 @@ type GetDatabasePathResult = {
   isDefault: boolean;
 };
 
-const GITHUB_RELEASE_LATEST_URL =
-  "https://api.github.com/repos/hunght/LearnifyTube/releases/latest";
+// Desktop and mobile publish to the same repo, so `/releases/latest` can be a
+// `mobile-v*` release. Scan the list and take the newest desktop `v*` tag.
+const GITHUB_RELEASES_URL = "https://api.github.com/repos/learnifytube/LearnifyTube/releases?per_page=30";
+const DESKTOP_RELEASE_TAG = /^v\d/i;
 
 type GitHubRelease = {
   tag_name?: string;
@@ -945,7 +947,7 @@ export const utilsRouter = t.router({
 
     try {
       logger.info("[updates] Checking for updates...");
-      const response = await fetch(GITHUB_RELEASE_LATEST_URL, {
+      const response = await fetch(GITHUB_RELEASES_URL, {
         headers: {
           "User-Agent": "LearnifyTube-Updater",
           Accept: "application/vnd.github+json",
@@ -953,7 +955,7 @@ export const utilsRouter = t.router({
       });
 
       if (!response.ok) {
-        logger.error("[updates] Failed to fetch latest release:", response.statusText);
+        logger.error("[updates] Failed to fetch releases:", response.statusText);
         return {
           updateAvailable: false,
           latestVersion: currentVersion,
@@ -961,7 +963,16 @@ export const utilsRouter = t.router({
         };
       }
 
-      const releaseData: unknown = await response.json();
+      const releasesData: unknown = await response.json();
+      const releases: unknown[] = Array.isArray(releasesData) ? releasesData : [];
+      const releaseData = releases.find(
+        (item) =>
+          isRecord(item) &&
+          item.draft !== true &&
+          item.prerelease !== true &&
+          typeof item.tag_name === "string" &&
+          DESKTOP_RELEASE_TAG.test(item.tag_name)
+      );
       const release: GitHubRelease = {};
 
       if (isRecord(releaseData)) {

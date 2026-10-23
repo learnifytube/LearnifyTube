@@ -110,6 +110,9 @@ jobs:
           tag_name: ${{ steps.release_meta.outputs.tag }}
           name: Learnify Mobile ${{ steps.release_meta.outputs.tag }}
           generate_release_notes: true
+          # Keep GitHub's "latest" on the desktop v* release: the desktop updater and
+          # download links read /releases/latest. Mobile scans the release list instead.
+          make_latest: false
           files: ${{ steps.release_meta.outputs.apk_path }}
           fail_on_unmatched_files: true
 

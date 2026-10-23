@@ -231,7 +231,8 @@ type GetDatabasePathResult = {
 
 // Desktop and mobile publish to the same repo, so `/releases/latest` can be a
 // `mobile-v*` release. Scan the list and take the newest desktop `v*` tag.
-const GITHUB_RELEASES_URL = "https://api.github.com/repos/learnifytube/LearnifyTube/releases?per_page=30";
+const GITHUB_RELEASES_URL =
+  "https://api.github.com/repos/learnifytube/LearnifyTube/releases?per_page=30";
 const DESKTOP_RELEASE_TAG = /^v\d/i;
 
 type GitHubRelease = {

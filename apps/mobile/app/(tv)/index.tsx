@@ -27,6 +27,11 @@ import { useOnDeviceSetStore } from "../../stores/onDeviceSet";
 import { useMovieCatalogStore } from "../../stores/movieCatalog";
 import { movieWatchKey, useMovieWatchStore } from "../../stores/movieWatch";
 import { useSeriesLastEpisodesStore } from "../../stores/seriesLastEpisodes";
+import {
+  currentVideoOf,
+  useCurrentVideosStore,
+} from "../../stores/currentVideos";
+import { isVideoWatched } from "../../db/repositories/watchHistory";
 import { movieCatalog } from "../../services/movie-catalog";
 import { api } from "../../services/api";
 import { playQueue } from "../../services/play-queue";
@@ -184,6 +189,8 @@ export default function TVHomeScreen() {
     (state) => state.lastEpisodes,
   );
   const heldTitles = useHeldTitles();
+  const currentVideos = useCurrentVideosStore((state) => state.currentVideos);
+  const knownCollections = useCurrentVideosStore((state) => state.collections);
 
   // The tab picked; the one shown falls back to Playlists when it has gone (an empty Movies tab).
   const [selectedMode, setMode] = useState<TVBrowseMode>("playlists");
@@ -419,10 +426,16 @@ export default function TVHomeScreen() {
         movieProgress[movieWatchKey("episode", episodeId)],
       keptLastEpisode: (seriesId) => lastEpisodes[seriesId],
       heldTitles,
+      collectionOf: (playlistId) => knownCollections[playlistId] ?? null,
+      currentVideoOf: (collection) =>
+        currentVideoOf(currentVideos, collection)?.videoId ?? null,
+      isWatched: (video) => isVideoWatched(video.id, video.duration),
     }),
     [
       cachedCollections,
       channels,
+      currentVideos,
+      knownCollections,
       getOfflineUri,
       getStoredThumbnail,
       heldTitles,
@@ -448,30 +461,71 @@ export default function TVHomeScreen() {
     setSelectedTabHandle(tab ? (findNodeHandle(tab) ?? undefined) : undefined);
   }, [mode]);
 
-  const play = (action: Extract<TVCardAction, { kind: "play" }>) => {
-    const first = playQueue.start({
-      id: action.playlistId,
-      title: action.title,
-      videos: action.videos,
-      startIndex: action.startIndex,
-    });
-    if (first) router.push(`/(tv)/player/${first.id}` as Href);
+  const open = (video: StreamingVideo | null) => {
+    if (video) router.push(`/(tv)/player/${video.id}` as Href);
+  };
+
+  // A queue played from a List or YouTube playlist (`collection`) moves its
+  // Current Video as each Video starts.
+  const play = (action: Extract<TVCardAction, { kind: "play" }>) =>
+    open(
+      playQueue.start({
+        id: action.playlistId,
+        title: action.title,
+        videos: action.videos,
+        startIndex: action.startIndex,
+        collection: action.collection ?? null,
+      }),
+    );
+
+  // Plays a List from where it picks up (its Current Video), or, when the
+  // desktop is too old to name the collection, from where this TV last was.
+  const resumeList = (action: Extract<TVCardAction, { kind: "play" }>) => {
+    const { collection } = action;
+    if (!collection) {
+      const entry = history.find(
+        (item) =>
+          item.kind === "videos" && item.playlistId === action.playlistId,
+      );
+      const lastVideoId = entry?.kind === "videos" ? entry.lastVideoId : null;
+      const index = action.videos.findIndex((v) => v.id === lastVideoId);
+      return play({ ...action, startIndex: Math.max(index, 0) });
+    }
+    open(
+      playQueue.resume({
+        id: action.playlistId,
+        title: action.title,
+        videos: action.videos,
+        collection,
+      }),
+    );
   };
 
   const playRemoteCollection = async (
     kind: "playlist" | "mylist",
     id: string,
     title: string,
+    { resume = false } = {},
   ) => {
     if (!serverUrl || openingId === id) return;
     const request = ++openRequest.current;
     setOpeningId(id);
+    const playlistId = `${kind}-${id}`;
+    const knownCollection = () =>
+      useCurrentVideosStore.getState().collections[playlistId] ?? undefined;
+    const playFromList = (action: Extract<TVCardAction, { kind: "play" }>) =>
+      resume ? resumeList(action) : play(action);
 
     try {
       const response =
         kind === "playlist"
           ? await api.getPlaylistVideos(serverUrl, id)
           : await api.getMyListVideos(serverUrl, id);
+      // The desktop names the List and its Current Video (newest wins with this TV's).
+      const currentVideosStore = useCurrentVideosStore.getState();
+      if (response.collection)
+        currentVideosStore.rememberCollection(playlistId, response.collection);
+      if (response.currentVideo) currentVideosStore.keep(response.currentVideo);
       const playlistMeta =
         kind === "playlist"
           ? playlists.find((item) => item.playlistId === id)
@@ -500,12 +554,13 @@ export default function TVHomeScreen() {
 
       const streamingVideos = toStreamingVideos(normalizedVideos, serverUrl);
 
-      play({
+      playFromList({
         kind: "play",
-        playlistId: `${kind}-${id}`,
+        playlistId,
         title,
         videos: streamingVideos,
         startIndex: 0,
+        collection: knownCollection(),
       });
     } catch {
       if (request !== openRequest.current) return;
@@ -517,7 +572,7 @@ export default function TVHomeScreen() {
       );
       const heldPlayback = cached && playHeldCollection(cached, catalogInput);
       if (heldPlayback) {
-        play(heldPlayback);
+        playFromList({ ...heldPlayback, collection: knownCollection() });
         return;
       }
 
@@ -534,7 +589,9 @@ export default function TVHomeScreen() {
       return;
     }
     if (action.kind === "remote") {
-      void playRemoteCollection(action.collection, action.id, action.title);
+      void playRemoteCollection(action.collection, action.id, action.title, {
+        resume: action.resume,
+      });
       return;
     }
     if (action.kind === "movie") {

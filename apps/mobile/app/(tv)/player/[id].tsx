@@ -18,6 +18,7 @@ import {
   playbackSource,
   type PlaybackFailure,
 } from "../../../services/playback-source";
+import { playQueue } from "../../../services/play-queue";
 import { useWatchProgressRecorder } from "../../../hooks/useWatchProgressRecorder";
 import { videoStartPosition } from "../../../db/repositories/watchHistory";
 import {
@@ -224,6 +225,11 @@ export default function TVPlayerScreen() {
       currentVideoId: playlistVideos[playlistIndex]?.id ?? null,
     });
   }, [playlistId, playlistIndex, playlistVideos, updateRecentPlaylistProgress]);
+
+  // Started from a List, the Video becomes the List's Current Video.
+  useEffect(() => {
+    if (id) playQueue.videoStarted(id);
+  }, [id]);
 
   const hasPlaylistContext = playlistIndex >= 0;
   const hasPrevious = hasPlaylistContext && playlistIndex > 0;

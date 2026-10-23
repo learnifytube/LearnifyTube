@@ -1,4 +1,6 @@
+import { whereListPicksUp } from "../../../shared/list-pickup";
 import type {
+  CollectionRef,
   LastEpisode,
   Movie,
   MovieWatch,
@@ -82,6 +84,12 @@ export type TVCatalogInput = {
   keptLastEpisode?: (seriesId: string) => LastEpisode | undefined;
   /** The Movies and Episodes whose Offline copy is on this TV. */
   heldTitles: HeldTitle[];
+  /** The List or YouTube playlist a History queue plays, once the desktop named it. */
+  collectionOf?: (playlistId: string) => CollectionRef | null;
+  /** The id of a collection's Current Video as this TV knows it (newest wins). */
+  currentVideoOf?: (collection: CollectionRef) => string | null;
+  /** Whether this TV counts the Video as watched. */
+  isWatched?: (video: StreamingVideo) => boolean;
 };
 
 /** What pressing a card does. */
@@ -92,12 +100,16 @@ export type TVCardAction =
       title: string;
       videos: StreamingVideo[];
       startIndex: number;
+      /** The List or YouTube playlist played; its Current Video follows the queue. */
+      collection?: CollectionRef;
     }
   | {
       kind: "remote";
       collection: "playlist" | "mylist";
       id: string;
       title: string;
+      /** Starts where the List picks up (its Current Video) instead of the first Video. */
+      resume?: boolean;
     }
   | { kind: "channel"; id: string; title: string }
   | { kind: "movie"; movieId: string; title: string }
@@ -112,6 +124,14 @@ export type TVCatalogCard = {
   subtitle: string;
   thumbnailUrl: string | null;
   action: TVCardAction;
+};
+
+/** The desktop collection a TV queue id names (`playlist-<id>`, `mylist-<id>`), or null. */
+const remoteCollectionOf = (playlistId: string) => {
+  const match = /^(playlist|mylist)-(.+)$/.exec(playlistId);
+  return match
+    ? { collection: match[1] as "playlist" | "mylist", id: match[2] }
+    : null;
 };
 
 const countVideos = (count: number) =>
@@ -388,14 +408,23 @@ export function buildTVCatalog(input: TVCatalogInput) {
       : entry.videos.filter((item) => hasOfflineCopy(item.id));
     if (videos.length === 0) return [];
 
-    const lastVideoId =
-      entry.lastVideoId ?? entry.videos[entry.lastIndex]?.id ?? null;
+    // A List resumes at its Current Video (the shared List rule); any other
+    // queue where the TV last was.
+    const collection = input.collectionOf?.(entry.playlistId) ?? null;
+    const isWatched = input.isWatched ?? (() => false);
+    const resumeVideoId = collection
+      ? (whereListPicksUp(
+          videos.map((item) => ({ id: item.id, watched: isWatched(item) })),
+          input.currentVideoOf?.(collection) ?? null,
+        )?.id ?? null)
+      : (entry.lastVideoId ?? entry.videos[entry.lastIndex]?.id ?? null);
     const startIndex = Math.max(
       0,
-      videos.findIndex((item) => item.id === lastVideoId),
+      videos.findIndex((item) => item.id === resumeVideoId),
     );
     const current = videos[startIndex];
     const first = videos[0];
+    const remote = desktop ? remoteCollectionOf(entry.playlistId) : null;
     return [
       {
         id: entry.playlistId,
@@ -407,13 +436,23 @@ export function buildTVCatalog(input: TVCatalogInput) {
           desktop?.resolveAssetUrl(current.thumbnailUrl) ??
           desktop?.resolveAssetUrl(first.thumbnailUrl) ??
           null,
-        action: {
-          kind: "play" as const,
-          playlistId: entry.playlistId,
-          title: entry.title,
-          videos,
-          startIndex,
-        },
+        // While connected, a List or YouTube playlist loads as the desktop has
+        // it now, with its newest Current Video, and resumes there.
+        action: remote
+          ? {
+              kind: "remote" as const,
+              ...remote,
+              title: entry.title,
+              resume: true,
+            }
+          : {
+              kind: "play" as const,
+              playlistId: entry.playlistId,
+              title: entry.title,
+              videos,
+              startIndex,
+              ...(collection ? { collection } : {}),
+            },
       },
     ];
   };

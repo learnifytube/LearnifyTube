@@ -804,3 +804,86 @@ describe("Series", () => {
     expect(offline.tabs.history).toEqual([]);
   });
 });
+
+describe("Lists in History", () => {
+  const list = { kind: "list" as const, id: "42" };
+  // The TV knows which List `mylist-42` plays, and that List's Current Video.
+  const knowing = (
+    currentVideoId: string | null,
+    watched: string[] = [],
+  ): Partial<TVCatalogInput> => ({
+    collectionOf: (playlistId) => (playlistId === "mylist-42" ? list : null),
+    currentVideoOf: (ref) =>
+      ref.kind === "list" && ref.id === "42" ? currentVideoId : null,
+    isWatched: (item) => watched.includes(item.id),
+  });
+
+  it("resumes a List offline at its Current Video, not where the TV last was", () => {
+    const history = [historyEntry("mylist-42", ["a", "b", "c"], "a")];
+    const catalog = buildTVCatalog(
+      input({
+        history,
+        library: [video("a"), video("b"), video("c")],
+        ...knowing("b"),
+      }),
+    );
+    expect(catalog.tabs.history).toEqual([
+      expect.objectContaining({
+        id: "mylist-42",
+        subtitle: "Resume 2/3 - Video b",
+        action: {
+          kind: "play",
+          playlistId: "mylist-42",
+          title: "History mylist-42",
+          videos: [video("a"), video("b"), video("c")],
+          startIndex: 1,
+          collection: list,
+        },
+      }),
+    ]);
+  });
+
+  it("moves on past a watched Current Video to the next unwatched one", () => {
+    const history = [historyEntry("mylist-42", ["a", "b", "c", "d"])];
+    const catalog = buildTVCatalog(
+      input({
+        history,
+        library: ["a", "b", "c", "d"].map((id) => video(id)),
+        ...knowing("b", ["b", "c"]),
+      }),
+    );
+    expect(catalog.tabs.history[0]).toMatchObject({
+      subtitle: "Resume 4/4 - Video d",
+      action: { kind: "play", startIndex: 3 },
+    });
+  });
+
+  it("while connected, resumes a List or YouTube playlist as the desktop has it now", () => {
+    const history = [
+      historyEntry("mylist-42", ["a", "b"]),
+      historyEntry("playlist-PL9", ["c"]),
+      historyEntry("channel-ch1", ["e", "f"], "f"),
+    ];
+    const catalog = buildTVCatalog(
+      input({ ...connected, history, ...knowing("b") }),
+    );
+    expect(catalog.tabs.history.map((card) => card.action)).toEqual([
+      {
+        kind: "remote",
+        collection: "mylist",
+        id: "42",
+        title: "History mylist-42",
+        resume: true,
+      },
+      {
+        kind: "remote",
+        collection: "playlist",
+        id: "PL9",
+        title: "History playlist-PL9",
+        resume: true,
+      },
+      expect.objectContaining({ kind: "play", startIndex: 1 }),
+    ]);
+    expect(catalog.tabs.history[0].subtitle).toBe("Resume 2/2 - Video b");
+  });
+});

@@ -1,4 +1,10 @@
-import type { Audiobook } from "../mobile-sync-contract";
+import type {
+  Audiobook,
+  AudiobookTrackPosition,
+  TrackPosition,
+} from "../mobile-sync-contract";
+import { newestWins } from "../newest-wins";
+import { resumeAt } from "../resume-at";
 
 export type Book = Pick<
   Audiobook,
@@ -87,6 +93,44 @@ export function createBookPlayer(
     autoplay: boolean;
   } | null = null;
 
+  const now = options.now ?? Date.now;
+  // Track positions this player recorded, newer than the book it was handed
+  // until the app passes a fresher one.
+  const kept = new Map<string, TrackPosition>();
+  const positionOf = (track: BookTrack) =>
+    newestWins(track.trackPosition ?? null, kept.get(track.id) ?? null);
+  const trackPositionListeners = new Set<
+    (position: AudiobookTrackPosition) => void
+  >();
+  // The Track loaded in the audio output, until playback leaves it.
+  let loaded: { book: Book; track: BookTrack } | null = null;
+  // Records where the loaded Track was left (another Track, the book's end,
+  // another book, close) as its Track position.
+  const leave = (playedToEnd = false) => {
+    if (!loaded) return;
+    const position: AudiobookTrackPosition = {
+      audiobookId: loaded.book.id,
+      trackId: loaded.track.id,
+      seconds: platform.currentTime(),
+      playedToEnd,
+      updatedAt: now(),
+    };
+    loaded = null;
+    kept.set(position.trackId, position);
+    for (const listener of trackPositionListeners) listener(position);
+  };
+
+  // Where a Track resumes: 0 once played to its end, else its Track position
+  // (no 90% rule: a long chapter near its end still resumes).
+  const startAtOf = (track: BookTrack) => {
+    const position = positionOf(track);
+    return resumeAt({
+      positionSeconds: position?.seconds ?? null,
+      durationSeconds: null,
+      watched: position?.playedToEnd ?? false,
+    });
+  };
+
   const setState = (next: BookPlayerState) => {
     state = next;
     for (const listener of listeners) listener();
@@ -116,6 +160,7 @@ export function createBookPlayer(
     stopWatching();
     if (state.status !== "playing" && state.status !== "paused") return;
     const { book, trackIndex } = state;
+    loaded = null;
     if (ticket === skippedTo) {
       // Two Tracks in a row: the source is likely gone (no desktop), so stop
       // here rather than rushing through the rest of the book.
@@ -177,6 +222,7 @@ export function createBookPlayer(
       return;
     }
     watchLoading(mine);
+    loaded = { book, track };
     platform.load(uri, startAt, {
       bookId: book.id,
       bookTitle: book.title,
@@ -196,6 +242,7 @@ export function createBookPlayer(
     autoplay = true,
     failed?: BookTrack,
   ) => {
+    leave();
     pending = startTrack(book, fromIndex, startAt, ++ticket, autoplay, failed);
     return pending;
   };
@@ -263,6 +310,7 @@ export function createBookPlayer(
 
   platform.onEnded(() => {
     if (state.status !== "playing") return;
+    leave(true);
     void goTo(state.book, state.trackIndex + 1, 0);
   });
 
@@ -292,12 +340,38 @@ export function createBookPlayer(
         (track) => track.id === from?.trackId,
       );
       if (!from || index < 0) return goTo(book, 0, 0);
-      return goTo(book, index, book.tracks[index].missing ? 0 : from.seconds);
+      const track = book.tracks[index];
+      if (track.missing) return goTo(book, index, 0);
+      // The Track's own Track position, when it has one, is where it stopped.
+      return goTo(book, index, positionOf(track) ? startAtOf(track) : from.seconds);
     },
-    /** Plays a book from the start of the Track at `trackIndex`. */
-    jumpTo: (book: Book, trackIndex: number) => goTo(book, trackIndex, 0),
-    /** Plays a book again from Track 1 at 0:00. */
-    startOver: (book: Book) => goTo(book, 0, 0),
+    /**
+     * Plays the Track at `trackIndex` from its Track position; from 0 once
+     * played to its end.
+     */
+    jumpTo: (book: Book, trackIndex: number) => {
+      // The Track playing is left first, so picking it again resumes there.
+      leave();
+      const track = book.tracks[trackIndex];
+      return goTo(
+        book,
+        trackIndex,
+        track && !track.missing ? startAtOf(track) : 0,
+      );
+    },
+    /**
+     * Clears every Track position of the book and plays it again from Track 1
+     * at 0:00. The app records the Start over itself.
+     */
+    startOver: (book: Book) => {
+      const at = now();
+      // The place playing now is part of what Start over clears.
+      if (loaded?.book.id === book.id) loaded = null;
+      for (const track of book.tracks) {
+        kept.set(track.id, { seconds: 0, playedToEnd: false, updatedAt: at });
+      }
+      return goTo(book, 0, 0);
+    },
     /** Plays the finished book again from Track 1 at 0:00. */
     playAgain: () => {
       if (state.status !== "finished") return Promise.resolve();
@@ -317,6 +391,7 @@ export function createBookPlayer(
         platform.pause();
         setState({ ...state, status: "paused" });
       }
+      leave();
       ++ticket;
       heading = null;
       lastTrack = null;
@@ -392,6 +467,17 @@ export function createBookPlayer(
         skipListeners.delete(listener);
       };
     },
+    /**
+     * Called with a Track's Track position each time playback leaves that
+     * Track: another Track, the book's end (played to its end), another book,
+     * or close.
+     */
+    onTrackPosition: (listener: (position: AudiobookTrackPosition) => void) => {
+      trackPositionListeners.add(listener);
+      return () => {
+        trackPositionListeners.delete(listener);
+      };
+    },
     /** Resolves once the Track change in flight has happened. */
     settled: () => pending,
   };
@@ -417,6 +503,8 @@ type BookPlayerOptions = {
   speed?: BookSpeedMemory;
   /** How long a Track may take to get ready before it is skipped. */
   stallTimeoutMs?: number;
+  /** The clock Track positions are stamped with. */
+  now?: () => number;
 };
 
 function createSpeedMemory(): BookSpeedMemory {

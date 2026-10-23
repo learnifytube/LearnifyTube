@@ -16,6 +16,7 @@ import {
   onDeviceSetSchema,
   syncServerInfoSchema,
   type AudiobookListening,
+  type AudiobookTrackPosition,
   type CollectionRef,
   type CurrentVideo,
   type DeviceReport,
@@ -296,6 +297,22 @@ export const api = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(listening),
+      },
+    );
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  },
+
+  /** Tells the desktop where this phone left a Track (v5); the desktop keeps the newest. */
+  async reportTrackPosition(
+    serverUrl: string,
+    position: AudiobookTrackPosition,
+  ): Promise<void> {
+    const response = await fetchWithTimeout(
+      `${serverUrl}/api/audiobook/${encodeURIComponent(position.audiobookId)}/track-position`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(position),
       },
     );
     if (!response.ok) throw new Error(`HTTP ${response.status}`);

@@ -61,6 +61,8 @@ export type DeviceMirrorPlatform = {
     seriesLastEpisodes: () => NonNullable<DeviceReport["seriesLastEpisodes"]>;
     /** The Current Video of each List and YouTube playlist, as kept on this Device. */
     currentVideos: () => NonNullable<DeviceReport["currentVideos"]>;
+    /** Track positions kept on this Device. */
+    trackPositions: () => NonNullable<DeviceReport["trackPositions"]>;
   };
   loadMirroredIds: () => Promise<string[]>;
   saveMirroredIds: (videoIds: string[]) => Promise<void>;
@@ -131,6 +133,7 @@ function resumeReport(
   return {
     seriesLastEpisodes: platform.resume.seriesLastEpisodes(),
     currentVideos: platform.resume.currentVideos(),
+    trackPositions: platform.resume.trackPositions(),
   };
 }
 

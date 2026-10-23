@@ -11,6 +11,9 @@ import { AudiobookCover } from "../../components/phone/AudiobookCover";
 import { colors, fontSize, fontWeight, radius, spacing } from "../../theme";
 import { ArrowLeft, RotateCcw } from "../../theme/icons";
 import { formatTrackDuration } from "../../components/phone/formatTrackDuration";
+import { TrackListenBadge } from "../../components/phone/TrackListenBadge";
+import { useTrackPositionsStore } from "../../stores/trackPositions";
+import { withKeptTrackPositions } from "../../services/listening-position/trackPositions";
 
 const COVER_SIZE = 120;
 
@@ -26,6 +29,7 @@ export default function AudiobookScreen() {
   const kept = useListeningPositionsStore((s) =>
     id ? s.positions[id] : undefined,
   );
+  const keptTrackPositions = useTrackPositionsStore((s) => s.positions);
   const playerState = useBookPlayerState();
 
   if (!book) {
@@ -57,7 +61,7 @@ export default function AudiobookScreen() {
     <SafeAreaView style={styles.container}>
       <BackButton />
       <FlatList
-        data={book.tracks}
+        data={withKeptTrackPositions(book, keptTrackPositions).tracks}
         keyExtractor={(track) => track.id}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
@@ -108,6 +112,9 @@ export default function AudiobookScreen() {
               >
                 {track.title}
               </Text>
+              {track.missing ? null : (
+                <TrackListenBadge position={track.trackPosition} />
+              )}
               <Text style={styles.trackDuration}>
                 {track.missing
                   ? "Missing"

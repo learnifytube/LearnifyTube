@@ -4,6 +4,7 @@ import {
   SYNC_SSE_EVENT_ON_DEVICE_SET,
   ON_DEVICE_SET_SYNC_PROTOCOL_VERSION,
   RESUME_SYNC_PROTOCOL_VERSION,
+  type AudiobookTrackPosition,
   type CurrentVideo,
   type MovieCatalog,
   type MovieWatch,
@@ -114,6 +115,7 @@ function createHarness({
     movieMirrors: [] as MovieCatalog[],
     movieMirrorFails: false,
     heldMovies: { movieIds: [] as string[], episodeIds: [] as string[] },
+    trackPositions: [] as AudiobookTrackPosition[],
     // The desktops listened to for pushed sync events, and how to push one.
     listening: [] as string[],
     pushEvent: (_event: string) => {},
@@ -184,6 +186,7 @@ function createHarness({
     resume: {
       seriesLastEpisodes: () => state.seriesLastEpisodes,
       currentVideos: () => state.currentVideos,
+      trackPositions: () => state.trackPositions,
     },
     loadMirroredIds: async () => state.mirrored,
     saveMirroredIds: async (ids) => {
@@ -294,6 +297,7 @@ describe("device mirror", () => {
           },
         ],
         heldAudiobookIds: ["orwell"],
+        trackPositions: [],
         movieWatch: [],
         heldMovieIds: [],
         heldEpisodeIds: [],
@@ -360,10 +364,42 @@ describe("device mirror", () => {
         updatedAt: 50,
       },
     ];
+    state.trackPositions = [
+      {
+        audiobookId: "frankl",
+        trackId: "cd2",
+        seconds: 410,
+        playedToEnd: false,
+        updatedAt: 30,
+      },
+    ];
     await mirror.syncNow();
     expect(state.reports).toHaveLength(1);
     expect(state.reports[0]).not.toHaveProperty("seriesLastEpisodes");
     expect(state.reports[0]).not.toHaveProperty("currentVideos");
+    expect(state.reports[0]).not.toHaveProperty("trackPositions");
+  });
+
+  it("sends Track positions kept in Offline mode in the next Device report", async () => {
+    const { state, mirror } = createHarness({ set: [] });
+    // Kept while no desktop was there: nothing went out.
+    state.serverUrl = null;
+    const kept: AudiobookTrackPosition = {
+      audiobookId: "frankl",
+      trackId: "cd2",
+      seconds: 410,
+      playedToEnd: false,
+      updatedAt: 30,
+    };
+    state.trackPositions = [kept];
+    await mirror.syncNow();
+    expect(state.reports).toEqual([]);
+
+    state.serverUrl = SERVER;
+    await mirror.syncNow();
+    expect(state.reports).toEqual([
+      expect.objectContaining({ trackPositions: [kept] }),
+    ]);
   });
 
   it("Mirrors the sent Audiobooks on every sync", async () => {

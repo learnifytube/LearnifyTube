@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "../api";
 import { desktopProtocol } from "../desktop-protocol";
 import { useSeriesLastEpisodesStore } from "../../stores/seriesLastEpisodes";
+import { useTrackPositionsStore } from "../../stores/trackPositions";
 import { downloadQueue } from "../download-queue";
 import { videoThumbnails } from "../video-thumbnails";
 import { getAppSurface } from "../../core/hooks/useAppSurface";
@@ -146,6 +147,10 @@ const platform: DeviceMirrorPlatform = {
       Object.values(useSeriesLastEpisodesStore.getState().lastEpisodes),
     currentVideos: () =>
       Object.values(useCurrentVideosStore.getState().currentVideos),
+    trackPositions: () =>
+      Object.values(useTrackPositionsStore.getState().positions).flatMap(
+        (position) => (position ? [position] : []),
+      ),
   },
   loadMirroredIds: async () => {
     const raw = await AsyncStorage.getItem(MIRRORED_IDS_KEY);

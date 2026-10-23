@@ -11,6 +11,9 @@ import type { Book } from "../../services/book-player";
 import { colors, fontSize, fontWeight, radius, spacing } from "../../theme";
 import { X } from "../../theme/icons";
 import { formatTrackDuration } from "./formatTrackDuration";
+import { TrackListenBadge } from "./TrackListenBadge";
+import { useTrackPositionsStore } from "../../stores/trackPositions";
+import { withKeptTrackPositions } from "../../services/listening-position/trackPositions";
 
 type Props = {
   book: Book;
@@ -21,7 +24,8 @@ type Props = {
 };
 
 // The book's Tracks in Track order, over the Book player: the current one
-// highlighted, missing ones greyed out; tapping one plays it from its start.
+// highlighted, missing ones greyed out, each with its Track state; tapping one
+// plays it from its Track position.
 export function BookTracksSheet({
   book,
   currentIndex,
@@ -29,6 +33,7 @@ export function BookTracksSheet({
   onClose,
   onPlayTrack,
 }: Props) {
+  const kept = useTrackPositionsStore((s) => s.positions);
   return (
     <Modal
       visible={visible}
@@ -50,7 +55,7 @@ export function BookTracksSheet({
           </Pressable>
         </View>
         <FlatList
-          data={book.tracks}
+          data={withKeptTrackPositions(book, kept).tracks}
           keyExtractor={(track) => track.id}
           initialScrollIndex={currentIndex}
           getItemLayout={(_, index) => ({
@@ -89,6 +94,9 @@ export function BookTracksSheet({
                 >
                   {track.title}
                 </Text>
+                {track.missing ? null : (
+                  <TrackListenBadge position={track.trackPosition} />
+                )}
                 <Text style={styles.trackDuration}>
                   {track.missing
                     ? "Missing"

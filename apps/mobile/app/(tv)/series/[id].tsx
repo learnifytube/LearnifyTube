@@ -23,7 +23,7 @@ import {
   TVMessageCard,
 } from "../../../components/tv/TVMessage";
 import { seriesNotFound } from "../../../components/tv/tvMessages";
-import { heldSeries } from "../../../components/tv/tvCatalog";
+import { heldSeries } from "../../../services/movie-watch/seriesWatch";
 import { useHeldTitles } from "../../../hooks/useHeldTitles";
 import {
   buildTVSeriesView,

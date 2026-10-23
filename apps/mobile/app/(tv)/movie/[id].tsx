@@ -11,7 +11,10 @@ import {
   tvEpisodePlaybackSource,
   tvMoviePlaybackSource,
 } from "../../../services/playback-source";
-import { findTitle } from "../../../services/movie-watch/seriesWatch";
+import {
+  findTitle,
+  heldSeries,
+} from "../../../services/movie-watch/seriesWatch";
 import { useMovieProgressRecorder } from "../../../hooks/useMovieProgressRecorder";
 import { useLastEpisodeWhenStarted } from "../../../hooks/useLastEpisodeWhenStarted";
 import { useMovieCaptions } from "../../../hooks/useMovieCaptions";
@@ -20,7 +23,6 @@ import { movieStartPosition } from "../../../hooks/useMovieResume";
 import { useEpisodeAutoplay } from "../../../hooks/useEpisodeAutoplay";
 import { usePlayerOverlay } from "../../../hooks/usePlayerOverlay";
 import { usePlayerTime } from "../../../hooks/usePlayerTime";
-import { heldSeries } from "../../../components/tv/tvCatalog";
 import { desktopConnection } from "../../../services/desktop-connection";
 import { goBackOrTVHome } from "../../../components/tv/tvBack";
 import { TVMovieMessage } from "../../../components/tv/TVMovieMessage";

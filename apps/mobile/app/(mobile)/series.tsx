@@ -17,6 +17,7 @@ import { showMovieOptions } from "../../components/phone/movieOnThisPhone";
 import { heldMovies } from "../../services/held-movies";
 import { heldTitleOfEpisode } from "../../services/held-movies/heldTitle";
 import { movieOfflineCopy } from "../../services/offline-copy";
+import { phoneSeriesView } from "../../components/phone/phoneSeries";
 import { colors, fontSize, fontWeight, radius, spacing } from "../../theme";
 import { ArrowLeft, Check, Play } from "../../theme/icons";
 import type { Episode } from "../../../shared/mobile-sync-contract";
@@ -42,7 +43,7 @@ const episodeLabel = (episode: Episode) =>
 export default function SeriesScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const serverUrl = useConnectionStore((state) => state.serverUrl);
-  const series = useMovieCatalogStore((state) =>
+  const listed = useMovieCatalogStore((state) =>
     state.series.find((item) => item.id === id),
   );
   const progress = useMovieWatchStore((state) => state.progress);
@@ -52,18 +53,26 @@ export default function SeriesScreen() {
   const getOfflineUri = movieOfflineCopy.useLookup();
   const holds = heldMovies.useHolds();
 
-  if (!series || !serverUrl) {
+  // In Offline mode, only the Episodes this phone holds.
+  const view = phoneSeriesView({
+    series: listed,
+    connected: !!serverUrl,
+    isHeld: (episodeId) => getOfflineUri(episodeId) !== null,
+  });
+
+  if (view.kind !== "ready") {
     return (
       <SafeAreaView style={styles.container}>
         <BackButton />
         <Text style={styles.message}>
-          {series
+          {view.kind === "needsDesktop"
             ? "This Series needs the desktop."
             : "This Series isn't available now."}
         </Text>
       </SafeAreaView>
     );
   }
+  const { series } = view;
 
   const kept = (episodeId: string) =>
     progress[movieWatchKey("episode", episodeId)];
@@ -145,7 +154,7 @@ export default function SeriesScreen() {
                 showMovieOptions({
                   title: heldTitleOfEpisode(series, episode),
                   held,
-                  connected: true,
+                  connected: !!serverUrl,
                 })
               }
               accessibilityLabel={`Play ${episode.title}`}

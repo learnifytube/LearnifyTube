@@ -9,6 +9,7 @@ import type {
 } from "../../../shared/mobile-sync-contract";
 import { watchStateOf, resumeAt } from "../../services/movie-watch/movieWatch";
 import {
+  heldSeries,
   seriesEpisodes,
   seriesNextUp,
 } from "../../services/movie-watch/seriesWatch";
@@ -28,12 +29,7 @@ import { formatPlaybackTime } from "../playerSeek";
 import type { RemoteChannel, RemoteMyList, RemotePlaylist } from "../../types";
 
 export type TVBrowseMode =
-  | "playlists"
-  | "mylists"
-  | "channels"
-  | "movies"
-  | "series"
-  | "history";
+  "playlists" | "mylists" | "channels" | "movies" | "series" | "history";
 
 /** The tabs in the order the TV home shows them. */
 const TAB_ORDER: TVBrowseMode[] = [
@@ -216,26 +212,6 @@ export function describeTitleWatch(
   const minutes = Math.max(1, Math.round(title.durationSeconds / 60));
   const hours = Math.floor(minutes / 60);
   return hours > 0 ? `${hours} h ${minutes % 60} min` : `${minutes} min`;
-}
-
-/**
- * A Series cut down to the Episodes this TV holds (Seasons left empty go), as
- * it shows and plays in Offline mode; null when it holds none of them.
- */
-export function heldSeries(
-  series: Series,
-  isHeld: (episodeId: string) => boolean,
-): Series | null {
-  const seasons = series.seasons
-    .map((season) => ({
-      ...season,
-      // The TV's own copy plays, even when the desktop lost its file.
-      episodes: season.episodes
-        .filter((episode) => isHeld(episode.id))
-        .map((episode) => ({ ...episode, missing: false })),
-    }))
-    .filter((season) => season.episodes.length > 0);
-  return seasons.length > 0 ? { ...series, seasons } : null;
 }
 
 /** A held Movie as the TV shows it when the saved catalog doesn't list it. */

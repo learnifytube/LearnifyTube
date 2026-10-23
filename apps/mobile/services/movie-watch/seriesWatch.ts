@@ -130,3 +130,23 @@ export function seriesEpisodeAfter(series: Series, episodeId: string) {
   }));
   return episodeAfter(episodes, episodeId)?.episode ?? null;
 }
+
+/**
+ * A Series cut down to the Episodes this Device holds (Seasons left empty go),
+ * as it shows and plays in Offline mode; null when it holds none of them.
+ */
+export function heldSeries(
+  series: Series,
+  isHeld: (episodeId: string) => boolean,
+): Series | null {
+  const seasons = series.seasons
+    .map((season) => ({
+      ...season,
+      // The Device's own copy plays, even when the desktop lost its file.
+      episodes: season.episodes
+        .filter((episode) => isHeld(episode.id))
+        .map((episode) => ({ ...episode, missing: false })),
+    }))
+    .filter((season) => season.episodes.length > 0);
+  return seasons.length > 0 ? { ...series, seasons } : null;
+}

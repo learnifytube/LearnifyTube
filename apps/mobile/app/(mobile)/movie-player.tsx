@@ -19,7 +19,8 @@ import { useEpisodeAutoplay } from "../../hooks/useEpisodeAutoplay";
 import { usePlayerOverlay } from "../../hooks/usePlayerOverlay";
 import { usePlayerTime } from "../../hooks/usePlayerTime";
 import { useMovieCaptions } from "../../hooks/useMovieCaptions";
-import { findTitle } from "../../services/movie-watch/seriesWatch";
+import { findTitle, heldSeries } from "../../services/movie-watch/seriesWatch";
+import { movieOfflineCopy } from "../../services/offline-copy";
 import { resolveRemoteAssetUrl } from "../../services/remoteAssetUrl";
 import { MoviePlayerChrome } from "../../components/phone/MoviePlayerChrome";
 import { MovieCaptionLine } from "../../components/phone/MovieCaptionLine";
@@ -59,6 +60,7 @@ export default function MoviePlayerScreen() {
   // A title held here that the desktop no longer lists still plays.
   const hold = heldMovies.useHolds().find((item) => item.id === id);
   const shownTitle = movie?.title ?? hold?.title;
+  const getOfflineUri = movieOfflineCopy.useLookup();
   const [chromeHeight, setChromeHeight] = useState(0);
   const playerRef = useRef<VideoPlayer | null>(null);
 
@@ -122,8 +124,13 @@ export default function MoviePlayerScreen() {
   useResumeWhenStarted(player, sourceUri, kind, id);
   useMovieProgressRecorder(player, kind, id);
   useLastEpisodeWhenStarted(movie?.series?.id ?? null, id, !!sourceUri);
+  // In Offline mode, autoplay goes on only to the Episodes this phone holds.
+  const series = movie?.series ?? null;
   useEpisodeAutoplay(player, {
-    series: movie?.series ?? null,
+    series:
+      series && !serverUrl
+        ? heldSeries(series, (episodeId) => getOfflineUri(episodeId) !== null)
+        : series,
     id,
     hasSource: !!sourceUri,
     open: openEpisode,

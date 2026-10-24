@@ -41,3 +41,23 @@ export function showMovieOptions({
     },
   ]);
 }
+
+/** Series screen: Download to this phone every Episode in `titles`. */
+export function confirmDownloadSeries(
+  seriesTitle: string,
+  titles: HeldTitle[],
+) {
+  Alert.alert(
+    seriesTitle,
+    `Download ${titles.length} ${titles.length === 1 ? "Episode" : "Episodes"} to watch in Offline mode.`,
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Download to this phone",
+        onPress: () => {
+          for (const title of titles) heldMovies.pull(title);
+        },
+      },
+    ],
+  );
+}

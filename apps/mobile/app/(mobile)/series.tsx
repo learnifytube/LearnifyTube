@@ -13,11 +13,18 @@ import {
 import { MoviePoster } from "../../components/phone/MoviesRow";
 import { seasonCountText } from "../../components/phone/SeriesRow";
 import { formatTrackDuration } from "../../components/phone/formatTrackDuration";
-import { showMovieOptions } from "../../components/phone/movieOnThisPhone";
+import {
+  confirmDownloadSeries,
+  showMovieOptions,
+} from "../../components/phone/movieOnThisPhone";
 import { heldMovies } from "../../services/held-movies";
 import { heldTitleOfEpisode } from "../../services/held-movies/heldTitle";
 import { movieOfflineCopy } from "../../services/offline-copy";
-import { phoneSeriesView } from "../../components/phone/phoneSeries";
+import { SeriesDownload } from "../../components/phone/SeriesDownload";
+import {
+  phoneSeriesDownload,
+  phoneSeriesView,
+} from "../../components/phone/phoneSeries";
 import { colors, fontSize, fontWeight, radius, spacing } from "../../theme";
 import { ArrowLeft, Check, Play } from "../../theme/icons";
 import type { Episode } from "../../../shared/mobile-sync-contract";
@@ -38,7 +45,8 @@ const episodeLabel = (episode: Episode) =>
  * A Series screen: its Seasons and Episodes in order. Play Streams the
  * next-up Episode (the start again once all are watched); tapping an Episode
  * plays that one. Either way the Episodes after it autoplay. Long-press an
- * Episode for Download to this phone, or Remove from this phone once held.
+ * Episode for Download to this phone, or Remove from this phone once held;
+ * Download series pulls every Episode.
  */
 export default function SeriesScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -86,6 +94,11 @@ export default function SeriesScreen() {
     : nextUp.lastWatchedAt === null
       ? "Play"
       : `Continue: ${episodeLabel(nextUp.episode)}`;
+  const download = phoneSeriesDownload({
+    series,
+    holds,
+    hasCopy: (episodeId) => getOfflineUri(episodeId) !== null,
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -120,6 +133,18 @@ export default function SeriesScreen() {
                   </Text>
                 </Pressable>
               ) : null}
+              <SeriesDownload
+                download={download}
+                connected={!!serverUrl}
+                onPress={() =>
+                  confirmDownloadSeries(
+                    series.title,
+                    download.toPull.map((episode) =>
+                      heldTitleOfEpisode(series, episode),
+                    ),
+                  )
+                }
+              />
             </View>
           </View>
         }

@@ -65,6 +65,13 @@ export type PlaybackSourceRequest = {
   getPosition: () => number;
 };
 
+function sameIds(
+  a: PlaybackSourceRequest["queue"],
+  b: PlaybackSourceRequest["queue"],
+) {
+  return a.length === b.length && a.every((video, i) => video.id === b[i].id);
+}
+
 /**
  * What the player does when the desktop drops out mid-Stream: play the Offline
  * copy, else the next Video in the queue the Device holds, else go back.
@@ -401,7 +408,8 @@ export function createPlaybackSource(platform: PlaybackSourcePlatform) {
     if (
       !entry ||
       entry.videoId !== request.videoId ||
-      entry.queue !== request.queue ||
+      // By ids: a queue rebuilt each render would open a new session each render.
+      !sameIds(entry.queue, request.queue) ||
       entry.index !== request.index
     ) {
       // Opening only reads; nothing runs until useSyncExternalStore subscribes.

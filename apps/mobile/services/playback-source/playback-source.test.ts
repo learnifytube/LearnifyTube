@@ -1,3 +1,4 @@
+import { renderHook } from "@testing-library/react-native";
 import { DesktopFetchFailedError } from "../desktop-fetch/createDesktopFetch";
 import { createDesktopFetch } from "../desktop-fetch/createDesktopFetch";
 import { createFakeDesktopFetchPlatform } from "../desktop-fetch/fakeDesktopFetchPlatform";
@@ -50,6 +51,7 @@ function createHarness({ connected = true, streamOnly = false } = {}) {
   return {
     desktop,
     player,
+    useSource: playbackSource.useSource,
     holds: (...ids: string[]) => {
       for (const id of ids) offlineCopies.set(id, `file:///videos/${id}.mp4`);
       for (const listener of [...offlineCopyListeners]) listener();
@@ -451,5 +453,23 @@ describe("Playback source, Stream-only (Movies and Episodes)", () => {
     await flush();
 
     expect(state().source).toEqual({ kind: "desktopLost", nextIndex: null });
+  });
+
+  it("settles in Offline mode when the player passes a new empty queue each render", async () => {
+    const h = createHarness({ connected: false, streamOnly: true });
+
+    const { result } = await renderHook(() =>
+      h.useSource({
+        videoId: "up",
+        queue: [],
+        index: -1,
+        getPosition: () => 0,
+      }),
+    );
+
+    expect(result.current.source).toMatchObject({
+      kind: "failed",
+      failure: { kind: "notOnThisTV" },
+    });
   });
 });
